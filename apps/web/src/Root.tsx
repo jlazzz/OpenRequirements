@@ -4,6 +4,7 @@ import {
   Center,
   Group,
   Loader,
+  Modal,
   Paper,
   PasswordInput,
   Stack,
@@ -13,7 +14,7 @@ import {
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "@tanstack/react-router";
-import type { FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import { api, type Session, type User } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 
@@ -109,6 +110,12 @@ function Shell({ user }: { user: User }) {
     },
   });
 
+  const [changing, setChanging] = useState(false);
+  const password = useMutation({
+    mutationFn: (fields: object) => api("account/password", fields),
+    onSuccess: () => setChanging(false),
+  });
+
   return (
     <>
       <Group component="header" h={TOPBAR_HEIGHT} px="md" gap="lg" bg="dark.7" c="white" wrap="nowrap">
@@ -123,9 +130,9 @@ function Shell({ user }: { user: User }) {
             </RouterAnchor>
           )}
         </nav>
-        <Text size="sm" ml="auto">
+        <Button size="compact-sm" variant="subtle" color="gray.3" ml="auto" onClick={() => setChanging(true)}>
           {user.name}
-        </Text>
+        </Button>
         <Button size="compact-sm" variant="default" onClick={() => logout.mutate()} loading={logout.isPending}>
           Sign out
         </Button>
@@ -133,6 +140,34 @@ function Shell({ user }: { user: User }) {
       <main style={{ height: `calc(100vh - ${TOPBAR_HEIGHT}px)`, overflow: "auto" }}>
         <Outlet />
       </main>
+      <Modal opened={changing} onClose={() => setChanging(false)} title={`${user.name}: change password`}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            password.mutate(Object.fromEntries(new FormData(event.currentTarget)));
+          }}
+        >
+          <Stack gap="sm">
+            <PasswordInput name="current" label="Current password" required autoComplete="current-password" />
+            <PasswordInput
+              name="password"
+              label="New password"
+              description="At least 12 characters. You stay signed in here and are signed out everywhere else."
+              required
+              minLength={12}
+              autoComplete="new-password"
+            />
+            {password.isError && (
+              <Alert color="red" role="alert">
+                {password.error.message}
+              </Alert>
+            )}
+            <Button type="submit" loading={password.isPending}>
+              Change password
+            </Button>
+          </Stack>
+        </form>
+      </Modal>
     </>
   );
 }

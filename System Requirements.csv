@@ -1,0 +1,5 @@
+﻿ID,Name,Description,Status,Priority,Verification method,Rationale,Upstream,Downstream
+SYS-001,Supply voltage,The pump shall run from 5 V DC.,,,,,0,0
+SYS-003,Battery life,,,,,,0,0
+SYS-004,Alarm volume,"At least 65 dB, see =A1",Approved,High,,,0,0
+SYS-005,Dose accuracy,Within 5 %,Draft,Medium,,,0,0

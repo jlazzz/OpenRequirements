@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
@@ -91,7 +91,9 @@ export async function buildApp(
       .select({ id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())));
+      .where(
+        and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date()), isNull(users.deactivatedAt)),
+      );
     return user ?? null;
   }
 
@@ -178,7 +180,8 @@ export async function buildApp(
       const [row] = await db.select().from(users).where(eq(users.email, body.email.toLowerCase()));
       // Hash even when the user is unknown, so response time does not reveal which emails exist.
       const ok = await verifyPassword(body.password, row?.passwordHash ?? (await dummyHash));
-      if (!row || !ok) return reply.code(401).send({ error: "Wrong email or password" });
+      // A deactivated account gets the same answer as a wrong password.
+      if (!row || !ok || row.deactivatedAt) return reply.code(401).send({ error: "Wrong email or password" });
       await startSession(db, reply, row.id);
       return { user: { id: row.id, email: row.email, name: row.name, isAdmin: row.isAdmin } };
     },
@@ -191,6 +194,42 @@ export async function buildApp(
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
     return { ok: true };
   });
+
+  // Changing a password signs the user out everywhere else, so a stolen session does not survive it.
+  app.post(
+    "/api/account/password",
+    {
+      onRequest: requireUser,
+      config: loginLimit,
+      schema: {
+        body: {
+          type: "object",
+          required: ["current", "password"],
+          additionalProperties: false,
+          properties: { current: credentials.password, password: { ...credentials.password, minLength: 12 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = req.user as SessionUser;
+      const body = req.body as { current: string; password: string };
+      const [row] = await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, user.id));
+      if (!row || !(await verifyPassword(body.current, row.hash))) {
+        return reply.code(400).send({ error: "The current password is wrong" });
+      }
+      const passwordHash = await hashPassword(body.password);
+      await db.transaction(async (tx) => {
+        await tx.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+        await tx
+          .delete(sessions)
+          .where(
+            and(eq(sessions.userId, user.id), ne(sessions.tokenHash, hashToken(req.cookies[SESSION_COOKIE] ?? ""))),
+          );
+        await audit(tx, user.id, "user.password", "user", user.id);
+      });
+      return { ok: true };
+    },
+  );
 
   const access = createAccess(db);
   // Safety net under the per-route checks: any route whose path names something in a project answers 404 to people outside

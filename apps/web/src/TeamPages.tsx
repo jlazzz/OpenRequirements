@@ -163,6 +163,8 @@ const VERBS: Record<string, string> = {
   "item.revise": "saved a new version of",
   "item.move": "moved",
   "item.delete": "deleted",
+  "item.restore": "restored",
+  "folder.restore": "restored folder",
   "folder.create": "created folder",
   "folder.rename": "renamed a folder to",
   "folder.move": "moved folder",

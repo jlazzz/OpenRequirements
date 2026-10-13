@@ -1096,6 +1096,82 @@ test("a backup that is malformed or points outside itself is refused, and leaves
   expect((await restore(() => {})).statusCode).toBe(201);
 });
 
+test("a deleted folder is restored with its contents; an item alone comes back under the set", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const inside = (await add(sys.id, { kind: "item", name: "Inside", parentId: folder })).json().node.id;
+  const early = (await add(sys.id, { kind: "item", name: "Deleted earlier", parentId: folder })).json().node.id;
+  await add(sys.id, { kind: "item", name: "Stays" });
+  const restore = (id: string, as = cookie) => post(`/api/nodes/${id}/restore`, {}, as);
+
+  await send("DELETE", `/api/nodes/${early}`, cookie);
+  await send("DELETE", `/api/nodes/${folder}`, cookie);
+  const trash = (await get(`/api/projects/${projectId}/trash`, cookie)).json().deleted;
+  expect(trash.map((n: { name: string }) => n.name).sort()).toEqual(["Deleted earlier", "Inside", "Power"]);
+  expect(trash.find((n: { name: string }) => n.name === "Inside")).toMatchObject({
+    uid: "SYS-001",
+    set: "System Requirements",
+  });
+
+  expect((await restore(inside, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(403);
+  // The folder is still deleted, so the item deleted before it comes back at the top of the set.
+  expect((await restore(early)).json()).toEqual({ restored: 1 });
+  expect((await restore(early)).statusCode).toBe(404);
+  // The folder brings back what was deleted with it, and only that.
+  expect((await restore(folder)).json()).toEqual({ restored: 2 });
+
+  const nodes = (await detail()).nodes as { id: string; name: string; parentId: string | null }[];
+  const parentOf = (id: string) => nodes.find((n) => n.id === id)?.parentId;
+  expect(nodes).toHaveLength(4);
+  expect([parentOf(inside), parentOf(early), parentOf(folder)]).toEqual([folder, null, null]);
+  expect(nodes.filter((n) => n.parentId === null).map((n) => n.name)).toEqual(["Stays", "Deleted earlier", "Power"]);
+  expect((await get(`/api/projects/${projectId}/trash`, cookie)).json().deleted).toEqual([]);
+  expect(await auditActions()).toEqual(expect.arrayContaining(["folder.restore", "item.restore"]));
+});
+
+test("a user changes their own password, which ends their other sessions", async () => {
+  const cookie = cookieOf(await post("/api/setup", admin));
+  const elsewhere = cookieOf(await post("/api/login", { email: admin.email, password: admin.password }));
+  const change = (body: object) => post("/api/account/password", body, cookie);
+
+  expect((await change({ current: "wrong", password: "another long password" })).statusCode).toBe(400);
+  expect((await change({ current: admin.password, password: "short" })).statusCode).toBe(400);
+  expect((await change({ current: admin.password, password: "another long password" })).statusCode).toBe(200);
+
+  expect((await get("/api/projects", cookie)).statusCode).toBe(200);
+  expect((await get("/api/projects", elsewhere)).statusCode).toBe(401);
+  expect((await post("/api/login", { email: admin.email, password: admin.password })).statusCode).toBe(401);
+  expect((await post("/api/login", { email: admin.email, password: "another long password" })).statusCode).toBe(200);
+  expect(await auditActions()).toContain("user.password");
+});
+
+test("a deactivated account is signed out and cannot sign in until it is activated again", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const editor = await person("Ed Editor", "editor");
+  const item = (await post(`/api/sets/${sys.id}/nodes`, { kind: "item", name: "Ed's" }, editor.cookie)).json().node.id;
+  await add(sys.id, { kind: "item", name: "Other" });
+  const setActive = (id: string, active: boolean, as = cookie) =>
+    send("PUT", `/api/users/${id}/active`, as, { active });
+  const me = (await get("/api/session", cookie)).json().user.id;
+
+  expect((await setActive(me, false)).statusCode).toBe(400);
+  expect((await setActive(me, false, editor.cookie)).statusCode).toBe(403);
+  expect((await setActive("00000000-0000-4000-8000-000000000000", false)).statusCode).toBe(404);
+  expect((await setActive(editor.id, false)).statusCode).toBe(200);
+
+  expect((await get("/api/projects", editor.cookie)).statusCode).toBe(401);
+  expect((await post("/api/login", { email: "ed.editor@example.com", password: admin.password })).statusCode).toBe(401);
+  // What they wrote stays, under their name.
+  expect((await get(`/api/items/${item}/revisions`, cookie)).json().revisions[0].author).toBe("Ed Editor");
+  const listed = (await get("/api/users", cookie)).json().users.find((u: { id: string }) => u.id === editor.id);
+  expect(listed.deactivatedAt).not.toBeNull();
+
+  expect((await setActive(editor.id, true)).statusCode).toBe(200);
+  expect((await post("/api/login", { email: "ed.editor@example.com", password: admin.password })).statusCode).toBe(200);
+  expect(await auditActions()).toEqual(expect.arrayContaining(["user.deactivate", "user.activate"]));
+});
+
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.
 test("every API route that is not marked public rejects anonymous requests", async () => {
   const guarded = app.apiRoutes.filter((r) => !r.public && r.method !== "HEAD");

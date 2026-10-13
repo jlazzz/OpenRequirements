@@ -10,6 +10,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Finishing slice built: change own password, deactivate and reactivate accounts, Deleted items page with restore, restore an old version, [install guide](docs/user-guide/install.md) (2026-10-13)
+- Bundle C tested by the owner: "It's good" (2026-10-13)
 - Bundle C built: baselines with compare against current, spreadsheet import with column mapping, CSV export of List view, JSON backup and restore, [ADR 0006](docs/adr/0006-import-backup-and-baselines.md) (2026-10-13)
 - Repo skeleton: npm workspaces, TypeScript, Vitest (2026-10-12)
 - `CLAUDE.md` (2026-10-12)
@@ -28,25 +30,25 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundles B and C: built, waiting for the owner's test at checkpoints B and C.** Bundle C was started at the owner's request before the test of B. Phase 1 is feature-complete once both are tested.
+- **Finishing slice: built, waiting for the owner's test.**
+- Bundle B (M4 + M5): the owner has not said in so many words that it was tested. Confirm.
 
 ## Next
 
-Phase 1 milestones and review checkpoints are in [docs/DESIGN.md](docs/DESIGN.md) section 10.
+All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
-1. Owner test of bundle B: Reading view; list sort, filter, columns, edit in place; search; table, image and equation in a description; invite a second user; roles; comments and mentions; activity
-2. Owner test of bundle C: create a baseline, change things, compare; import a .csv and an .xlsx; Export CSV; download a backup and restore it
-3. Fold feedback into `docs/DESIGN.md`
-4. Dogfood: import this project's own requirements spec (it is not written yet)
+1. Owner decision: conflict handling when two people edit one item ([docs/DESIGN.md](docs/DESIGN.md) section 11). Today the second save is refused with "reload".
+2. Drag and drop in the explorer
+3. HTTPS, required before an install at a real company
+4. Playwright end-to-end tests
+5. Dogfood: write this project's own requirements spec and import it
 
 Known gaps left for later milestones or owner decision:
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.
-- Deleted folders, items, relationships and comments cannot be restored from the screen yet.
-- Old versions can be viewed and compared, not restored.
 - Version diffs compare wording; a formatting-only change is reported without detail.
-- Accounts cannot be deactivated, and a user cannot change their own password yet.
+- Deleted relationships and comments cannot be restored from the screen. There is no "forgot password": an administrator cannot reset one yet.
 - Mentions do not notify anyone; they only show in the activity stream.
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.

@@ -1,6 +1,6 @@
 import { diffWords, docToText, type RichNode } from "@app/shared";
-import { Alert, Box, Modal, NavLink, Select, Stack, Text, Title } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import { Alert, Box, Button, Modal, NavLink, Select, Stack, Text, Title } from "@mantine/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type Attributes, api, type Field, formatValue } from "./api.ts";
 
@@ -17,7 +17,8 @@ type Revision = {
 type Content = Pick<Revision, "number" | "name" | "description" | "attributes">;
 
 /** Side panel listing an item's versions. Choosing one shows what changed in it. */
-export function Versions({ itemId, fields }: { itemId: string; fields: Field[] }) {
+export function Versions({ itemId, fields, editable }: { itemId: string; fields: Field[]; editable?: boolean }) {
+  const queryClient = useQueryClient();
   const history = useQuery({
     queryKey: ["items", itemId, "revisions"],
     queryFn: () => api<{ revisions: Revision[] }>(`items/${itemId}/revisions`),
@@ -28,6 +29,22 @@ export function Versions({ itemId, fields }: { itemId: string; fields: Field[] }
   const revisions = history.data?.revisions ?? [];
   const after = revisions.find((r) => r.number === shown);
   const before = revisions.find((r) => r.number === (base ?? (shown ?? 0) - 1));
+  const latest = revisions[0]?.number;
+  // Restoring never rewrites history: the old content is saved again as the newest version.
+  const restore = useMutation({
+    mutationFn: (old: Revision) =>
+      api(`items/${itemId}/revisions`, {
+        baseRevision: latest,
+        name: old.name,
+        description: old.description,
+        attributes: old.attributes,
+        changeReason: `Restored version ${old.number}`,
+      }),
+    onSuccess: async () => {
+      await Promise.all(["items", "projects"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+      setShown(null);
+    },
+  });
 
   return (
     <Box component="aside" aria-label="Versions" w={280} style={{ flexShrink: 0 }}>
@@ -82,6 +99,21 @@ export function Versions({ itemId, fields }: { itemId: string; fields: Field[] }
               />
             )}
             <RevisionDiff fields={fields} before={before} after={after} />
+            {restore.isError && (
+              <Alert color="red" role="alert">
+                {restore.error.message}
+              </Alert>
+            )}
+            {editable && after.number !== latest && (
+              <Button
+                variant="default"
+                style={{ alignSelf: "flex-start" }}
+                loading={restore.isPending}
+                onClick={() => restore.mutate(after)}
+              >
+                Restore this version
+              </Button>
+            )}
           </Stack>
         )}
       </Modal>

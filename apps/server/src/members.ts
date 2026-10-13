@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, notInArray, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
-import { invitations, projectMembers, users } from "./db/schema.ts";
+import { invitations, projectMembers, sessions, users } from "./db/schema.ts";
 import { hashPassword, NO_PASSWORD } from "./domain/password.ts";
 import { ROLES, type Role } from "./domain/roles.ts";
 
@@ -36,6 +36,7 @@ export function memberRoutes({
         email: users.email,
         isAdmin: users.isAdmin,
         createdAt: users.createdAt,
+        deactivatedAt: users.deactivatedAt,
       })
       .from(users)
       .orderBy(users.name),
@@ -45,6 +46,43 @@ export function memberRoutes({
       .where(pending)
       .orderBy(invitations.createdAt),
   }));
+
+  // Deactivating keeps the account and everything it wrote, but ends its sessions and refuses new sign-ins.
+  app.put(
+    "/api/users/:userId/active",
+    {
+      onRequest: [requireUser, requireAdmin],
+      schema: {
+        params: { type: "object", required: ["userId"], properties: { userId: uuid } },
+        body: {
+          type: "object",
+          required: ["active"],
+          additionalProperties: false,
+          properties: { active: { type: "boolean" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { userId } = req.params as { userId: string };
+      const { active } = req.body as { active: boolean };
+      if (userId === req.user?.id) return reply.code(400).send({ error: "You cannot deactivate your own account" });
+      const found = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(users)
+          .set({ deactivatedAt: active ? null : new Date() })
+          .where(eq(users.id, userId))
+          .returning({ email: users.email });
+        if (!row) return false;
+        if (!active) await tx.delete(sessions).where(eq(sessions.userId, userId));
+        await audit(tx, req.user?.id ?? null, active ? "user.activate" : "user.deactivate", "user", userId, {
+          label: row.email,
+        });
+        return true;
+      });
+      if (!found) return reply.code(404).send({ error: "User not found" });
+      return { ok: true };
+    },
+  );
 
   // There is no email server in Phase 1: the administrator copies the returned link and sends it themselves.
   app.post(

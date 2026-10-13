@@ -15,9 +15,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { FormEvent } from "react";
 import { api, type Session, type User } from "./api.ts";
+import { useSession } from "./Root.tsx";
 
 type Accounts = {
-  users: (User & { createdAt: string })[];
+  users: (User & { createdAt: string; deactivatedAt: string | null })[];
   invitations: { id: string; email: string; expiresAt: string }[];
 };
 
@@ -34,6 +35,11 @@ export function UsersPage() {
     mutationFn: (id: string) => api(`invitations/${id}`, undefined, "DELETE"),
     onSuccess: refresh,
   });
+  const setActive = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => api(`users/${id}/active`, { active }, "PUT"),
+    onSuccess: refresh,
+  });
+  const me = useSession().data?.user?.id;
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     invite.mutate(String(new FormData(event.currentTarget).get("email")));
@@ -118,12 +124,18 @@ export function UsersPage() {
           <Title order={2} size="h4" mb="xs">
             Accounts
           </Title>
+          {setActive.isError && (
+            <Alert color="red" role="alert" mb="xs">
+              {setActive.error.message}
+            </Alert>
+          )}
           <Table withTableBorder bg="white">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
                 <Table.Th>Email</Table.Th>
                 <Table.Th>Joined</Table.Th>
+                <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -136,9 +148,26 @@ export function UsersPage() {
                         Administrator
                       </Badge>
                     )}
+                    {user.deactivatedAt && (
+                      <Badge variant="light" color="gray" size="sm" radius="sm">
+                        Deactivated
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>{user.email}</Table.Td>
                   <Table.Td>{new Date(user.createdAt).toLocaleDateString()}</Table.Td>
+                  <Table.Td ta="right">
+                    {user.id !== me && (
+                      <Button
+                        size="compact-sm"
+                        variant="default"
+                        aria-label={`${user.deactivatedAt ? "Activate" : "Deactivate"} ${user.name}`}
+                        onClick={() => setActive.mutate({ id: user.id, active: Boolean(user.deactivatedAt) })}
+                      >
+                        {user.deactivatedAt ? "Activate" : "Deactivate"}
+                      </Button>
+                    )}
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

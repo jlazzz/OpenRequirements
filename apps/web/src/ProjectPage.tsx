@@ -161,6 +161,13 @@ export function ProjectPage() {
           py={4}
         />
         <RouterNavLink
+          to="/projects/$projectId/trash"
+          params={{ projectId: info.id }}
+          label="Deleted items"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
           to="/projects/$projectId/members"
           params={{ projectId: info.id }}
           label="Members"

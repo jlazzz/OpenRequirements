@@ -300,7 +300,7 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
         {project && <Relationships data={project} itemId={item.id} />}
         {project && <Comments data={project} itemId={item.id} />}
-        <Versions itemId={item.id} fields={fields} />
+        <Versions itemId={item.id} fields={fields} editable />
       </Stack>
     </Flex>
   );

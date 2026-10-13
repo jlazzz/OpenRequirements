@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { docError, docToText, emptyDoc, formatUid, type RichNode, textToDoc } from "@app/shared";
-import { and, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
@@ -657,6 +657,89 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return result;
+    },
+  );
+
+  // Deleted folders and items of a project, newest first, so they can be restored.
+  app.get(
+    "/api/projects/:projectId/trash",
+    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    async (req, reply) => {
+      const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
+      const rows = await db
+        .select({
+          id: nodes.id,
+          kind: nodes.kind,
+          uid: nodes.uid,
+          folderName: nodes.name,
+          itemName: sql<
+            string | null
+          >`(select r.name from item_revisions r where r.item_id = ${nodes.id} order by r.number desc limit 1)`,
+          set: sets.name,
+          deletedAt: nodes.deletedAt,
+        })
+        .from(nodes)
+        .innerJoin(sets, eq(sets.id, nodes.setId))
+        .where(and(eq(sets.projectId, projectId), isNotNull(nodes.deletedAt)))
+        .orderBy(desc(nodes.deletedAt), nodes.position)
+        .limit(500);
+      return {
+        deleted: rows.map(({ folderName, itemName, ...row }) => ({ ...row, name: itemName ?? folderName ?? "" })),
+      };
+    },
+  );
+
+  // Undoes a delete: the node comes back with everything that was deleted together with it.
+  app.post(
+    "/api/nodes/:nodeId/restore",
+    { onRequest: requireUser, schema: { params: idParam("nodeId") } },
+    async (req, reply) => {
+      const { nodeId } = req.params as { nodeId: string };
+      if (!(await access(req, reply, { nodeId }, "editor"))) return reply;
+      const restored = await db.transaction(async (tx) => {
+        const [node] = await tx.select().from(nodes).where(eq(nodes.id, nodeId));
+        if (!node?.deletedAt) return null;
+        await tx.select({ id: sets.id }).from(sets).where(eq(sets.id, node.setId)).for("update");
+        // One delete stamps the node and its contents with the same time, which is how the group is found again.
+        const group = await tx
+          .select({ id: nodes.id, parentId: nodes.parentId, kind: nodes.kind })
+          .from(nodes)
+          .where(and(eq(nodes.setId, node.setId), eq(nodes.deletedAt, node.deletedAt)));
+        const back = [node, ...group.filter((n) => descendantIds(group, nodeId).has(n.id))];
+        const [parent] = node.parentId
+          ? await tx.select({ deletedAt: nodes.deletedAt }).from(nodes).where(eq(nodes.id, node.parentId))
+          : [];
+        // If its folder is still deleted, the node comes back directly under the set. It goes last among its siblings.
+        const parentId = node.parentId && !parent?.deletedAt ? node.parentId : null;
+        const [last] = await tx
+          .select({ max: sql<number>`coalesce(max(${nodes.position}), 0)` })
+          .from(nodes)
+          .where(
+            and(
+              eq(nodes.setId, node.setId),
+              isNull(nodes.deletedAt),
+              parentId ? eq(nodes.parentId, parentId) : isNull(nodes.parentId),
+            ),
+          );
+        await tx
+          .update(nodes)
+          .set({ deletedAt: null })
+          .where(
+            inArray(
+              nodes.id,
+              back.map((n) => n.id),
+            ),
+          );
+        await tx
+          .update(nodes)
+          .set({ parentId, position: (last?.max ?? 0) + 1 })
+          .where(eq(nodes.id, nodeId));
+        for (const n of back) await audit(tx, req.user?.id ?? null, `${n.kind}.restore`, n.kind, n.id);
+        return back.length;
+      });
+      if (restored === null) return reply.code(404).send({ error: "Nothing deleted with this id" });
+      return { restored };
     },
   );
 

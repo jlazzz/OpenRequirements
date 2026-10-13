@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   passwordHash: text().notNull(),
   isAdmin: boolean().notNull().default(false),
   createdAt: createdAt(),
+  // Set when an administrator deactivates the account: it cannot sign in, but its history stays.
+  deactivatedAt: timestamp({ withTimezone: true }),
 });
 
 export const sessions = pgTable("sessions", {
