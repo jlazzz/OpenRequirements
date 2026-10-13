@@ -15,6 +15,13 @@
       "when": 1791850732326,
       "tag": "0001_project_structure",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791851113621,
+      "tag": "0002_nodes_and_revisions",
+      "breakpoints": true
     }
   ]
 }

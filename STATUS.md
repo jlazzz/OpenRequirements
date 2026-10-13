@@ -25,7 +25,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 **M1, structure and items.** Slices, each testable in the browser:
 
 1. [x] Create a project from the Standard template; explorer lists its sets (2026-10-12)
-2. [ ] Folders and items in a set: create, UIDs, explorer tree
+2. [x] Folders and items in a set: create, UIDs, explorer tree (2026-10-12)
 3. [ ] List view of a set or folder
 4. [ ] Single item view with the type's fields, plain text
 5. [ ] Reorder and soft-delete
@@ -34,8 +34,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner look at M1 slice 1
-2. M1 slice 2: folders and items
+1. Owner look at M1 slice 2
+2. M1 slice 3: List view of a set or folder, with the type's fields as columns
 
 ## Open decisions
 

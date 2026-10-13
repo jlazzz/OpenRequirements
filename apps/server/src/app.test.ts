@@ -16,7 +16,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -122,6 +122,65 @@ test("an unknown or malformed project id is a clean error", async () => {
   const cookie = cookieOf(await post("/api/setup", admin));
   expect((await get("/api/projects/00000000-0000-4000-8000-000000000000", cookie)).statusCode).toBe(404);
   expect((await get("/api/projects/not-a-uuid", cookie)).statusCode).toBe(400);
+});
+
+async function projectWithSets() {
+  const cookie = cookieOf(await post("/api/setup", admin));
+  const { project } = (await post("/api/projects", { name: "P", templateId: "standard" }, cookie)).json();
+  const detail = async () => (await get(`/api/projects/${project.id}`, cookie)).json();
+  const [un, sys] = (await detail()).sets as { id: string }[];
+  if (!un || !sys) throw new Error("template sets missing");
+  const add = (setId: string, body: object) => post(`/api/sets/${setId}/nodes`, body, cookie);
+  return { cookie, detail, un, sys, add };
+}
+
+test("items get sequential UIDs per set and a first revision; folders nest them", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node;
+  expect(folder).toMatchObject({ kind: "folder", name: "Power", uid: null });
+
+  const first = (await add(sys.id, { kind: "item", name: " Supply voltage ", parentId: folder.id })).json().node;
+  const second = (await add(sys.id, { kind: "item", name: "Max current" })).json().node;
+  const other = (await add(un.id, { kind: "item", name: "Portable" })).json().node;
+  expect([first.uid, second.uid, other.uid]).toEqual(["SYS-001", "SYS-002", "UN-001"]);
+  expect(first).toMatchObject({ name: "Supply voltage", parentId: folder.id });
+
+  const tree = (await detail()).nodes;
+  expect(tree.map((n: { name: string }) => n.name).sort()).toEqual([
+    "Max current",
+    "Portable",
+    "Power",
+    "Supply voltage",
+  ]);
+
+  const item = (await get(`/api/items/${first.id}`, cookie)).json().item;
+  expect(item).toMatchObject({ uid: "SYS-001", name: "Supply voltage", description: "", revision: 1 });
+  expect(await auditActions()).toEqual(expect.arrayContaining(["folder.create", "item.create"]));
+});
+
+test("concurrent creates in one set never share a UID", async () => {
+  const { sys, add } = await projectWithSets();
+  const results = await Promise.all(Array.from({ length: 8 }, (_, i) => add(sys.id, { kind: "item", name: `R${i}` })));
+  const uids = results.map((r) => r.json().node.uid).sort();
+  expect(uids).toEqual(Array.from({ length: 8 }, (_, i) => `SYS-00${i + 1}`));
+});
+
+test("a node's parent must be a folder in the same set", async () => {
+  const { un, sys, add } = await projectWithSets();
+  const item = (await add(sys.id, { kind: "item", name: "A" })).json().node;
+  const otherFolder = (await add(un.id, { kind: "folder", name: "F" })).json().node;
+  expect((await add(sys.id, { kind: "item", name: "B", parentId: item.id })).statusCode).toBe(400);
+  expect((await add(sys.id, { kind: "item", name: "B", parentId: otherFolder.id })).statusCode).toBe(400);
+  // A rejected create must not use up a UID.
+  expect((await add(sys.id, { kind: "item", name: "B" })).json().node.uid).toBe("SYS-002");
+});
+
+test("creating a node rejects blank names and unknown sets, and a folder is not an item", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  expect((await add(sys.id, { kind: "item", name: "  " })).statusCode).toBe(400);
+  expect((await add("00000000-0000-4000-8000-000000000000", { kind: "item", name: "A" })).statusCode).toBe(404);
+  const folder = (await add(sys.id, { kind: "folder", name: "F" })).json().node;
+  expect((await get(`/api/items/${folder.id}`, cookie)).statusCode).toBe(404);
 });
 
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.

@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import { attributeDefinitions, itemTypes, projects, sets } from "./db/schema.ts";
 import { templates } from "./domain/templates.ts";
+import { projectNodes } from "./nodes.ts";
 
 const projectParams = {
   type: "object",
@@ -91,7 +92,7 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
         .where(eq(sets.projectId, projectId))
         .orderBy(sets.position);
-      return { project, sets: projectSets };
+      return { project, sets: projectSets, nodes: await projectNodes(db, projectId) };
     },
   );
 }

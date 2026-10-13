@@ -85,7 +85,7 @@ apps/
     src/links.tsx   Mantine links wired to the router: use these, not <a>
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
-    src/projects.ts Feature route file: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.

@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 
@@ -69,6 +69,50 @@ export const sets = pgTable(
     position: integer().notNull(),
   },
   (t) => [unique().on(t.projectId, t.uidPrefix)],
+);
+
+/** The tree inside a set: folders and items. Soft delete only: rows are never removed. */
+export const nodes = pgTable(
+  "nodes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    setId: uuid()
+      .notNull()
+      .references(() => sets.id),
+    // Null means directly under the set. Otherwise a folder in the same set.
+    parentId: uuid().references((): AnyPgColumn => nodes.id),
+    kind: text().$type<"folder" | "item">().notNull(),
+    // Folders only. An item's name lives in its revisions.
+    name: text(),
+    // Items only, e.g. SYS-042. Never reused.
+    uid: text(),
+    // Order among siblings.
+    position: integer().notNull(),
+    createdAt: createdAt(),
+    deletedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [unique().on(t.setId, t.uid)],
+);
+
+/** Append-only. The current state of an item is its highest-numbered revision. */
+export const itemRevisions = pgTable(
+  "item_revisions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    number: integer().notNull(),
+    name: text().notNull(),
+    description: text().notNull().default(""),
+    attributes: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    authorId: uuid()
+      .notNull()
+      .references(() => users.id),
+    changeReason: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.itemId, t.number)],
 );
 
 /** Append-only log of every write. Never update or delete rows. */

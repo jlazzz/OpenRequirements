@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
-import { ProjectHome, ProjectPage, SetPage } from "./ProjectPage.tsx";
+import { ItemPage } from "./ItemPage.tsx";
+import { FolderPage, ProjectHome, ProjectPage, SetPage } from "./ProjectPage.tsx";
 import { ProjectsPage } from "./ProjectsPage.tsx";
 import { Root } from "./Root.tsx";
 
@@ -10,11 +11,16 @@ const projectRoute = createRoute({
   path: "projects/$projectId",
   component: ProjectPage,
 });
-const projectHomeRoute = createRoute({ getParentRoute: () => projectRoute, path: "/", component: ProjectHome });
-const setRoute = createRoute({ getParentRoute: () => projectRoute, path: "sets/$setId", component: SetPage });
+const inProject = { getParentRoute: () => projectRoute };
+const projectChildren = [
+  createRoute({ ...inProject, path: "/", component: ProjectHome }),
+  createRoute({ ...inProject, path: "sets/$setId", component: SetPage }),
+  createRoute({ ...inProject, path: "folders/$nodeId", component: FolderPage }),
+  createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
+];
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([projectsRoute, projectRoute.addChildren([projectHomeRoute, setRoute])]),
+  routeTree: rootRoute.addChildren([projectsRoute, projectRoute.addChildren(projectChildren)]),
 });
 
 declare module "@tanstack/react-router" {

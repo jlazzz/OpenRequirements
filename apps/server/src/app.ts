@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { Db } from "./db/client.ts";
 import { auditEvents, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
+import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
 
 const SESSION_COOKIE = "session";
@@ -187,7 +188,9 @@ export async function buildApp(
     return { ok: true };
   });
 
-  projectRoutes({ app, db, requireUser, requireAdmin, audit });
+  const context: AppContext = { app, db, requireUser, requireAdmin, audit };
+  projectRoutes(context);
+  nodeRoutes(context);
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });
