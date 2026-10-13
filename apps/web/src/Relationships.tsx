@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Badge,
   Box,
   Button,
   Group,
@@ -15,7 +16,7 @@ import {
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, canEdit, type ProjectDetail, type ProjectLinks, type TreeNode } from "./api.ts";
+import { api, canEdit, isSuspect, type LiveLink, type ProjectDetail, type ProjectLinks, type TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 
 type Direction = "upstream" | "downstream";
@@ -26,6 +27,31 @@ export function useLinks(projectId: string) {
     queryKey: ["projects", projectId, "links"],
     queryFn: () => api<ProjectLinks>(`projects/${projectId}/links`),
   });
+}
+
+/** Confirms suspect relationships against the versions on screen. The server refuses if an item changed since. */
+export function useConfirmLinks(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (links: LiveLink[]) =>
+      api(`projects/${projectId}/links/confirm`, {
+        links: links.map((l) => ({
+          id: l.id,
+          upstreamRevision: l.current.upstream,
+          downstreamRevision: l.current.downstream,
+        })),
+      }),
+    // Also after a refusal, so the screen shows the versions that are now current.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects", projectId, "links"] }),
+  });
+}
+
+export function SuspectBadge() {
+  return (
+    <Badge color="orange" variant="light" size="sm" title="An item changed since this relationship was confirmed">
+      Suspect
+    </Badge>
+  );
 }
 
 /** Side panel listing an item's upstream and downstream relationships, with add and remove. */
@@ -40,6 +66,8 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
     mutationFn: (linkId: string) => api(`links/${linkId}`, undefined, "DELETE"),
     onSuccess: refresh,
   });
+
+  const confirm = useConfirmLinks(projectId);
 
   const nodeOf = (id: string) => data.nodes.find((n) => n.id === id);
   const typeName = (id: string) => links.data?.linkTypes.find((t) => t.id === id)?.name ?? "";
@@ -85,6 +113,22 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
                   <Text size="xs" c="dimmed">
                     {typeName(link.typeId)}
                   </Text>
+                  {isSuspect(link) && (
+                    <Group gap={6} mt={2}>
+                      <SuspectBadge />
+                      {editor && (
+                        <Button
+                          size="compact-xs"
+                          variant="default"
+                          aria-label={`Confirm relationship with ${other.uid}`}
+                          onClick={() => confirm.mutate([link])}
+                          loading={confirm.isPending && confirm.variables?.[0]?.id === link.id}
+                        >
+                          Confirm
+                        </Button>
+                      )}
+                    </Group>
+                  )}
                 </Box>
                 {editor && (
                   <ActionIcon
@@ -110,9 +154,9 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
       <Title order={2} size="h5" mb={4}>
         Relationships
       </Title>
-      {(links.isError || remove.isError) && (
+      {(links.isError || remove.isError || confirm.isError) && (
         <Alert color="red" role="alert">
-          {(links.error ?? remove.error)?.message}
+          {(links.error ?? remove.error ?? confirm.error)?.message}
         </Alert>
       )}
       <Stack gap="sm">

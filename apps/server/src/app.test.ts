@@ -538,7 +538,15 @@ test("items can be linked upstream to downstream, once per pair, and unlinked", 
   expect(created.statusCode).toBe(201);
   expect((await link(need, req2)).statusCode).toBe(201);
   expect((await list()).links).toEqual([
-    { id: created.json().link.id, typeId, upstreamId: need, downstreamId: req1 },
+    {
+      id: created.json().link.id,
+      typeId,
+      upstreamId: need,
+      downstreamId: req1,
+      confirmed: { upstream: 1, downstream: 2 },
+      current: { upstream: 1, downstream: 2 },
+      changed: { upstream: false, downstream: false },
+    },
     expect.objectContaining({ upstreamId: need, downstreamId: req2 }),
   ]);
   // The link remembers which revisions it joined, for suspect-link checks later.
@@ -580,6 +588,79 @@ test("two requests linking the same pair cannot both succeed, and projects canno
   const otherSet = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0];
   const c = (await add(otherSet.id, { kind: "item", name: "C" })).json().node.id;
   expect((await post("/api/links", { upstreamId: a, downstreamId: c, typeId }, cookie)).statusCode).toBe(400);
+});
+
+test("a new version of either end makes a relationship suspect until an editor confirms it", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const req1 = (await add(sys.id, { kind: "item", name: "Req 1" })).json().node.id;
+  const req2 = (await add(sys.id, { kind: "item", name: "Req 2" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
+  const link1 = (await post("/api/links", { upstreamId: need, downstreamId: req1, typeId }, cookie)).json().link.id;
+  const link2 = (await post("/api/links", { upstreamId: need, downstreamId: req2, typeId }, cookie)).json().link.id;
+  const revise = (itemId: string, baseRevision: number) =>
+    post(
+      `/api/items/${itemId}/revisions`,
+      { baseRevision, name: `v${baseRevision + 1}`, description: textToDoc(""), attributes: {} },
+      cookie,
+    );
+  const list = async () => (await get(`/api/projects/${projectId}/links`, cookie)).json().links;
+  const confirm = (links: object[], as = cookie) => post(`/api/projects/${projectId}/links/confirm`, { links }, as);
+  const seen = (id: string, upstreamRevision: number, downstreamRevision: number) => ({
+    id,
+    upstreamRevision,
+    downstreamRevision,
+  });
+  const rowsBefore = (await db.execute(sql`select * from links order by id`)).rows;
+
+  // The upstream item changes: both of its relationships are suspect. One downstream item changes too.
+  await revise(need, 1);
+  await revise(req2, 1);
+  expect((await list()).map((l: { changed: object }) => l.changed)).toEqual([
+    { upstream: true, downstream: false },
+    { upstream: true, downstream: true },
+  ]);
+  // A baseline records which relationships were suspect when it was made.
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B" }, cookie)).json().id;
+
+  expect((await confirm([seen(link1, 2, 1)], (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(403);
+  expect((await confirm([seen(link1, 1, 1)])).statusCode, "confirming a version that is no longer current").toBe(409);
+  expect((await confirm([seen("00000000-0000-4000-8000-000000000000", 1, 1)])).statusCode).toBe(404);
+  // All or nothing: one stale entry stops the whole request.
+  expect((await confirm([seen(link1, 2, 1), seen(link2, 2, 1)])).statusCode).toBe(409);
+  expect((await list()).every((l: { changed: { upstream: boolean } }) => l.changed.upstream)).toBe(true);
+
+  expect((await confirm([seen(link1, 2, 1), seen(link2, 2, 2)])).json()).toEqual({ confirmed: 2 });
+  expect(await list()).toEqual([
+    expect.objectContaining({
+      confirmed: { upstream: 2, downstream: 1 },
+      changed: { upstream: false, downstream: false },
+    }),
+    expect.objectContaining({
+      confirmed: { upstream: 2, downstream: 2 },
+      changed: { upstream: false, downstream: false },
+    }),
+  ]);
+  // Confirming what is not suspect records nothing.
+  expect((await confirm([seen(link1, 2, 1)])).json()).toEqual({ confirmed: 0 });
+
+  // The next change makes it suspect again, and a second confirmation is a second link revision.
+  await revise(req1, 1);
+  expect((await list())[0].changed).toEqual({ upstream: false, downstream: true });
+  expect((await confirm([seen(link1, 2, 2)])).json()).toEqual({ confirmed: 1 });
+  const revisions = await db.execute(
+    sql`select number, upstream_revision, downstream_revision from link_revisions where link_id = ${link1} order by number`,
+  );
+  expect(revisions.rows).toEqual([
+    { number: 1, upstream_revision: 2, downstream_revision: 1 },
+    { number: 2, upstream_revision: 2, downstream_revision: 2 },
+  ]);
+  // Link rows are never edited, and the baseline still says what was suspect then.
+  expect((await db.execute(sql`select * from links order by id`)).rows).toEqual(rowsBefore);
+  const frozen = (await get(`/api/baselines/${baselineId}`, cookie)).json().links;
+  expect(frozen.map((l: { suspect: boolean }) => l.suspect)).toEqual([true, true]);
+  expect((await auditActions()).filter((a) => a === "link.confirm")).toHaveLength(3);
 });
 
 test("an image can be uploaded, embedded in a description and read back; other files are refused", async () => {
@@ -891,7 +972,7 @@ test("a baseline freezes items, folders and relationships; later changes do not 
     description: textToDoc(""),
   });
   expect(byName.Power).toMatchObject({ kind: "folder", revision: null });
-  expect(frozen.links).toEqual([{ id: link, typeId, upstreamId: need, downstreamId: req }]);
+  expect(frozen.links).toEqual([{ id: link, typeId, upstreamId: need, downstreamId: req, suspect: false }]);
 
   // A set baseline holds that set's nodes, and the relationships that touch it.
   const part = (await get(`/api/baselines/${ofSet}`, cookie)).json();
@@ -968,16 +1049,27 @@ test("a backup restores as a new project with history, relationships, comments, 
   );
   await send("DELETE", `/api/nodes/${doomed}`, cookie);
   const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
-  await post("/api/links", { upstreamId: need, downstreamId: req, typeId }, cookie);
+  const linkId = (await post("/api/links", { upstreamId: need, downstreamId: req, typeId }, cookie)).json().link.id;
   await post(`/api/items/${req}/comments`, { body: "@Rob Reviewer check" }, cookie);
+  // The relationship goes suspect, is frozen suspect in a baseline, then is confirmed.
+  await post(
+    `/api/items/${need}/revisions`,
+    { baseRevision: 1, name: "Need 2", description: textToDoc(""), attributes: {} },
+    cookie,
+  );
   await post(`/api/projects/${projectId}/baselines`, { name: "v1" }, cookie);
+  await post(
+    `/api/projects/${projectId}/links/confirm`,
+    { links: [{ id: linkId, upstreamRevision: 2, downstreamRevision: 2 }] },
+    cookie,
+  );
 
   expect((await get(`/api/projects/${projectId}/backup`, reviewer.cookie)).statusCode).toBe(403);
   const file = await get(`/api/projects/${projectId}/backup`, cookie);
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 1, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 2, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -993,7 +1085,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   const tree = (await get(`/api/projects/${copy.id}`, cookie)).json();
   expect(tree.sets.map((s: { uidPrefix: string }) => s.uidPrefix)).toEqual(["UN", "SYS", "VER"]);
   const names = tree.nodes.map((n: { name: string }) => n.name).sort();
-  expect(names).toEqual(["Need", "Power", "Supply voltage"]);
+  expect(names).toEqual(["Need 2", "Power", "Supply voltage"]);
   const newReq = tree.nodes.find((n: { uid: string }) => n.uid === "SYS-001");
   expect(newReq.id).not.toBe(req);
   expect(tree.nodes.find((n: { name: string }) => n.name === "Power").id).toBe(newReq.parentId);
@@ -1012,16 +1104,39 @@ test("a backup restores as a new project with history, relationships, comments, 
     [2, "Supply voltage", "Admin"],
     [1, "Supply", "Admin"],
   ]);
-  expect((await get(`/api/projects/${copy.id}/links`, cookie)).json().links).toHaveLength(1);
+  // The confirmation came along: the relationship is not suspect in the copy, and the baseline still says it was.
+  expect((await get(`/api/projects/${copy.id}/links`, cookie)).json().links).toEqual([
+    expect.objectContaining({
+      confirmed: { upstream: 2, downstream: 2 },
+      changed: { upstream: false, downstream: false },
+    }),
+  ]);
   const [comment] = (await get(`/api/items/${newReq.id}/comments`, cookie)).json().comments;
   expect(comment).toMatchObject({ body: "@Rob Reviewer check", author: "Admin" });
   const [baseline] = (await get(`/api/projects/${copy.id}/baselines`, cookie)).json().baselines;
-  expect((await get(`/api/baselines/${baseline.id}`, cookie)).json().entries).toHaveLength(3);
+  const frozen = (await get(`/api/baselines/${baseline.id}`, cookie)).json();
+  expect(frozen.entries).toHaveLength(3);
+  expect(frozen.links).toEqual([expect.objectContaining({ suspect: true })]);
   expect((await get(`/api/projects/${copy.id}/search?q=voltage`, cookie)).json().ids).toEqual([newReq.id]);
   const actions = (await get(`/api/projects/${copy.id}/activity`, cookie))
     .json()
     .events.map((e: { action: string }) => e.action);
   expect(actions).toEqual(expect.arrayContaining(["project.restore", "item.revise", "baseline.create"]));
+
+  // A version 1 file, from before suspect links, still restores: nothing confirmed, nothing recorded on its baselines.
+  const { linkRevisions: _, ...old } = backup;
+  const v1 = {
+    ...old,
+    version: 1,
+    baselineLinks: backup.baselineLinks.map((l: { baselineId: string; linkId: string }) => ({
+      baselineId: l.baselineId,
+      linkId: l.linkId,
+    })),
+  };
+  const fromV1 = (await post("/api/projects/restore", v1, cookie)).json().project;
+  expect((await get(`/api/projects/${fromV1.id}/links`, cookie)).json().links[0].changed.upstream).toBe(true);
+  const [oldBaseline] = (await get(`/api/projects/${fromV1.id}/baselines`, cookie)).json().baselines;
+  expect((await get(`/api/baselines/${oldBaseline.id}`, cookie)).json().links[0].suspect).toBeNull();
 
   // UIDs of deleted items stay used in the copy, and the original project is untouched.
   const newSys = tree.sets[1].id;
@@ -1062,7 +1177,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 2 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 3 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));

@@ -92,6 +92,7 @@ apps/
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
     src/domain/roles.ts      Role ranking and @mention matching
+    src/domain/suspect.ts    The suspect-link rule: which ends of a link changed since it was confirmed
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
@@ -162,9 +163,9 @@ Item ─< ItemRevision               (append-only: body, attributes JSONB, autho
 ItemType ─< AttributeDefinition    (name, type, allowed values, required?)
 Project ─< LinkType                (name; from the template; no source→target rules)
 Link                               (upstream item, downstream item, type, revisions of both ends at creation; immutable, soft-deleted)
-LinkRevision                       (Phase 2, with suspect links: re-confirmations of a link)
+Link ─< LinkRevision               (append-only: one per confirmation of a suspect link, with the revisions of both ends confirmed against)
 Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
-Baseline ─< BaselineLink               (ids of the links that were live)
+Baseline ─< BaselineLink               (ids of the links that were live, and whether each was suspect)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted)
 Project ─< Attachment              (uploaded images embedded in rich text)
 Item ─< ExternalReference          (later)
@@ -177,7 +178,7 @@ AuditEvent                          (append-only log of every write; project id 
 - **UIDs:** a per-set prefix plus a monotonic counter (`SRS-001`). See `packages/shared/src/uid.ts`.
 - **Versioning:** append-only revision tables. The "current" state is the latest revision. Baselines reference revision IDs, so they cost nothing to create and can never drift.
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
-- **Suspect links (Phase 2):** each link records which revisions of its source and target were last confirmed. Store those revision IDs from Phase 1 on; flagging comes later.
+- **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
 - **Ordering:** set trees use fractional indexing or ordered lists, so reordering does not rewrite every row.
 - **Permissions:** per project: Viewer reads, Reviewer also comments, Editor also changes items and relationships, Admin also manages members. An instance administrator (`users.is_admin`) is Admin in every project, manages accounts and creates projects. Set-level overrides come later.
 

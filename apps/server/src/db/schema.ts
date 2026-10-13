@@ -176,7 +176,7 @@ export const links = pgTable("links", {
   downstreamId: uuid()
     .notNull()
     .references(() => nodes.id),
-  // The revisions of both ends when the link was made. Phase 2 uses them to flag suspect links.
+  // The revisions of both ends when the link was made. The link is suspect once either end has a newer one.
   upstreamRevision: integer().notNull(),
   downstreamRevision: integer().notNull(),
   createdBy: uuid()
@@ -185,6 +185,25 @@ export const links = pgTable("links", {
   createdAt: createdAt(),
   deletedAt: timestamp({ withTimezone: true }),
 });
+
+/** Append-only. One row each time someone confirms a suspect link: the revisions of both ends they confirmed it against. */
+export const linkRevisions = pgTable(
+  "link_revisions",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    linkId: uuid()
+      .notNull()
+      .references(() => links.id),
+    number: integer().notNull(),
+    upstreamRevision: integer().notNull(),
+    downstreamRevision: integer().notNull(),
+    confirmedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.linkId, t.number)],
+);
 
 /** An uploaded image. The bytes are a file named by this id in the attachments directory. */
 export const attachments = pgTable("attachments", {
@@ -290,6 +309,8 @@ export const baselineLinks = pgTable(
     linkId: uuid()
       .notNull()
       .references(() => links.id),
+    // Whether the link was suspect at that moment. Null for baselines made before suspect links existed.
+    suspect: boolean(),
   },
   (t) => [primaryKey({ columns: [t.baselineId, t.linkId] })],
 );

@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Suspect links built: pure flagging rule, link revisions for confirmations, markers in the Relationships panel, matrix and List view, "Suspect links" review page, suspect flag in baselines, backup format version 2, [ADR 0007](docs/adr/0007-suspect-links.md) (2026-10-13)
 - Owner feedback on the explorer and item state folded in: compact explorer with icons and collapsible folders, state colours in every multi-item view, print or save as PDF from Reading view (2026-10-13)
 - Example project "Infusion Pump (example)" added to the owner's local instance (2026-10-13)
 - Finishing slice built: change own password, deactivate and reactivate accounts, Deleted items page with restore, restore an old version, [install guide](docs/user-guide/install.md) (2026-10-13)
@@ -32,7 +33,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Finishing slice: built, waiting for the owner's test.**
+- **Suspect links: built, waiting for the owner's test.**
+- Finishing slice: built, waiting for the owner's test.
 - Bundle B (M4 + M5): the owner has not said in so many words that it was tested. Confirm.
 
 ## Next
@@ -53,6 +55,7 @@ Known gaps left for later milestones or owner decision:
 - Deleted relationships and comments cannot be restored from the screen. There is no "forgot password": an administrator cannot reset one yet.
 - Mentions do not notify anyone; they only show in the activity stream.
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
+- Suspect links: no notification when a link becomes suspect, no "suspect only" filter in List view, and baseline compare does not report suspect differences. The review page links to the changed item; its version compare is opened from there by hand.
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
 - Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
 - Export is CSV only (Excel opens it). No .xlsx export.

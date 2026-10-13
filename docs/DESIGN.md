@@ -80,7 +80,7 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 - **One relationship per pair of items**, in either direction. Both items must be in the same project.
 - **Relationship types** come from the project template. Standard has: Related to, Derived from, Verified by.
 - **Removing a relationship is a soft delete.** A relationship to a deleted item is hidden.
-- **Suspect links: not in Phase 1.** Still store, on each link, the source and target revisions it was created against, so suspect flagging can be added later without a migration of old links.
+- **Suspect links:** built ahead of Phase 2 at the owner's request, see [ADR 0007](adr/0007-suspect-links.md). A relationship is suspect when either end got a new version since it was made or last confirmed; an editor confirms it from the item's panel or the project's Suspect links page.
 
 ## 5. Team features in Phase 1
 
@@ -121,7 +121,7 @@ Moved **into** Phase 1 from Phase 2: invitations and roles, comments, activity s
 
 Added, not in the outline: item types and sets (Jama model), draft-and-commit editing, project templates, equations.
 
-Stays in Phase 2 or later: suspect links, relationship rules, Trace view, admin UI for types and fields, email notifications, Word / PDF / ReqIF, HTTPS.
+Stays in Phase 2 or later: relationship rules, Trace view, admin UI for types and fields, email notifications, Word / PDF / ReqIF, HTTPS.
 
 The outline estimated Phase 1 at 2–3 months of solo part-time work. With these additions, expect roughly double.
 

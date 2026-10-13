@@ -1,6 +1,6 @@
 import { Alert, Group, Select, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type { TreeNode } from "./api.ts";
+import { isSuspect, type LiveLink, type TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
@@ -20,13 +20,17 @@ export function MatrixPage() {
   if (!rowSet || !colSet) return <Alert color="red">This project has no sets.</Alert>;
   const rows = itemsWithin(nodes, rowSet.id);
   const cols = itemsWithin(nodes, colSet.id);
-  const pairs = new Set(
-    (links.data?.links ?? []).flatMap((l) => [
-      `${l.upstreamId}:${l.downstreamId}`,
-      `${l.downstreamId}:${l.upstreamId}`,
+  const pairs = new Map(
+    (links.data?.links ?? []).flatMap((l): [string, LiveLink][] => [
+      [`${l.upstreamId}:${l.downstreamId}`, l],
+      [`${l.downstreamId}:${l.upstreamId}`, l],
     ]),
   );
   const linked = (a: TreeNode, b: TreeNode) => pairs.has(`${a.id}:${b.id}`);
+  const suspect = (a: TreeNode, b: TreeNode) => {
+    const link = pairs.get(`${a.id}:${b.id}`);
+    return link !== undefined && isSuspect(link);
+  };
   const unlinked = rows.filter((row) => !cols.some((col) => linked(row, col))).length;
   const options = sets.map((s) => ({ value: s.id, label: s.name }));
   const choose = (key: "rows" | "cols") => (value: string | null) =>
@@ -52,6 +56,9 @@ export function MatrixPage() {
         <Text c="dimmed">Both sets need at least one item.</Text>
       ) : (
         <>
+          <Text size="sm" c="dimmed">
+            ● linked. ⚠ suspect: an item changed since the relationship was confirmed.
+          </Text>
           <Text size="sm" c={unlinked > 0 ? "orange.8" : "dimmed"}>
             {unlinked} of {rows.length} {rowSet.name} items have no relationship with any {colSet.name} item.
           </Text>
@@ -82,10 +89,18 @@ export function MatrixPage() {
                       <StatusBadge status={row.status} />
                     </Table.Th>
                     {cols.map((col) => (
-                      <Table.Td key={col.id} ta="center" bg={linked(row, col) ? "blue.0" : undefined}>
+                      <Table.Td
+                        key={col.id}
+                        ta="center"
+                        bg={suspect(row, col) ? "orange.1" : linked(row, col) ? "blue.0" : undefined}
+                      >
                         {linked(row, col) && (
-                          <span role="img" aria-label={`${row.uid} is linked to ${col.uid}`}>
-                            ●
+                          <span
+                            role="img"
+                            aria-label={`${row.uid} is linked to ${col.uid}${suspect(row, col) ? ", suspect" : ""}`}
+                            title={suspect(row, col) ? "Suspect: an item changed since this was confirmed" : undefined}
+                          >
+                            {suspect(row, col) ? "⚠" : "●"}
                           </span>
                         )}
                       </Table.Td>

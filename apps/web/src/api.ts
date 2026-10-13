@@ -77,7 +77,12 @@ export function formatValue(value: unknown): string {
 export type LinkType = { id: string; name: string };
 /** A relationship: the upstream item is the source, the downstream item derives from, verifies or otherwise depends on it. */
 export type Link = { id: string; typeId: string; upstreamId: string; downstreamId: string };
-export type ProjectLinks = { linkTypes: LinkType[]; links: Link[] };
+type Ends<T> = { upstream: T; downstream: T };
+/** A live relationship with the versions it was last confirmed against, the current ones, and which end changed since. */
+export type LiveLink = Link & { confirmed: Ends<number>; current: Ends<number>; changed: Ends<boolean> };
+/** A relationship is suspect when either end has a newer version than the one it was made or last confirmed against. */
+export const isSuspect = (link: LiveLink) => link.changed.upstream || link.changed.downstream;
+export type ProjectLinks = { linkTypes: LinkType[]; links: LiveLink[] };
 
 /** Uploads an image to a project and returns the address to embed in rich text. */
 export async function uploadImage(projectId: string, file: File): Promise<string> {

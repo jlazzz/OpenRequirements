@@ -1,9 +1,62 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import type { AppContext } from "./app.ts";
-import { itemRevisions, links, linkTypes, nodes, sets } from "./db/schema.ts";
+import type { Db } from "./db/client.ts";
+import { itemRevisions, linkRevisions, links, linkTypes, nodes, sets } from "./db/schema.ts";
+import { changedEnds } from "./domain/suspect.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
+const revision = { type: "integer", minimum: 1 } as const;
+
+/**
+ * The live relationships of a project, or only those touching one set or having one of the given ids.
+ * Each carries the revisions it was last confirmed against, the current ones, and which end changed since.
+ */
+export async function liveLinks(
+  db: Pick<Db, "select">,
+  projectId: string,
+  only: { setId?: string; ids?: string[] } = {},
+) {
+  const up = alias(nodes, "up");
+  const down = alias(nodes, "down");
+  const current = (item: AnyPgColumn) =>
+    sql<number>`(select max(r.number) from item_revisions r where r.item_id = ${item})`;
+  // The latest confirmation, or the revisions stored on the link when it has never been confirmed.
+  const confirmed = (end: "upstream_revision" | "downstream_revision", made: AnyPgColumn) =>
+    sql<number>`coalesce((select ${sql.raw(`c.${end}`)} from link_revisions c where c.link_id = ${links.id} order by c.number desc limit 1), ${made})`;
+  // shortcut: reads every link of the project, query per set or per item when projects reach tens of thousands of links
+  const rows = await db
+    .select({
+      id: links.id,
+      typeId: links.linkTypeId,
+      upstreamId: links.upstreamId,
+      downstreamId: links.downstreamId,
+      confirmedUp: confirmed("upstream_revision", links.upstreamRevision),
+      confirmedDown: confirmed("downstream_revision", links.downstreamRevision),
+      currentUp: current(up.id),
+      currentDown: current(down.id),
+    })
+    .from(links)
+    .innerJoin(up, eq(up.id, links.upstreamId))
+    .innerJoin(down, eq(down.id, links.downstreamId))
+    // A link to a deleted item is hidden, and comes back if the item is ever restored.
+    .where(
+      and(
+        eq(links.projectId, projectId),
+        isNull(links.deletedAt),
+        isNull(up.deletedAt),
+        isNull(down.deletedAt),
+        only.setId ? or(eq(up.setId, only.setId), eq(down.setId, only.setId)) : undefined,
+        only.ids ? inArray(links.id, only.ids) : undefined,
+      ),
+    )
+    .orderBy(links.createdAt);
+  return rows.map(({ confirmedUp, confirmedDown, currentUp, currentDown, ...link }) => {
+    const confirmed = { upstream: confirmedUp, downstream: confirmedDown };
+    const current = { upstream: currentUp, downstream: currentDown };
+    return { ...link, confirmed, current, changed: changedEnds(confirmed, current) };
+  });
+}
 
 export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) {
   // Every live relationship of a project. The item side panel, the matrix and the coverage filter all read this.
@@ -21,25 +74,7 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
         .from(linkTypes)
         .where(eq(linkTypes.projectId, projectId))
         .orderBy(linkTypes.position);
-      const up = alias(nodes, "up");
-      const down = alias(nodes, "down");
-      // shortcut: returns every link of the project, query per set or per item when projects reach tens of thousands of links
-      const rows = await db
-        .select({
-          id: links.id,
-          typeId: links.linkTypeId,
-          upstreamId: links.upstreamId,
-          downstreamId: links.downstreamId,
-        })
-        .from(links)
-        .innerJoin(up, eq(up.id, links.upstreamId))
-        .innerJoin(down, eq(down.id, links.downstreamId))
-        // A link to a deleted item is hidden, and comes back if the item is ever restored.
-        .where(
-          and(eq(links.projectId, projectId), isNull(links.deletedAt), isNull(up.deletedAt), isNull(down.deletedAt)),
-        )
-        .orderBy(links.createdAt);
-      return { linkTypes: types, links: rows };
+      return { linkTypes: types, links: await liveLinks(db, projectId) };
     },
   );
 
@@ -128,6 +163,84 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);
+    },
+  );
+
+  // Confirms suspect relationships: each gets a new link revision holding the current revisions of both ends.
+  // One request covers "Confirm" and "Confirm all for this item"; all of it succeeds or none.
+  app.post(
+    "/api/projects/:projectId/links/confirm",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: { type: "object", required: ["projectId"], properties: { projectId: uuid } },
+        body: {
+          type: "object",
+          required: ["links"],
+          additionalProperties: false,
+          properties: {
+            links: {
+              type: "array",
+              minItems: 1,
+              maxItems: 500,
+              items: {
+                type: "object",
+                required: ["id", "upstreamRevision", "downstreamRevision"],
+                additionalProperties: false,
+                // The revisions the person was looking at, so nobody confirms a version they have not seen.
+                properties: { id: uuid, upstreamRevision: revision, downstreamRevision: revision },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "editor"))) return reply;
+      const userId = req.user?.id as string;
+      const { links: asked } = req.body as {
+        links: { id: string; upstreamRevision: number; downstreamRevision: number }[];
+      };
+      const seen = new Map(asked.map((link) => [link.id, link]));
+      const ids = [...seen.keys()];
+
+      const result = await db.transaction(async (tx) => {
+        // Locks the links, so two people confirming one link cannot both take the same revision number.
+        await tx.select({ id: links.id }).from(links).where(inArray(links.id, ids)).orderBy(links.id).for("update");
+        const live = await liveLinks(tx, projectId, { ids });
+        if (live.length !== ids.length) return { error: [404, "Relationship not found"] } as const;
+        const stale = live.some((link) => {
+          const sent = seen.get(link.id);
+          return (
+            sent?.upstreamRevision !== link.current.upstream || sent.downstreamRevision !== link.current.downstream
+          );
+        });
+        if (stale) return { error: [409, "An item changed again. Reload and review it before confirming."] } as const;
+
+        const suspect = live.filter((link) => link.changed.upstream || link.changed.downstream);
+        if (suspect.length === 0) return { confirmed: 0 };
+        const last = await tx
+          .select({ linkId: linkRevisions.linkId, number: sql<number>`max(${linkRevisions.number})` })
+          .from(linkRevisions)
+          .where(inArray(linkRevisions.linkId, ids))
+          .groupBy(linkRevisions.linkId);
+        const lastOf = new Map(last.map((row) => [row.linkId, row.number]));
+        await tx.insert(linkRevisions).values(
+          suspect.map((link) => ({
+            linkId: link.id,
+            number: (lastOf.get(link.id) ?? 0) + 1,
+            upstreamRevision: link.current.upstream,
+            downstreamRevision: link.current.downstream,
+            confirmedBy: userId,
+          })),
+        );
+        for (const link of suspect) await audit(tx, userId, "link.confirm", "link", link.id);
+        return { confirmed: suspect.length };
+      });
+
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
     },
   );
 

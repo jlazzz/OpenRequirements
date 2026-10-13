@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import { baselineEntries, baselineLinks, baselines, itemRevisions, links, nodes, sets, users } from "./db/schema.ts";
+import { liveLinks } from "./links.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -73,12 +74,16 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
           from nodes n join sets s on s.id = n.set_id
           where s.project_id = ${projectId} and n.deleted_at is null
             and (${setId}::uuid is null or n.set_id = ${setId}::uuid)`);
-        await tx.execute(sql`
-          insert into baseline_links (baseline_id, link_id)
-          select ${row.id}, l.id
-          from links l join nodes u on u.id = l.upstream_id join nodes d on d.id = l.downstream_id
-          where l.project_id = ${projectId} and l.deleted_at is null and u.deleted_at is null and d.deleted_at is null
-            and (${setId}::uuid is null or u.set_id = ${setId}::uuid or d.set_id = ${setId}::uuid)`);
+        const frozen = await liveLinks(tx, projectId, setId ? { setId } : {});
+        for (let i = 0; i < frozen.length; i += 500) {
+          await tx.insert(baselineLinks).values(
+            frozen.slice(i, i + 500).map((link) => ({
+              baselineId: row.id,
+              linkId: link.id,
+              suspect: link.changed.upstream || link.changed.downstream,
+            })),
+          );
+        }
         await audit(tx, req.user?.id ?? null, "baseline.create", "baseline", row.id, { projectId, label: name });
         return row.id;
       });
@@ -129,6 +134,7 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
           typeId: links.linkTypeId,
           upstreamId: links.upstreamId,
           downstreamId: links.downstreamId,
+          suspect: baselineLinks.suspect,
         })
         .from(baselineLinks)
         .innerJoin(links, eq(links.id, baselineLinks.linkId))

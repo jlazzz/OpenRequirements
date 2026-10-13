@@ -35,7 +35,7 @@ Someone who leaves: **Users**, then **Deactivate**. Their work and name stay in 
 
 There are two kinds of backup. Use both.
 
-- **One project, as a file.** Open the project's home page and click **Download backup**. The file holds every item, version, relationship, comment, baseline and image. An instance administrator restores it from the **Projects** page; it always arrives as a new project.
+- **One project, as a file.** Open the project's home page and click **Download backup**. The file holds every item, version, relationship and its confirmations, comment, baseline and image. An instance administrator restores it from the **Projects** page; it always arrives as a new project.
 - **The whole server.** Back up the two Docker volumes, `deploy_db-data` (database) and `deploy_attachments` (images), with your normal server backup. For the database, a dump is safer than copying files:
 
   ```bash

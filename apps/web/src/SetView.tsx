@@ -30,6 +30,7 @@ import {
   download,
   type Field,
   formatValue,
+  isSuspect,
   type ProjectDetail,
   type ProjectSet,
   type SetItems,
@@ -234,6 +235,7 @@ function ListTable({
 
   const details = new Map(list.items.map((item) => [item.id, item]));
   const count = (id: string, end: "upstreamId" | "downstreamId") => links.filter((l) => l[end] === id).length;
+  const suspect = (id: string, end: "upstreamId" | "downstreamId") => links.some((l) => l[end] === id && isSuspect(l));
   const all = itemsWithin(data.nodes, containerId).flatMap((node) => {
     const item = details.get(node.id);
     if (!item) return [];
@@ -247,6 +249,7 @@ function ListTable({
         attributes: edit?.attributes ?? item.attributes,
         upstream: count(node.id, "downstreamId"),
         downstream: count(node.id, "upstreamId"),
+        suspect: { upstream: suspect(node.id, "downstreamId"), downstream: suspect(node.id, "upstreamId") },
       },
     ];
   });
@@ -497,6 +500,18 @@ function ListTable({
                         <StatusBadge status={row.attributes[column.id]} />
                       ) : (
                         cell(row, column.id)
+                      )}
+                      {!column.field && row.suspect[column.id as "upstream" | "downstream"] && (
+                        <Text
+                          span
+                          c="orange.8"
+                          ml={4}
+                          role="img"
+                          aria-label={`${row.item.uid} has a suspect ${column.id} relationship`}
+                          title="Suspect: an item changed since a relationship was confirmed"
+                        >
+                          ⚠
+                        </Text>
                       )}
                     </Table.Td>
                   ))}

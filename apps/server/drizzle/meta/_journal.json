@@ -71,6 +71,13 @@
       "when": 1791932756358,
       "tag": "0009_deactivate_users",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791935121734,
+      "tag": "0010_suspect_links",
+      "breakpoints": true
     }
   ]
 }

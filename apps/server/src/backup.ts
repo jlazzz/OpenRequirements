@@ -13,6 +13,7 @@ import {
   comments,
   itemRevisions,
   itemTypes,
+  linkRevisions,
   links,
   linkTypes,
   nodes,
@@ -48,7 +49,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { const: BACKUP_VERSION },
+    version: { enum: [1, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -97,6 +98,19 @@ const backupSchema = {
       createdAt: when,
       deletedAt: whenOrNull,
     }),
+    // Not in version 1 files.
+    linkRevisions: {
+      ...rows({
+        id,
+        linkId: id,
+        number: { type: "integer", minimum: 1 },
+        upstreamRevision: count,
+        downstreamRevision: count,
+        confirmedBy: id,
+        createdAt: when,
+      }),
+      default: [],
+    },
     comments: rows({
       id,
       itemId: id,
@@ -115,7 +129,13 @@ const backupSchema = {
       position: count,
       name: textOrNull(200),
     }),
-    baselineLinks: rows({ baselineId: id, linkId: id }),
+    baselineLinks: {
+      type: "array",
+      items: {
+        ...row({ baselineId: id, linkId: id, suspect: { type: ["boolean", "null"], default: null } }),
+        required: ["baselineId", "linkId"],
+      },
+    },
     attachments: rows({ id, createdBy: id, createdAt: when, data: { type: "string" } }),
     auditEvents: rows({
       id,
@@ -132,6 +152,7 @@ const backupSchema = {
     }),
   }),
 };
+backupSchema.required = backupSchema.required.filter((key) => key !== "linkRevisions");
 
 const iso = (date: Date) => date.toISOString();
 const isoOrNull = (date: Date | null) => date?.toISOString() ?? null;
@@ -222,6 +243,12 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           createdAt: iso(link.createdAt),
           deletedAt: isoOrNull(link.deletedAt),
         })),
+        linkRevisions: (
+          await db
+            .select()
+            .from(linkRevisions)
+            .where(inArray(linkRevisions.linkId, db.select({ id: links.id }).from(links).where(inProject(links))))
+        ).map((r) => ({ ...r, createdAt: iso(r.createdAt) })),
         comments: (await db.select().from(comments).where(inArray(comments.itemId, nodeIds))).map((c) => ({
           ...c,
           createdAt: iso(c.createdAt),
@@ -244,6 +271,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.members.map((m) => m.userId),
           backup.itemRevisions.map((r) => r.authorId),
           backup.links.map((l) => l.createdBy),
+          backup.linkRevisions.map((r) => r.confirmedBy),
           backup.comments.flatMap((c) => [c.authorId, ...c.mentions]),
           backup.baselines.map((b) => b.createdBy),
           backup.attachments.map((a) => a.createdBy),
@@ -374,6 +402,9 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
                 deletedAt: dateOrNull(link.deletedAt),
               })),
             );
+          }
+          for (const part of parts(backup.linkRevisions)) {
+            await tx.insert(linkRevisions).values(part.map((r) => ({ ...r, createdAt: date(r.createdAt) })));
           }
           for (const part of parts(backup.comments)) {
             await tx

@@ -29,7 +29,8 @@ import { RevisionDiff } from "./Versions.tsx";
 type Baseline = { id: string; name: string; setId: string | null; createdAt: string; author: string };
 /** A folder or item as the baseline froze it. Items carry the revision that was current then. */
 type Entry = TreeNode & { revision: number | null; description: RichNode | null; attributes: Attributes | null };
-type BaselineDetail = { baseline: Baseline; entries: Entry[]; links: Link[] };
+/** `suspect` is null when the baseline was made before suspect links were recorded. */
+type BaselineDetail = { baseline: Baseline; entries: Entry[]; links: (Link & { suspect: boolean | null })[] };
 
 /** The project's baselines, newest first, and the form to make a new one. */
 export function BaselinesPage() {
@@ -284,7 +285,7 @@ export function BaselinePage() {
         </Title>
         {(!differencesOnly || linksAdded.length + linksRemoved.length === 0) && (
           <Text size="sm" c="dimmed">
-            {detail.data.links.map(arrow).join(" · ") || "None."}
+            {detail.data.links.map((l) => `${arrow(l)}${l.suspect ? " (suspect)" : ""}`).join(" · ") || "None."}
           </Text>
         )}
         {linksAdded.length > 0 && <Text size="sm">Added since: {linksAdded.join(" · ")}</Text>}

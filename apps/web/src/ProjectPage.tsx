@@ -3,8 +3,9 @@ import { useLocalStorage } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { api, type ProjectDetail, type TreeNode } from "./api.ts";
+import { api, isSuspect, type ProjectDetail, type TreeNode } from "./api.ts";
 import { RouterNavLink } from "./links.tsx";
+import { useLinks } from "./Relationships.tsx";
 import { KindIcon, StatusDot } from "./Status.tsx";
 
 export function useProject() {
@@ -33,6 +34,7 @@ export function ProjectPage() {
     key: `explorer-toggled:${selected.projectId}`,
     defaultValue: [],
   });
+  const suspectCount = useLinks(selected.projectId ?? "").data?.links.filter(isSuspect).length;
   const nodeList = project.data?.nodes;
   const selectedNodeId = selected.nodeId;
   // Opens the folders around the selected item, so it is always visible after following a link.
@@ -194,6 +196,13 @@ export function ProjectPage() {
           params={{ projectId: info.id }}
           label="Traceability matrix"
           mt="sm"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
+          to="/projects/$projectId/suspect"
+          params={{ projectId: info.id }}
+          label={suspectCount ? `Suspect links (${suspectCount})` : "Suspect links"}
           pl={26}
           py={4}
         />

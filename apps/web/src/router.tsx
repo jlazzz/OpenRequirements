@@ -7,6 +7,7 @@ import { ProjectsPage } from "./ProjectsPage.tsx";
 import { Root } from "./Root.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { FolderPage, SetPage } from "./SetView.tsx";
+import { SuspectPage } from "./SuspectPage.tsx";
 import { ActivityPage, MembersPage } from "./TeamPages.tsx";
 import { TrashPage } from "./TrashPage.tsx";
 import { InvitePage, UsersPage } from "./UsersPage.tsx";
@@ -33,6 +34,7 @@ const projectChildren = [
   createRoute({ ...inProject, path: "members", component: MembersPage }),
   createRoute({ ...inProject, path: "activity", component: ActivityPage }),
   createRoute({ ...inProject, path: "trash", component: TrashPage }),
+  createRoute({ ...inProject, path: "suspect", component: SuspectPage }),
   createRoute({ ...inProject, path: "baselines", component: BaselinesPage }),
   createRoute({ ...inProject, path: "baselines/$baselineId", component: BaselinePage }),
   createRoute({

@@ -2,12 +2,13 @@ import { docError, type RichNode } from "@app/shared";
 import { checkAttributes } from "./attributes.ts";
 
 export const BACKUP_FORMAT = "open-requirements-backup";
-export const BACKUP_VERSION = 1;
+// Version 2 added linkRevisions and baselineLinks.suspect. Version 1 files are still restored.
+export const BACKUP_VERSION = 2;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: typeof BACKUP_VERSION;
+  version: 1 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -57,6 +58,16 @@ export type Backup = {
     createdAt: string;
     deletedAt: string | null;
   }[];
+  /** Confirmations of suspect links. */
+  linkRevisions: {
+    id: string;
+    linkId: string;
+    number: number;
+    upstreamRevision: number;
+    downstreamRevision: number;
+    confirmedBy: string;
+    createdAt: string;
+  }[];
   comments: {
     id: string;
     itemId: string;
@@ -75,7 +86,7 @@ export type Backup = {
     position: number;
     name: string | null;
   }[];
-  baselineLinks: { baselineId: string; linkId: string }[];
+  baselineLinks: { baselineId: string; linkId: string; suspect: boolean | null }[];
   /** `data` is the file's bytes in base64. */
   attachments: { id: string; createdBy: string; createdAt: string; data: string }[];
   auditEvents: {
@@ -104,6 +115,8 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["links", "upstreamId", "nodes"],
   ["links", "downstreamId", "nodes"],
   ["links", "createdBy", "users"],
+  ["linkRevisions", "linkId", "links"],
+  ["linkRevisions", "confirmedBy", "users"],
   ["comments", "itemId", "nodes"],
   ["comments", "authorId", "users"],
   ["comments", "mentions", "users"],
