@@ -15,25 +15,31 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- M0, running skeleton: built and tested by the owner (2026-10-12)
+- CI passes on GitHub (2026-10-12)
+- UI decided: Mantine and TanStack Router, ADR 0004 (2026-10-12)
 - Product design decided, Jama-style: [docs/DESIGN.md](docs/DESIGN.md) (2026-10-12)
 
 ## In progress
 
-- **M0, running skeleton: built, waiting for the owner's test.** Do not start M1 until the owner has tested and given feedback.
+**M1, structure and items.** Slices, each testable in the browser:
+
+1. [x] Create a project from the Standard template; explorer lists its sets (2026-10-12)
+2. [ ] Folders and items in a set: create, UIDs, explorer tree
+3. [ ] List view of a set or folder
+4. [ ] Single item view with the type's fields, plain text
+5. [ ] Reorder and soft-delete
 
 ## Next
 
-Phase 1 is split into 8 milestones, M0 to M7, in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
+Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner test of M0: `npm run up`, then log in from another machine on the network
-2. Push and confirm the CI workflow passes on GitHub (not yet run)
-3. Fold M0 feedback into `docs/DESIGN.md`
-4. M1, structure and items. Decide the UI component library and router first.
+1. Owner look at M1 slice 1
+2. M1 slice 2: folders and items
 
 ## Open decisions
 
 - Project name
-- UI component library and router (before M1)
 - Four design details in [docs/DESIGN.md](docs/DESIGN.md) section 11
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance

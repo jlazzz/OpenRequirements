@@ -63,7 +63,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Lint / format | Biome | in use |
 | Frontend | React + Vite, TanStack Query | in use |
 | Rich-text editor | TipTap (ProseMirror) | proposed |
-| UI components / router | None yet: plain CSS, no router | decide in M1 |
+| UI components / router | Mantine, TanStack Router with routes in code ([ADR 0004](docs/adr/0004-ui-mantine-tanstack-router.md)) | in use |
 | Backend | Fastify on Node 24+, run as TypeScript with no build step ([ADR 0002](docs/adr/0002-backend-fastify-native-typescript.md)) | in use |
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
@@ -81,8 +81,12 @@ Also open: project name. Do not publish a package name until it is decided.
 ```
 apps/
   web/              React front end
+    src/router.tsx  All routes. Every screen has a URL.
+    src/links.tsx   Mantine links wired to the router: use these, not <a>
   server/           API server + background worker
-    src/app.ts      All routes (split by feature when it grows)
+    src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
+    src/projects.ts Feature route file: one per feature, taking `AppContext`
+    src/domain/templates.ts  Project templates (item types, fields, sets)
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
@@ -101,7 +105,9 @@ e2e/                Playwright tests (empty)
 - Tests sit next to the code as `*.test.ts`.
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
-- Every `/api/` route either has `preHandler: requireUser` or `config: { public: true }`. The server refuses to start otherwise.
+- Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
+- Route params that are IDs are validated as `format: "uuid"` in the route schema.
+- UI: use Mantine components and theme before writing custom CSS.
 - Every write calls `audit(...)` in the same transaction as the change.
 - A new workspace needs its own `package.json` named `@app/<name>`.
 

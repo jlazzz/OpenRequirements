@@ -3,17 +3,37 @@ import { existsSync } from "node:fs";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import { and, eq, gt, sql } from "drizzle-orm";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { Db } from "./db/client.ts";
-import { auditEvents, projects, sessions, users } from "./db/schema.ts";
+import { auditEvents, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
+import { projectRoutes } from "./projects.ts";
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
 
 type SessionUser = { id: string; email: string; name: string; isAdmin: boolean };
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type Guard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+
+/** What feature route files receive from buildApp. */
+export type AppContext = {
+  app: FastifyInstance;
+  db: Db;
+  /** Rejects requests that are not signed in. Every non-public route needs it in `onRequest`. */
+  requireUser: Guard;
+  /** Use after requireUser: rejects users who are not administrators. */
+  requireAdmin: Guard;
+  /** Records an audit event. Call it in the same transaction as the write. */
+  audit: (
+    tx: Db | Tx,
+    actorUserId: string | null,
+    action: string,
+    entityType: string,
+    entityId: string,
+  ) => Promise<unknown>;
+};
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -35,7 +55,10 @@ const credentials = {
   password: { type: "string", minLength: 1, maxLength: 200 },
 } as const;
 
-export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolean } = {}) {
+export async function buildApp(
+  db: Db,
+  opts: { webRoot?: string; logger?: boolean; loginAttemptsPerMinute?: number } = {},
+) {
   const app = Fastify({ logger: opts.logger ?? false });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -47,13 +70,13 @@ export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolea
   app.addHook("onRoute", (route) => {
     if (!route.url.startsWith("/api/")) return;
     const isPublic = route.config?.public === true;
-    if (!isPublic && ![route.preHandler].flat().includes(requireUser)) {
+    if (!isPublic && ![route.onRequest].flat().includes(requireUser)) {
       throw new Error(`${route.method} ${route.url} must use requireUser or be marked public`);
     }
     for (const method of [route.method].flat()) apiRoutes.push({ method, url: route.url, public: isPublic });
   });
 
-  const audit = (tx: Db | Tx, actorUserId: string | null, action: string, entityType: string, entityId: string) =>
+  const audit: AppContext["audit"] = (tx, actorUserId, action, entityType, entityId) =>
     tx.insert(auditEvents).values({ actorUserId, action, entityType, entityId });
 
   async function findUser(req: FastifyRequest): Promise<SessionUser | null> {
@@ -72,6 +95,10 @@ export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolea
     if (!req.user) return reply.code(401).send({ error: "Not signed in" });
   }
 
+  async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+    if (!req.user?.isAdmin) return reply.code(403).send({ error: "Administrators only" });
+  }
+
   async function startSession(tx: Db | Tx, reply: FastifyReply, userId: string) {
     const token = randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
@@ -86,7 +113,7 @@ export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolea
     });
   }
 
-  const loginLimit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
+  const loginLimit = { rateLimit: { max: opts.loginAttemptsPerMinute ?? 10, timeWindow: "1 minute" } };
 
   app.get("/api/session", { config: { public: true } }, async (req) => {
     const user = await findUser(req);
@@ -152,7 +179,7 @@ export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolea
     },
   );
 
-  app.post("/api/logout", { preHandler: requireUser }, async (req, reply) => {
+  app.post("/api/logout", { onRequest: requireUser }, async (req, reply) => {
     const user = req.user as SessionUser;
     await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(req.cookies[SESSION_COOKIE] ?? "")));
     await audit(db, user.id, "session.delete", "user", user.id);
@@ -160,10 +187,7 @@ export async function buildApp(db: Db, opts: { webRoot?: string; logger?: boolea
     return { ok: true };
   });
 
-  app.get("/api/projects", { preHandler: requireUser }, async () => {
-    const rows = await db.select().from(projects).where(isNull(projects.archivedAt)).orderBy(projects.name);
-    return { projects: rows };
-  });
+  projectRoutes({ app, db, requireUser, requireAdmin, audit });
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

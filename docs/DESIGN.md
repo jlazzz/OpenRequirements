@@ -86,7 +86,7 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 
 ## 6. Project setup
 
-- **Templates only.** A new project is created from a fixed template that defines its item types, fields and sets. First template: medical device (User Needs, Requirements, Risks, Test Cases).
+- **Templates only.** A new project is created from a fixed template that defines its item types, fields and sets. The default template is generic, named "Standard": User Needs, System Requirements, Verification Tests. Industry-specific templates (e.g. medical device, with Risks) can be added later.
 - Types and fields are **not editable on screen** in Phase 1.
 - Store types and fields as per-project data anyway, not as code constants, so an admin UI can be added later.
 
@@ -120,7 +120,7 @@ Phase 1 is built as 8 milestones. Each one ends with something the owner can ope
 | # | Milestone | What the owner can test at the end | Estimate |
 |---|---|---|---|
 | M0 | **Running skeleton** | `docker compose up` on the server; open it from another machine on the network; first run creates the admin; log in and see an empty project list | 2 weeks |
-| M1 | **Structure and items** | Create a project from the medical device template; build sets, folders and items in the explorer; items get UIDs; List view and Single item view with plain-text fields; reorder and soft-delete | 3 weeks |
+| M1 | **Structure and items** | Create a project from the Standard template; build sets, folders and items in the explorer; items get UIDs; List view and Single item view with plain-text fields; reorder and soft-delete | 3 weeks |
 | M2 | **Editing and versions** | Inline editing with basic formatting; auto-saved draft; "Save version" with a reason; version history with a diff | 3 weeks |
 | M3 | **Relationships** | "Add relationship" by search; upstream and downstream in the side panel; traceability matrix; coverage filter | 3 weeks |
 | M4 | **Reading and finding** | Reading view; List view column picker, sort and filters; full-text search; tables, images and equations in the editor | 3 weeks |
