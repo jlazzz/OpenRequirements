@@ -1,8 +1,8 @@
-import { formatUid } from "@app/shared";
+import { docError, emptyDoc, formatUid, type RichNode } from "@app/shared";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
-import { attributeDefinitions, itemRevisions, nodes, sets, users } from "./db/schema.ts";
+import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
 import { checkAttributes } from "./domain/attributes.ts";
 import { descendantIds, placeBefore } from "./domain/tree.ts";
 
@@ -135,7 +135,9 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
           .returning({ id: nodes.id });
         if (!node) throw new Error("node insert returned no row");
         if (body.kind === "item")
-          await tx.insert(itemRevisions).values({ itemId: node.id, number: 1, name, authorId: userId });
+          await tx
+            .insert(itemRevisions)
+            .values({ itemId: node.id, number: 1, name, description: emptyDoc, authorId: userId });
         await audit(tx, userId, `${body.kind}.create`, body.kind, node.id);
         return { node: { id: node.id, setId, parentId: body.parentId ?? null, kind: body.kind, name, uid } };
       });
@@ -196,7 +198,18 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
         .limit(1);
       if (!item) return reply.code(404).send({ error: "Item not found" });
       const { itemTypeId, ...rest } = item;
-      return { item: rest, fields: await fieldsOf(db, itemTypeId) };
+      // Only the signed-in user's own draft: drafts are private.
+      const [draft] = await db
+        .select({
+          baseRevision: itemDrafts.baseRevision,
+          name: itemDrafts.name,
+          description: itemDrafts.description,
+          attributes: itemDrafts.attributes,
+          updatedAt: itemDrafts.updatedAt,
+        })
+        .from(itemDrafts)
+        .where(and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, req.user?.id as string)));
+      return { item: rest, fields: await fieldsOf(db, itemTypeId), draft: draft ?? null };
     },
   );
 
@@ -241,7 +254,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
             // The revision the edit started from. Saving fails if someone else saved a newer one meanwhile.
             baseRevision: { type: "integer", minimum: 1 },
             name: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" },
-            description: { type: "string", maxLength: 100_000 },
+            description: { type: "object" },
             attributes: { type: "object" },
             changeReason: { type: "string", maxLength: 500 },
           },
@@ -253,11 +266,13 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
       const body = req.body as {
         baseRevision: number;
         name: string;
-        description: string;
+        description: RichNode;
         attributes: Record<string, unknown>;
         changeReason?: string;
       };
       const userId = req.user?.id as string;
+      const badText = docError(body.description);
+      if (badText) return reply.code(400).send({ error: badText });
 
       const result = await db.transaction(async (tx) => {
         // Locks the item, so two saves of the same item cannot both pass the baseRevision check.
@@ -291,12 +306,87 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
           authorId: userId,
           changeReason: body.changeReason?.trim() || null,
         });
+        // The draft has become this revision.
+        await tx.delete(itemDrafts).where(and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, userId)));
         await audit(tx, userId, "item.revise", "item", itemId);
         return { revision };
       });
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);
+    },
+  );
+
+  // Auto-save target. A draft may be incomplete (e.g. an empty name); it is fully checked when saved as a version.
+  app.put(
+    "/api/items/:itemId/draft",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("itemId"),
+        body: {
+          type: "object",
+          required: ["baseRevision", "name", "description", "attributes"],
+          additionalProperties: false,
+          properties: {
+            baseRevision: { type: "integer", minimum: 1 },
+            name: { type: "string", maxLength: 200 },
+            description: { type: "object" },
+            attributes: { type: "object" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { itemId } = req.params as { itemId: string };
+      const body = req.body as {
+        baseRevision: number;
+        name: string;
+        description: RichNode;
+        attributes: Record<string, unknown>;
+      };
+      const userId = req.user?.id as string;
+      const badText = docError(body.description);
+      if (badText) return reply.code(400).send({ error: badText });
+
+      const saved = await db.transaction(async (tx) => {
+        const [item] = await tx
+          .select({ id: nodes.id })
+          .from(nodes)
+          .where(and(eq(nodes.id, itemId), eq(nodes.kind, "item"), isNull(nodes.deletedAt)));
+        if (!item) return false;
+        const mine = and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, userId));
+        const [existing] = await tx.select({ itemId: itemDrafts.itemId }).from(itemDrafts).where(mine);
+        await tx
+          .insert(itemDrafts)
+          .values({ itemId, authorId: userId, ...body })
+          .onConflictDoUpdate({
+            target: [itemDrafts.itemId, itemDrafts.authorId],
+            set: { ...body, updatedAt: new Date() },
+          });
+        // Audited when a draft starts, not on every keystroke save. See hard rule 3 in CLAUDE.md.
+        if (!existing) await audit(tx, userId, "draft.create", "item", itemId);
+        return true;
+      });
+      if (!saved) return reply.code(404).send({ error: "Item not found" });
+      return { ok: true };
+    },
+  );
+
+  app.delete(
+    "/api/items/:itemId/draft",
+    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    async (req) => {
+      const { itemId } = req.params as { itemId: string };
+      const userId = req.user?.id as string;
+      await db.transaction(async (tx) => {
+        const gone = await tx
+          .delete(itemDrafts)
+          .where(and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, userId)))
+          .returning({ itemId: itemDrafts.itemId });
+        if (gone.length > 0) await audit(tx, userId, "draft.discard", "item", itemId);
+      });
+      return { ok: true };
     },
   );
 

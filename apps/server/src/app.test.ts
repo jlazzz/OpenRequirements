@@ -1,3 +1,4 @@
+import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
@@ -16,7 +17,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -26,7 +27,7 @@ afterAll(async () => {
 
 const post = (url: string, payload: object, cookie?: string) =>
   app.inject({ method: "POST", url, payload, headers: cookie ? { cookie } : {} });
-const send = (method: "PATCH" | "DELETE", url: string, cookie: string, payload?: object) =>
+const send = (method: "PATCH" | "DELETE" | "PUT", url: string, cookie: string, payload?: object) =>
   app.inject({ method, url, payload, headers: { cookie } });
 const get = (url: string, cookie?: string) => app.inject({ method: "GET", url, headers: cookie ? { cookie } : {} });
 const cookieOf = (res: { cookies: { name: string; value: string }[] }) => `session=${res.cookies[0]?.value}`;
@@ -156,7 +157,7 @@ test("items get sequential UIDs per set and a first revision; folders nest them"
   ]);
 
   const item = (await get(`/api/items/${first.id}`, cookie)).json().item;
-  expect(item).toMatchObject({ uid: "SYS-001", name: "Supply voltage", description: "", revision: 1 });
+  expect(item).toMatchObject({ uid: "SYS-001", name: "Supply voltage", description: textToDoc(""), revision: 1 });
   expect(await auditActions()).toEqual(expect.arrayContaining(["folder.create", "item.create"]));
 });
 
@@ -187,11 +188,15 @@ test("saving an item appends a revision and keeps the old one", async () => {
   const status = fields.find((f: { name: string }) => f.name === "Status").id;
   const rationale = fields.find((f: { name: string }) => f.name === "Rationale").id;
   const save = (body: object) =>
-    post(`/api/items/${id}/revisions`, { name: "Supply voltage", description: "", attributes: {}, ...body }, cookie);
+    post(
+      `/api/items/${id}/revisions`,
+      { name: "Supply voltage", description: textToDoc(""), attributes: {}, ...body },
+      cookie,
+    );
 
   const saved = await save({
     baseRevision: 1,
-    description: "5 V DC",
+    description: textToDoc("5 V DC"),
     attributes: { [status]: "Approved", [rationale]: "" },
     changeReason: " USB ",
   });
@@ -199,19 +204,19 @@ test("saving an item appends a revision and keeps the old one", async () => {
   expect(saved.json()).toEqual({ revision: 2 });
 
   const { item } = (await get(`/api/items/${id}`, cookie)).json();
-  expect(item).toMatchObject({ revision: 2, description: "5 V DC", attributes: { [status]: "Approved" } });
+  expect(item).toMatchObject({ revision: 2, description: textToDoc("5 V DC"), attributes: { [status]: "Approved" } });
   const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
   expect(list.items[0]).toMatchObject({ revision: 2, attributes: { [status]: "Approved" } });
 
   const history = await db.execute(sql`select number, description, change_reason from item_revisions order by number`);
   expect(history.rows).toEqual([
-    { number: 1, description: "", change_reason: null },
-    { number: 2, description: "5 V DC", change_reason: "USB" },
+    { number: 1, description: textToDoc(""), change_reason: null },
+    { number: 2, description: textToDoc("5 V DC"), change_reason: "USB" },
   ]);
   expect(await auditActions()).toContain("item.revise");
 
   // A save that started from an old revision must not overwrite the newer one.
-  expect((await save({ baseRevision: 1, description: "stale" })).statusCode).toBe(409);
+  expect((await save({ baseRevision: 1, description: textToDoc("stale") })).statusCode).toBe(409);
   expect((await save({ baseRevision: 2, attributes: { [status]: "Bogus" } })).statusCode).toBe(400);
   expect((await save({ baseRevision: 2, name: " " })).statusCode).toBe(400);
   expect((await get(`/api/items/${id}`, cookie)).json().item.revision).toBe(2);
@@ -222,23 +227,101 @@ test("an item's history lists every version, newest first, with author and reaso
   const { id } = (await add(sys.id, { kind: "item", name: "First" })).json().node;
   await post(
     `/api/items/${id}/revisions`,
-    { baseRevision: 1, name: "Second", description: "d", attributes: {}, changeReason: "why" },
+    { baseRevision: 1, name: "Second", description: textToDoc("d"), attributes: {}, changeReason: "why" },
     cookie,
   );
 
   const { revisions } = (await get(`/api/items/${id}/revisions`, cookie)).json();
   expect(revisions).toEqual([
-    expect.objectContaining({ number: 2, name: "Second", description: "d", changeReason: "why", author: "Admin" }),
-    expect.objectContaining({ number: 1, name: "First", description: "", changeReason: null, author: "Admin" }),
+    expect.objectContaining({
+      number: 2,
+      name: "Second",
+      description: textToDoc("d"),
+      changeReason: "why",
+      author: "Admin",
+    }),
+    expect.objectContaining({
+      number: 1,
+      name: "First",
+      description: textToDoc(""),
+      changeReason: null,
+      author: "Admin",
+    }),
   ]);
   expect((await get("/api/items/00000000-0000-4000-8000-000000000000/revisions", cookie)).statusCode).toBe(404);
+});
+
+test("a draft is auto-saved, private to its author, and consumed by Save version", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  const draft = { baseRevision: 1, name: "", description: textToDoc("work in progress"), attributes: {} };
+
+  expect((await get(`/api/items/${id}`, cookie)).json().draft).toBeNull();
+  expect((await send("PUT", `/api/items/${id}/draft`, cookie, draft)).statusCode).toBe(200);
+  expect((await send("PUT", `/api/items/${id}/draft`, cookie, { ...draft, name: "Renamed" })).statusCode).toBe(200);
+  const mine = (await get(`/api/items/${id}`, cookie)).json();
+  expect(mine.draft).toMatchObject({ baseRevision: 1, name: "Renamed", description: textToDoc("work in progress") });
+  // The committed item is untouched by a draft.
+  expect(mine.item).toMatchObject({ name: "Item", revision: 1 });
+  expect((await auditActions()).filter((a) => a === "draft.create")).toHaveLength(1);
+
+  // Another user does not see it.
+  await db.execute(
+    sql`insert into users (email, name, password_hash) select 'b@example.com', 'B', password_hash from users`,
+  );
+  const other = cookieOf(await post("/api/login", { email: "b@example.com", password: admin.password }));
+  expect((await get(`/api/items/${id}`, other)).json().draft).toBeNull();
+
+  // Saving a version removes the author's draft.
+  await post(
+    `/api/items/${id}/revisions`,
+    { baseRevision: 1, name: "Renamed", description: draft.description, attributes: {} },
+    cookie,
+  );
+  expect((await get(`/api/items/${id}`, cookie)).json()).toMatchObject({
+    draft: null,
+    item: { name: "Renamed", revision: 2 },
+  });
+});
+
+test("a draft can be discarded, and bad drafts are rejected", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  const draft = { baseRevision: 1, name: "X", description: textToDoc("x"), attributes: {} };
+  await send("PUT", `/api/items/${id}/draft`, cookie, draft);
+  expect((await send("DELETE", `/api/items/${id}/draft`, cookie)).statusCode).toBe(200);
+  expect((await get(`/api/items/${id}`, cookie)).json().draft).toBeNull();
+  expect(await auditActions()).toContain("draft.discard");
+
+  const script = { type: "doc", content: [{ type: "script" }] };
+  expect((await send("PUT", `/api/items/${id}/draft`, cookie, { ...draft, description: script })).statusCode).toBe(400);
+  expect((await send("PUT", "/api/items/00000000-0000-4000-8000-000000000000/draft", cookie, draft)).statusCode).toBe(
+    404,
+  );
+});
+
+test("unsafe rich text is refused when saving a version", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  const link = (href: string) => ({
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "x", marks: [{ type: "link", attrs: { href } }] }] },
+    ],
+  });
+  const save = (description: object, baseRevision: number) =>
+    post(`/api/items/${id}/revisions`, { baseRevision, name: "Item", description, attributes: {} }, cookie);
+  expect((await save(link("javascript:alert(1)"), 1)).statusCode).toBe(400);
+  expect((await save({ type: "doc", content: [{ type: "iframe" }] }, 1)).statusCode).toBe(400);
+  expect((await save("plain string" as unknown as object, 1)).statusCode).toBe(400);
+  expect((await save(link("https://example.com"), 1)).statusCode).toBe(201);
 });
 
 test("two saves from the same revision cannot both succeed", async () => {
   const { cookie, sys, add } = await projectWithSets();
   const { id } = (await add(sys.id, { kind: "item", name: "A" })).json().node;
   const save = (name: string) =>
-    post(`/api/items/${id}/revisions`, { baseRevision: 1, name, description: "", attributes: {} }, cookie);
+    post(`/api/items/${id}/revisions`, { baseRevision: 1, name, description: textToDoc(""), attributes: {} }, cookie);
   const codes = (await Promise.all([save("B"), save("C")])).map((r) => r.statusCode).sort();
   expect(codes).toEqual([201, 409]);
 });
@@ -309,7 +392,7 @@ test("deleting hides a folder and everything in it, but keeps history and never 
     (
       await post(
         `/api/items/${inside.id}/revisions`,
-        { baseRevision: 1, name: "X", description: "", attributes: {} },
+        { baseRevision: 1, name: "X", description: textToDoc(""), attributes: {} },
         cookie,
       )
     ).statusCode,

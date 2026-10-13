@@ -27,9 +27,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 **Bundle A: M2 (editing and versions) + M3 (relationships).** One owner test at the end, not per slice.
 
 - [x] M2: version history side panel; compare any two versions with a word-level diff (2026-10-12)
-- [ ] M2: auto-saved private drafts; "Save version" commits the draft; discard draft
-- [ ] M2: rich-text description with basic formatting (TipTap); record the stored format as an ADR
-- [ ] M2: inline editing of simple fields in List view
+- [x] M2: auto-saved private drafts; "Save version" commits the draft; discard draft (2026-10-12)
+- [x] M2: rich-text description with basic formatting, stored as editor JSON, ADR 0005 (2026-10-12)
 - [ ] M3: add a relationship by search; upstream and downstream in the item side panel
 - [ ] M3: traceability matrix between two sets
 - [ ] M3: coverage filter in List view

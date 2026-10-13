@@ -15,19 +15,22 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useBlocker, useParams } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
-import { type Attributes, api, type Field, type Item } from "./api.ts";
+import { useParams } from "@tanstack/react-router";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type Attributes, api, type Draft, type Field, type Item } from "./api.ts";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
+import { RichTextInput } from "./RichText.tsx";
 import { Versions } from "./Versions.tsx";
 
-type ItemData = { item: Item; fields: Field[] };
+type ItemData = { item: Item; fields: Field[]; draft: Draft | null };
 
-/** Single item view: every field of one item, editable, saved as a new version. */
+/** Single item view: every field of one item, edited in place, auto-saved as a private draft and committed with "Save version". */
 export function ItemPage() {
   const { nodeId } = useParams({ from: "/projects/$projectId/items/$nodeId" });
   const item = useQuery({ queryKey: ["items", nodeId], queryFn: () => api<ItemData>(`items/${nodeId}`) });
+  // Bumped to throw away the form's state, e.g. after discarding a draft.
+  const [epoch, setEpoch] = useState(0);
 
   if (item.isPending) return null;
   if (item.isError) {
@@ -38,38 +41,107 @@ export function ItemPage() {
     );
   }
   // The key resets the form whenever another item, or a newer version of this one, is shown.
-  return <ItemForm key={`${nodeId}:${item.data.item.revision}`} {...item.data} />;
+  return (
+    <ItemForm
+      key={`${nodeId}:${item.data.item.revision}:${epoch}`}
+      {...item.data}
+      onReset={() => setEpoch((n) => n + 1)}
+    />
+  );
 }
 
-function ItemForm({ item, fields }: ItemData) {
+const AUTOSAVE_MS = 800;
+
+function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => void }) {
   const { projectId } = useParams({ from: "/projects/$projectId/items/$nodeId" });
   const queryClient = useQueryClient();
   const project = useProject().data;
   const node = project?.nodes.find((n) => n.id === item.id);
-  const [name, setName] = useState(item.name);
-  const [description, setDescription] = useState(item.description);
-  const [attributes, setAttributes] = useState<Attributes>(item.attributes);
+  const start = draft ?? item;
+  const [name, setName] = useState(start.name);
+  const [description, setDescription] = useState(start.description);
+  const [attributes, setAttributes] = useState<Attributes>(start.attributes);
   const [changeReason, setChangeReason] = useState("");
+  // The version these edits started from. Older than the current one when someone saved in the meantime.
+  const [base, setBase] = useState(draft?.baseRevision ?? item.revision);
+  const [draftStatus, setDraftStatus] = useState<"none" | "saving" | "saved" | "error">(draft ? "saved" : "none");
 
+  const stale = base < item.revision;
   const dirty =
     name !== item.name ||
-    description !== item.description ||
+    !sameValue(description, item.description) ||
     fields.some((f) => !sameValue(attributes[f.id], item.attributes[f.id]));
 
+  // Auto-save. `saved` is what the server holds as this user's draft; null when there is none.
+  const body = JSON.stringify({ baseRevision: base, name, description, attributes });
+  const saved = useRef(
+    draft
+      ? JSON.stringify({
+          baseRevision: draft.baseRevision,
+          name: draft.name,
+          description: draft.description,
+          attributes: draft.attributes,
+        })
+      : null,
+  );
+  const flush = useRef<(() => void) | null>(null);
+  const inFlight = useRef<Promise<unknown>>(Promise.resolve());
+  const stopped = useRef(false);
+  useEffect(() => {
+    if (body === saved.current || (saved.current === null && !dirty)) return;
+    const send = () => {
+      flush.current = null;
+      if (stopped.current) return;
+      setDraftStatus("saving");
+      inFlight.current = api(`items/${item.id}/draft`, JSON.parse(body), "PUT").then(
+        () => {
+          saved.current = body;
+          setDraftStatus("saved");
+        },
+        () => setDraftStatus("error"),
+      );
+    };
+    flush.current = send;
+    const timer = setTimeout(send, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [body, dirty, item.id]);
+  // Leaving the page within the auto-save delay must not lose the last edits.
+  useEffect(() => () => flush.current?.(), []);
+
+  /** Stops auto-save and waits for a save already on its way, so it cannot land after what follows. */
+  const settle = async () => {
+    stopped.current = true;
+    flush.current = null;
+    await inFlight.current;
+  };
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["items", item.id] }),
+      queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
+    ]);
   const save = useMutation({
-    mutationFn: () =>
-      api(`items/${item.id}/revisions`, { baseRevision: item.revision, name, description, attributes, changeReason }),
-    // Refreshes this item, the explorer and any open List view.
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["items", item.id] }),
-        queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
-      ]),
+    mutationFn: async () => {
+      await settle();
+      return api(`items/${item.id}/revisions`, { baseRevision: base, name, description, attributes, changeReason });
+    },
+    // Refreshes this item, the explorer and any open List view. The new version number remounts this form.
+    onSuccess: refresh,
+    onError: () => {
+      stopped.current = false;
+    },
   });
-  // shortcut: unsaved edits are only protected by this prompt, replaced by auto-saved drafts in milestone M2
-  useBlocker({
-    shouldBlockFn: () => dirty && !save.isSuccess && !window.confirm("Discard your unsaved changes to this item?"),
-    enableBeforeUnload: () => dirty,
+  const discard = useMutation({
+    mutationFn: async () => {
+      await settle();
+      return api(`items/${item.id}/draft`, undefined, "DELETE");
+    },
+    onSuccess: async () => {
+      await refresh();
+      onReset();
+    },
+    onError: () => {
+      stopped.current = false;
+    },
   });
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -77,6 +149,7 @@ function ItemForm({ item, fields }: ItemData) {
     save.mutate();
   };
   const setValue = (id: string, value: unknown) => setAttributes((previous) => ({ ...previous, [id]: value }));
+  const hasDraft = draftStatus !== "none";
 
   return (
     <Flex gap="xl" align="flex-start" wrap="wrap">
@@ -89,8 +162,42 @@ function ItemForm({ item, fields }: ItemData) {
             <Text c="dimmed" size="sm">
               Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
             </Text>
+            {hasDraft && (
+              <Badge color={draftStatus === "error" ? "red" : "yellow"} variant="light" radius="sm" aria-live="polite">
+                {draftStatus === "saving"
+                  ? "Saving draft…"
+                  : draftStatus === "error"
+                    ? "Draft not saved"
+                    : "Draft saved"}
+              </Badge>
+            )}
             <Group ml="auto">{project && node && <NodeActions data={project} node={node} />}</Group>
           </Group>
+
+          {stale && (
+            <Alert color="yellow" title={`Version ${item.revision} was saved after you started this draft`}>
+              <Stack gap="xs" align="flex-start">
+                <Text size="sm">
+                  Your draft began from version {base}. Open the newer version under Versions to see what changed.
+                  Keeping your draft means saving it will replace those changes.
+                </Text>
+                <Group gap="xs">
+                  <Button size="compact-sm" variant="default" onClick={() => setBase(item.revision)}>
+                    Keep my draft
+                  </Button>
+                  <Button
+                    size="compact-sm"
+                    variant="default"
+                    onClick={() => discard.mutate()}
+                    loading={discard.isPending}
+                  >
+                    Discard my draft
+                  </Button>
+                </Group>
+              </Stack>
+            </Alert>
+          )}
+
           <TextInput
             label="Name"
             required
@@ -98,13 +205,7 @@ function ItemForm({ item, fields }: ItemData) {
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
-          <Textarea
-            label="Description"
-            autosize
-            minRows={4}
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-          />
+          <RichTextInput label="Description" initial={start.description} onChange={setDescription} />
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             {fields.map((field) => (
               <FieldInput
@@ -116,9 +217,9 @@ function ItemForm({ item, fields }: ItemData) {
             ))}
           </SimpleGrid>
 
-          {save.isError && (
+          {(save.isError || discard.isError) && (
             <Alert color="red" role="alert">
-              {save.error.message}
+              {(save.error ?? discard.error)?.message}
             </Alert>
           )}
           <Group align="flex-end">
@@ -131,10 +232,18 @@ function ItemForm({ item, fields }: ItemData) {
               onChange={(e) => setChangeReason(e.currentTarget.value)}
               disabled={!dirty}
             />
-            <Button type="submit" disabled={!dirty} loading={save.isPending}>
+            {hasDraft && !stale && (
+              <Button variant="default" onClick={() => discard.mutate()} loading={discard.isPending}>
+                Discard draft
+              </Button>
+            )}
+            <Button type="submit" disabled={!dirty || stale} loading={save.isPending}>
               Save version
             </Button>
           </Group>
+          <Text size="xs" c="dimmed">
+            Your edits are saved automatically as a private draft. Others see them only after “Save version”.
+          </Text>
         </Stack>
       </form>
       <Versions itemId={item.id} fields={fields} />

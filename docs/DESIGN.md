@@ -123,7 +123,7 @@ Phase 1 is built as 8 milestones. Each one ends with something the owner can ope
 | M1 | **Structure and items** | Create a project from the Standard template; build sets, folders and items in the explorer; items get UIDs; List view and Single item view with plain-text fields; reorder and soft-delete | 3 weeks |
 | M2 | **Editing and versions** | Inline editing with basic formatting; auto-saved draft; "Save version" with a reason; version history with a diff | 3 weeks |
 | M3 | **Relationships** | "Add relationship" by search; upstream and downstream in the side panel; traceability matrix; coverage filter | 3 weeks |
-| M4 | **Reading and finding** | Reading view; List view column picker, sort and filters; full-text search; tables, images and equations in the editor | 3 weeks |
+| M4 | **Reading and finding** | Reading view; List view column picker, sort, filters and editing cells in place; full-text search; tables, images and equations in the editor | 3 weeks |
 | M5 | **Team** | Invite a second user; roles limit what each can do; comments with @mentions; activity stream; two people editing the same item get a conflict prompt | 4 weeks |
 | M6 | **Baselines** | Create a baseline of a set or project; browse it; compare it with current | 2 weeks |
 | M7 | **Data in and out** | Import a real spreadsheet with column mapping; export a List view to Excel/CSV; JSON backup and restore; import this project's own requirements | 3 weeks |

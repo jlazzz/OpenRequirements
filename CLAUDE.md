@@ -34,7 +34,7 @@ Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
 
 1. **Never hard-delete items.** Soft delete only. Deleted items stay in history and baselines.
 2. **History is append-only.** Never update or delete a revision row. A change is a new revision.
-3. **Every write creates an audit event.**
+3. **Every write creates an audit event.** One exception: auto-saving a draft is audited when the draft starts and when it is discarded, not on every keystroke save.
 4. **Every endpoint checks permissions**, and that check has a test.
 5. **UIDs are never reused**, even after deletion.
 6. **Everything goes through the API.** The UI uses the same public API that integrations use. No back doors.
@@ -62,7 +62,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Unit tests | Vitest, against a real Postgres test database | in use |
 | Lint / format | Biome | in use |
 | Frontend | React + Vite, TanStack Query | in use |
-| Rich-text editor | TipTap (ProseMirror) | proposed |
+| Rich-text editor | TipTap via `@mantine/tiptap`; stored as editor JSON ([ADR 0005](docs/adr/0005-rich-text-as-editor-json.md)) | in use |
 | UI components / router | Mantine, TanStack Router with routes in code ([ADR 0004](docs/adr/0004-ui-mantine-tanstack-router.md)) | in use |
 | Backend | Fastify on Node 24+, run as TypeScript with no build step ([ADR 0002](docs/adr/0002-backend-fastify-native-typescript.md)) | in use |
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
@@ -93,7 +93,7 @@ apps/
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
-  shared/           Pure code used by both web and server: UID format, word diff
+  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation
   reqif/            ReqIF parser/serializer, standalone and reusable (empty)
   importers/        CSV/Excel/Word import logic (empty)
 docs/
@@ -112,6 +112,8 @@ e2e/                Playwright tests (empty)
 - UI: use Mantine components and theme before writing custom CSS.
 - Every write calls `audit(...)` in the same transaction as the change.
 - A new workspace needs its own `package.json` named `@app/<name>`.
+- `apps/web` has its own `tsconfig.json` (bundler module resolution). `npm run typecheck` checks both.
+- A generated migration that must convert existing data is edited by hand before it is committed, with a comment saying so.
 
 ## System components
 

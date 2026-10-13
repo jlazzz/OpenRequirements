@@ -1,3 +1,5 @@
+import type { RichNode } from "@app/shared";
+
 export type User = { id: string; email: string; name: string; isAdmin: boolean };
 export type Session = { user: User | null; needsSetup: boolean };
 export type Project = { id: string; name: string; createdAt: string };
@@ -18,15 +20,23 @@ export type Item = {
   setId: string;
   uid: string;
   name: string;
-  description: string;
+  description: RichNode;
   attributes: Attributes;
   revision: number;
   revisedAt: string;
 };
+/** The signed-in user's own uncommitted edits to an item. */
+export type Draft = {
+  baseRevision: number;
+  name: string;
+  description: RichNode;
+  attributes: Attributes;
+  updatedAt: string;
+};
 export type Template = { id: string; name: string; description: string; sets: string[] };
 
 /** Calls the API and returns the JSON body, or throws an Error carrying the server's message. A body makes it a POST unless `method` says otherwise. */
-export async function api<T>(path: string, body?: object, method?: "PATCH" | "DELETE"): Promise<T> {
+export async function api<T>(path: string, body?: object, method?: "PATCH" | "DELETE" | "PUT"): Promise<T> {
   const res = await fetch(`/api/${path}`, {
     method: method ?? (body ? "POST" : "GET"),
     headers: body ? { "content-type": "application/json" } : undefined,

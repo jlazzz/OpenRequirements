@@ -1,4 +1,16 @@
-import { type AnyPgColumn, boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import type { RichNode } from "@app/shared";
+import {
+  type AnyPgColumn,
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 
@@ -104,7 +116,8 @@ export const itemRevisions = pgTable(
       .references(() => nodes.id),
     number: integer().notNull(),
     name: text().notNull(),
-    description: text().notNull().default(""),
+    // Rich text as editor JSON (ADR 0005).
+    description: jsonb().$type<RichNode>().notNull(),
     attributes: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     authorId: uuid()
       .notNull()
@@ -113,6 +126,26 @@ export const itemRevisions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.itemId, t.number)],
+);
+
+/** One user's auto-saved, uncommitted edits to an item. Private to its author; "Save version" turns it into a revision. */
+export const itemDrafts = pgTable(
+  "item_drafts",
+  {
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    authorId: uuid()
+      .notNull()
+      .references(() => users.id),
+    // The revision the edits started from.
+    baseRevision: integer().notNull(),
+    name: text().notNull(),
+    description: jsonb().$type<RichNode>().notNull(),
+    attributes: jsonb().$type<Record<string, unknown>>().notNull(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.authorId] })],
 );
 
 /** Append-only log of every write. Never update or delete rows. */

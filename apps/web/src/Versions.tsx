@@ -1,4 +1,4 @@
-import { diffWords } from "@app/shared";
+import { diffWords, docToText, type RichNode } from "@app/shared";
 import { Alert, Box, Modal, NavLink, Select, Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -7,7 +7,7 @@ import { type Attributes, api, type Field, formatValue } from "./api.ts";
 type Revision = {
   number: number;
   name: string;
-  description: string;
+  description: RichNode;
   attributes: Attributes;
   changeReason: string | null;
   createdAt: string;
@@ -97,7 +97,7 @@ const marks = {
 function RevisionDiff({ fields, before, after }: { fields: Field[]; before?: Revision; after: Revision }) {
   const rows = [
     { label: "Name", from: before?.name ?? "", to: after.name },
-    { label: "Description", from: before?.description ?? "", to: after.description },
+    { label: "Description", from: before ? docToText(before.description) : "", to: docToText(after.description) },
     ...fields.map((field) => ({
       label: field.name,
       from: formatValue(before?.attributes[field.id]),
@@ -105,7 +105,12 @@ function RevisionDiff({ fields, before, after }: { fields: Field[]; before?: Rev
     })),
   ].filter((row) => row.from !== row.to);
 
-  if (rows.length === 0) return <Text c="dimmed">No differences.</Text>;
+  // The word diff compares text only, so a change of bold, headings or lists alone is reported in words.
+  const formattingOnly =
+    before !== undefined &&
+    docToText(before.description) === docToText(after.description) &&
+    JSON.stringify(before.description) !== JSON.stringify(after.description);
+  if (rows.length === 0 && !formattingOnly) return <Text c="dimmed">No differences.</Text>;
   return (
     <Stack gap="sm">
       {before && (
@@ -114,6 +119,7 @@ function RevisionDiff({ fields, before, after }: { fields: Field[]; before?: Rev
           highlighted.
         </Text>
       )}
+      {formattingOnly && <Text size="sm">Description: formatting changed, wording unchanged.</Text>}
       {rows.map((row) => (
         <div key={row.label}>
           <Text size="sm" fw={600}>
