@@ -25,10 +25,10 @@ export type Item = {
 };
 export type Template = { id: string; name: string; description: string; sets: string[] };
 
-/** Calls the API and returns the JSON body, or throws an Error carrying the server's message. */
-export async function api<T>(path: string, body?: object): Promise<T> {
+/** Calls the API and returns the JSON body, or throws an Error carrying the server's message. A body makes it a POST unless `method` says otherwise. */
+export async function api<T>(path: string, body?: object, method?: "PATCH" | "DELETE"): Promise<T> {
   const res = await fetch(`/api/${path}`, {
-    method: body ? "POST" : "GET",
+    method: method ?? (body ? "POST" : "GET"),
     headers: body ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });

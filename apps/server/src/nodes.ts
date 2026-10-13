@@ -1,9 +1,10 @@
 import { formatUid } from "@app/shared";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import type { AppContext } from "./app.ts";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemRevisions, nodes, sets } from "./db/schema.ts";
 import { checkAttributes } from "./domain/attributes.ts";
+import { descendantIds, placeBefore } from "./domain/tree.ts";
 
 const idParam = (name: string) =>
   ({ type: "object", required: [name], properties: { [name]: { type: "string", format: "uuid" } } }) as const;
@@ -47,6 +48,25 @@ function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
     .from(attributeDefinitions)
     .where(eq(attributeDefinitions.itemTypeId, itemTypeId))
     .orderBy(attributeDefinitions.position);
+}
+
+const nullableId = { type: ["string", "null"], format: "uuid" } as const;
+
+/**
+ * Locks a live node's set and returns the node with every live node of that set, in sibling order.
+ * The lock makes moves, deletes and creates in one set run one at a time.
+ */
+async function lockSetOf(tx: Tx, nodeId: string) {
+  const [found] = await tx.select({ setId: nodes.setId }).from(nodes).where(eq(nodes.id, nodeId));
+  if (!found) return null;
+  await tx.select({ id: sets.id }).from(sets).where(eq(sets.id, found.setId)).for("update");
+  const live = await tx
+    .select({ id: nodes.id, parentId: nodes.parentId, kind: nodes.kind, position: nodes.position })
+    .from(nodes)
+    .where(and(eq(nodes.setId, found.setId), isNull(nodes.deletedAt)))
+    .orderBy(nodes.position);
+  const node = live.find((n) => n.id === nodeId);
+  return node ? { node, live } : null;
 }
 
 export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
@@ -251,6 +271,122 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);
+    },
+  );
+
+  app.patch(
+    "/api/nodes/:nodeId",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("nodeId"),
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: { name: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { nodeId } = req.params as { nodeId: string };
+      const name = (req.body as { name: string }).name.trim();
+      const renamed = await db.transaction(async (tx) => {
+        // Folders only: an item's name is versioned, so it changes by saving a new revision.
+        const rows = await tx
+          .update(nodes)
+          .set({ name })
+          .where(and(eq(nodes.id, nodeId), eq(nodes.kind, "folder"), isNull(nodes.deletedAt)))
+          .returning({ id: nodes.id });
+        if (rows.length > 0) await audit(tx, req.user?.id ?? null, "folder.rename", "folder", nodeId);
+        return rows.length > 0;
+      });
+      if (!renamed) return reply.code(404).send({ error: "Folder not found" });
+      return { ok: true };
+    },
+  );
+
+  // Moves a node to a parent in the same set (null = directly under the set), before a sibling or last.
+  app.post(
+    "/api/nodes/:nodeId/move",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("nodeId"),
+        body: {
+          type: "object",
+          required: ["parentId", "beforeId"],
+          additionalProperties: false,
+          properties: { parentId: nullableId, beforeId: nullableId },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { nodeId } = req.params as { nodeId: string };
+      const { parentId, beforeId } = req.body as { parentId: string | null; beforeId: string | null };
+
+      const result = await db.transaction(async (tx) => {
+        const locked = await lockSetOf(tx, nodeId);
+        if (!locked) return { error: [404, "Not found"] } as const;
+        const { node, live } = locked;
+
+        if (parentId) {
+          if (live.find((n) => n.id === parentId)?.kind !== "folder") {
+            return { error: [400, "Destination must be a folder in the same set"] } as const;
+          }
+          if (parentId === nodeId || descendantIds(live, nodeId).has(parentId)) {
+            return { error: [400, "A folder cannot be moved into itself"] } as const;
+          }
+        }
+        const siblings = live.filter((n) => n.parentId === parentId);
+        const order = placeBefore(
+          siblings.map((n) => n.id),
+          nodeId,
+          beforeId,
+        );
+        if (!order) return { error: [400, "beforeId must be another node in the destination"] } as const;
+
+        // Renumbers only the destination's children, and only those whose position changed.
+        for (const [index, id] of order.entries()) {
+          const position = index + 1;
+          if (id === nodeId) await tx.update(nodes).set({ parentId, position }).where(eq(nodes.id, id));
+          else if (siblings.find((n) => n.id === id)?.position !== position) {
+            await tx.update(nodes).set({ position }).where(eq(nodes.id, id));
+          }
+        }
+        await audit(tx, req.user?.id ?? null, `${node.kind}.move`, node.kind, nodeId);
+        return { ok: true };
+      });
+
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
+    },
+  );
+
+  // Soft delete: the node and everything inside it are hidden, never removed. History and UIDs are kept.
+  app.delete(
+    "/api/nodes/:nodeId",
+    { onRequest: requireUser, schema: { params: idParam("nodeId") } },
+    async (req, reply) => {
+      const { nodeId } = req.params as { nodeId: string };
+      const deleted = await db.transaction(async (tx) => {
+        const locked = await lockSetOf(tx, nodeId);
+        if (!locked) return null;
+        const doomed = [locked.node, ...locked.live.filter((n) => descendantIds(locked.live, nodeId).has(n.id))];
+        await tx
+          .update(nodes)
+          .set({ deletedAt: new Date() })
+          .where(
+            inArray(
+              nodes.id,
+              doomed.map((n) => n.id),
+            ),
+          );
+        for (const n of doomed) await audit(tx, req.user?.id ?? null, `${n.kind}.delete`, n.kind, n.id);
+        return doomed.length;
+      });
+      if (deleted === null) return reply.code(404).send({ error: "Not found" });
+      return { deleted };
     },
   );
 }

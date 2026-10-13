@@ -17,6 +17,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { type Attributes, api, type Field, type Item } from "./api.ts";
+import { NodeActions } from "./NodeActions.tsx";
+import { useProject } from "./ProjectPage.tsx";
 
 type ItemData = { item: Item; fields: Field[] };
 
@@ -40,6 +42,8 @@ export function ItemPage() {
 function ItemForm({ item, fields }: ItemData) {
   const { projectId } = useParams({ from: "/projects/$projectId/items/$nodeId" });
   const queryClient = useQueryClient();
+  const project = useProject().data;
+  const node = project?.nodes.find((n) => n.id === item.id);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description);
   const [attributes, setAttributes] = useState<Attributes>(item.attributes);
@@ -82,6 +86,7 @@ function ItemForm({ item, fields }: ItemData) {
           <Text c="dimmed" size="sm">
             Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
           </Text>
+          <Group ml="auto">{project && node && <NodeActions data={project} node={node} />}</Group>
         </Group>
         <TextInput
           label="Name"

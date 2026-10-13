@@ -26,6 +26,8 @@ afterAll(async () => {
 
 const post = (url: string, payload: object, cookie?: string) =>
   app.inject({ method: "POST", url, payload, headers: cookie ? { cookie } : {} });
+const send = (method: "PATCH" | "DELETE", url: string, cookie: string, payload?: object) =>
+  app.inject({ method, url, payload, headers: { cookie } });
 const get = (url: string, cookie?: string) => app.inject({ method: "GET", url, headers: cookie ? { cookie } : {} });
 const cookieOf = (res: { cookies: { name: string; value: string }[] }) => `session=${res.cookies[0]?.value}`;
 const auditActions = async () => (await db.select().from(auditEvents)).map((e) => e.action).sort();
@@ -222,6 +224,97 @@ test("two saves from the same revision cannot both succeed", async () => {
     post(`/api/items/${id}/revisions`, { baseRevision: 1, name, description: "", attributes: {} }, cookie);
   const codes = (await Promise.all([save("B"), save("C")])).map((r) => r.statusCode).sort();
   expect(codes).toEqual([201, 409]);
+});
+
+/** The live tree of a set as nested names, e.g. ["A", ["F", ["B"]]] . */
+async function shape(
+  detail: () => Promise<{ nodes: { id: string; setId: string; parentId: string | null; name: string }[] }>,
+  setId: string,
+) {
+  const { nodes } = await detail();
+  const level = (parentId: string | null): unknown[] =>
+    nodes
+      .filter((n) => n.setId === setId && n.parentId === parentId)
+      .map((n) => (nodes.some((c) => c.parentId === n.id) ? [n.name, level(n.id)] : n.name));
+  return level(null);
+}
+
+test("nodes can be reordered and moved between folders of one set", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const make = async (kind: string, name: string, parentId?: string, setId = sys.id) =>
+    (await add(setId, { kind, name, parentId })).json().node.id as string;
+  const f = await make("folder", "F");
+  const g = await make("folder", "G", f);
+  const a = await make("item", "A");
+  const b = await make("item", "B");
+  const elsewhere = await make("folder", "Elsewhere", undefined, un.id);
+  const move = (id: string, parentId: string | null, beforeId: string | null) =>
+    post(`/api/nodes/${id}/move`, { parentId, beforeId }, cookie);
+
+  expect(await shape(detail, sys.id)).toEqual([["F", ["G"]], "A", "B"]);
+  expect((await move(b, null, f)).statusCode).toBe(200);
+  expect(await shape(detail, sys.id)).toEqual(["B", ["F", ["G"]], "A"]);
+  expect((await move(a, g, null)).statusCode).toBe(200);
+  expect((await move(b, g, a)).statusCode).toBe(200);
+  expect(await shape(detail, sys.id)).toEqual([["F", [["G", ["B", "A"]]]]]);
+  expect((await move(a, null, null)).statusCode).toBe(200);
+  expect(await shape(detail, sys.id)).toEqual([["F", [["G", ["B"]]]], "A"]);
+
+  // Refused: into itself, into its own descendant, into an item, into another set, before a non-sibling.
+  for (const [id, parentId, beforeId] of [
+    [f, f, null],
+    [f, g, null],
+    [f, a, null],
+    [a, elsewhere, null],
+    [a, null, b],
+    [a, null, a],
+  ] as const) {
+    expect((await move(id, parentId, beforeId)).statusCode, `${id} -> ${parentId} before ${beforeId}`).toBe(400);
+  }
+  expect(await shape(detail, sys.id)).toEqual([["F", [["G", ["B"]]]], "A"]);
+  expect(await auditActions()).toEqual(expect.arrayContaining(["item.move"]));
+});
+
+test("deleting hides a folder and everything in it, but keeps history and never reuses a UID", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const folder = (await add(sys.id, { kind: "folder", name: "F" })).json().node;
+  const inside = (await add(sys.id, { kind: "item", name: "Inside", parentId: folder.id })).json().node;
+  await add(sys.id, { kind: "item", name: "Outside" });
+
+  const res = await send("DELETE", `/api/nodes/${folder.id}`, cookie);
+  expect(res.json()).toEqual({ deleted: 2 });
+  expect(await shape(detail, sys.id)).toEqual(["Outside"]);
+  expect((await get(`/api/items/${inside.id}`, cookie)).statusCode).toBe(404);
+  expect((await get(`/api/sets/${sys.id}/items`, cookie)).json().items).toHaveLength(1);
+  expect((await send("DELETE", `/api/nodes/${folder.id}`, cookie)).statusCode).toBe(404);
+  expect((await post(`/api/nodes/${inside.id}/move`, { parentId: null, beforeId: null }, cookie)).statusCode).toBe(404);
+  expect(
+    (
+      await post(
+        `/api/items/${inside.id}/revisions`,
+        { baseRevision: 1, name: "X", description: "", attributes: {} },
+        cookie,
+      )
+    ).statusCode,
+  ).toBe(404);
+
+  // Nothing was removed from the database, and the next item does not take SYS-001 again.
+  const kept = await db.execute(sql`select count(*)::int as n from nodes where deleted_at is not null`);
+  expect(kept.rows[0]).toEqual({ n: 2 });
+  expect((await db.execute(sql`select count(*)::int as n from item_revisions`)).rows[0]).toEqual({ n: 2 });
+  expect((await add(sys.id, { kind: "item", name: "Next" })).json().node.uid).toBe("SYS-003");
+  expect(await auditActions()).toEqual(expect.arrayContaining(["folder.delete", "item.delete"]));
+});
+
+test("folders can be renamed; items cannot be renamed this way", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const folder = (await add(sys.id, { kind: "folder", name: "Old" })).json().node;
+  const item = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  expect((await send("PATCH", `/api/nodes/${folder.id}`, cookie, { name: " New " })).statusCode).toBe(200);
+  expect((await send("PATCH", `/api/nodes/${item.id}`, cookie, { name: "Nope" })).statusCode).toBe(404);
+  expect((await send("PATCH", `/api/nodes/${folder.id}`, cookie, { name: " " })).statusCode).toBe(400);
+  expect(await shape(detail, sys.id)).toEqual(["New", "Item"]);
+  expect(await auditActions()).toContain("folder.rename");
 });
 
 test("concurrent creates in one set never share a UID", async () => {

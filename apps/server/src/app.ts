@@ -15,7 +15,7 @@ const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
 
 type SessionUser = { id: string; email: string; name: string; isAdmin: boolean };
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Guard = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 /** What feature route files receive from buildApp. */

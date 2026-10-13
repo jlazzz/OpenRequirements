@@ -17,6 +17,7 @@ import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { api, formatValue, type ProjectDetail, type ProjectSet, type SetItems, type TreeNode } from "./api.ts";
 import { RouterAnchor, RouterNavLink } from "./links.tsx";
+import { NodeActions } from "./NodeActions.tsx";
 
 export function useProject() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -204,6 +205,7 @@ function Container({
           </Text>
         </div>
         <Group gap="xs">
+          {folder && <NodeActions data={data} node={folder} />}
           <Button variant="default" onClick={() => setAdding("folder")}>
             Add folder
           </Button>

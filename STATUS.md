@@ -15,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- M1 built in 5 slices: projects from a template, folders and items with UIDs, List view, Single item view with Save version, move / rename / soft-delete (2026-10-12)
 - M0, running skeleton: built and tested by the owner (2026-10-12)
 - CI passes on GitHub (2026-10-12)
 - UI decided: Mantine and TanStack Router, ADR 0004 (2026-10-12)
@@ -22,20 +23,21 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-**M1, structure and items.** Slices, each testable in the browser:
-
-1. [x] Create a project from the Standard template; explorer lists its sets (2026-10-12)
-2. [x] Folders and items in a set: create, UIDs, explorer tree (2026-10-12)
-3. [x] List view of a set or folder, one column per field (2026-10-12)
-4. [x] Single item view: edit name, description and fields; "Save version" appends a revision (2026-10-12)
-5. [ ] Reorder and soft-delete
+- **M1, structure and items: built, waiting for the owner's test.** Do not start M2 until the owner has tested and given feedback.
 
 ## Next
 
 Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner look at M1 slices 3 and 4
-2. M1 slice 5: rename folders, move and reorder, soft-delete. Then the M1 owner test.
+1. Owner test of M1: create a project, folders and items; edit and save; reorder, move and delete
+2. Fold M1 feedback into `docs/DESIGN.md`
+3. M2, editing and versions: inline editing, auto-saved drafts, version history with a diff
+
+Known gaps left for later milestones or owner decision:
+
+- Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
+- Items cannot be nested under items, only under folders and sets.
+- Deleted folders and items cannot be restored from the screen yet.
 
 ## Open decisions
 
