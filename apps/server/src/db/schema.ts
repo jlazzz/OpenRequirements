@@ -148,6 +148,40 @@ export const itemDrafts = pgTable(
   (t) => [primaryKey({ columns: [t.itemId, t.authorId] })],
 );
 
+export const linkTypes = pgTable("link_types", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  name: text().notNull(),
+  position: integer().notNull(),
+});
+
+/** A directional relationship between two items of one project. Rows are never changed, only soft-deleted. */
+export const links = pgTable("links", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  linkTypeId: uuid()
+    .notNull()
+    .references(() => linkTypes.id),
+  upstreamId: uuid()
+    .notNull()
+    .references(() => nodes.id),
+  downstreamId: uuid()
+    .notNull()
+    .references(() => nodes.id),
+  // The revisions of both ends when the link was made. Phase 2 uses them to flag suspect links.
+  upstreamRevision: integer().notNull(),
+  downstreamRevision: integer().notNull(),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  deletedAt: timestamp({ withTimezone: true }),
+});
+
 /** Append-only log of every write. Never update or delete rows. */
 export const auditEvents = pgTable("audit_events", {
   id: uuid().primaryKey().defaultRandom(),

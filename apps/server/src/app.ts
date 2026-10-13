@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { Db } from "./db/client.ts";
 import { auditEvents, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
+import { linkRoutes } from "./links.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
 
@@ -191,6 +192,7 @@ export async function buildApp(
   const context: AppContext = { app, db, requireUser, requireAdmin, audit };
   projectRoutes(context);
   nodeRoutes(context);
+  linkRoutes(context);
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

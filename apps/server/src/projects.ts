@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
-import { attributeDefinitions, itemTypes, projects, sets } from "./db/schema.ts";
+import { attributeDefinitions, itemTypes, linkTypes, projects, sets } from "./db/schema.ts";
 import { templates } from "./domain/templates.ts";
 import { projectNodes } from "./nodes.ts";
 
@@ -69,6 +69,9 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
             position,
           })),
         );
+        await tx
+          .insert(linkTypes)
+          .values(template.linkTypes.map((name, position) => ({ projectId: created.id, name, position })));
         await audit(tx, req.user?.id ?? null, "project.create", "project", created.id);
         return created;
       });

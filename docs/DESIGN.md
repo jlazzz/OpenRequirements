@@ -75,6 +75,10 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 - **Baselines:** named, frozen snapshot of a set or project, with compare against current.
 - **Traceability matrix:** set A down the side, set B across the top.
 - **Coverage filter:** find items with no downstream link, e.g. requirements with no test.
+- **Direction:** a relationship runs from an upstream item to a downstream item. Coverage means "has at least one downstream relationship".
+- **One relationship per pair of items**, in either direction. Both items must be in the same project.
+- **Relationship types** come from the project template. Standard has: Related to, Derived from, Verified by.
+- **Removing a relationship is a soft delete.** A relationship to a deleted item is hidden.
 - **Suspect links: not in Phase 1.** Still store, on each link, the source and target revisions it was created against, so suspect flagging can be added later without a migration of old links.
 
 ## 5. Team features in Phase 1

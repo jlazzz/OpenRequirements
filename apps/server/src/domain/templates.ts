@@ -6,6 +6,8 @@ export type Template = {
   description: string;
   itemTypes: { name: string; fields: { name: string; type: FieldType; options?: string[] }[] }[];
   sets: { name: string; uidPrefix: string; itemType: string }[];
+  /** Relationship types offered when linking two items. The first is the default. */
+  linkTypes: string[];
 };
 
 type Field = Template["itemTypes"][number]["fields"][number];
@@ -34,5 +36,6 @@ export const templates: Template[] = [
       { name: "System Requirements", uidPrefix: "SYS", itemType: "Requirement" },
       { name: "Verification Tests", uidPrefix: "VER", itemType: "Test Case" },
     ],
+    linkTypes: ["Related to", "Derived from", "Verified by"],
   },
 ];

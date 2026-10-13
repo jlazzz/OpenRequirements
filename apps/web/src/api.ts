@@ -65,3 +65,8 @@ export function formatValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return Array.isArray(value) ? value.join(", ") : String(value);
 }
+
+export type LinkType = { id: string; name: string };
+/** A relationship: the upstream item is the source, the downstream item derives from, verifies or otherwise depends on it. */
+export type Link = { id: string; typeId: string; upstreamId: string; downstreamId: string };
+export type ProjectLinks = { linkTypes: LinkType[]; links: Link[] };

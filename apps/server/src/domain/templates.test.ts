@@ -12,6 +12,8 @@ test("every template is internally consistent", () => {
       expect(typeNames, `set "${set.name}"`).toContain(set.itemType);
       expect(set.uidPrefix).toMatch(/^[A-Z]{2,6}$/);
     }
+    expect(template.linkTypes.length, "at least one link type").toBeGreaterThan(0);
+    expect(new Set(template.linkTypes).size, "link type names are unique").toBe(template.linkTypes.length);
     for (const field of template.itemTypes.flatMap((t) => t.fields)) {
       const needsOptions = field.type === "enum" || field.type === "multi_enum";
       expect(Boolean(field.options?.length), `field "${field.name}"`).toBe(needsOptions);

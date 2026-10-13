@@ -6,6 +6,7 @@ import {
   Flex,
   Group,
   Modal,
+  SegmentedControl,
   Stack,
   Table,
   Text,
@@ -18,6 +19,7 @@ import { type FormEvent, useState } from "react";
 import { api, formatValue, type ProjectDetail, type ProjectSet, type SetItems, type TreeNode } from "./api.ts";
 import { RouterAnchor, RouterNavLink } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
+import { useLinks } from "./Relationships.tsx";
 
 export function useProject() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -30,7 +32,7 @@ function childrenOf(nodes: TreeNode[], containerId: string) {
 }
 
 /** Every item inside a set or folder, including those in sub-folders, in explorer order. */
-function itemsWithin(nodes: TreeNode[], containerId: string): TreeNode[] {
+export function itemsWithin(nodes: TreeNode[], containerId: string): TreeNode[] {
   return childrenOf(nodes, containerId).flatMap((n) => (n.kind === "item" ? [n] : itemsWithin(nodes, n.id)));
 }
 
@@ -133,6 +135,14 @@ export function ProjectPage() {
           {info.name}
         </Text>
         {branch(null, 0)}
+        <RouterNavLink
+          to="/projects/$projectId/matrix"
+          params={{ projectId: info.id }}
+          label="Traceability matrix"
+          mt="sm"
+          pl={26}
+          py={4}
+        />
       </Box>
       <Box flex={1} p="lg" style={{ overflow: "auto" }}>
         <Outlet />
@@ -189,7 +199,18 @@ function Container({
     queryFn: () => api<SetItems>(`sets/${set.id}/items`),
   });
   const details = new Map(list.data?.items.map((item) => [item.id, item]));
-  const rows = itemsWithin(data.nodes, folder?.id ?? set.id);
+  const links = useLinks(projectId).data?.links ?? [];
+  const [coverage, setCoverage] = useState<"all" | "no-upstream" | "no-downstream">("all");
+  const count = (id: string, end: "upstreamId" | "downstreamId") => links.filter((l) => l[end] === id).length;
+  // An item's upstream relationships are the links where it is the downstream end, and the reverse.
+  const all = itemsWithin(data.nodes, folder?.id ?? set.id).map((node) => ({
+    node,
+    upstream: count(node.id, "downstreamId"),
+    downstream: count(node.id, "upstreamId"),
+  }));
+  const rows = all.filter(
+    (r) => coverage === "all" || (coverage === "no-upstream" ? r.upstream === 0 : r.downstream === 0),
+  );
   const fields = list.data?.fields ?? [];
 
   return (
@@ -200,8 +221,8 @@ function Container({
             {title}
           </Title>
           <Text c="dimmed" size="sm">
-            {folder ? `Folder in ${set.name}` : `Set of ${set.itemType} items`} · {rows.length}{" "}
-            {rows.length === 1 ? "item" : "items"}
+            {folder ? `Folder in ${set.name}` : `Set of ${set.itemType} items`} · {all.length}{" "}
+            {all.length === 1 ? "item" : "items"}
           </Text>
         </div>
         <Group gap="xs">
@@ -218,10 +239,24 @@ function Container({
           {list.error.message}
         </Alert>
       )}
+      {all.length > 0 && (
+        <SegmentedControl
+          aria-label="Coverage filter"
+          size="xs"
+          style={{ alignSelf: "flex-start" }}
+          value={coverage}
+          onChange={(value) => setCoverage(value as typeof coverage)}
+          data={[
+            { value: "all", label: `All (${all.length})` },
+            { value: "no-upstream", label: `No upstream (${all.filter((r) => r.upstream === 0).length})` },
+            { value: "no-downstream", label: `No downstream (${all.filter((r) => r.downstream === 0).length})` },
+          ]}
+        />
+      )}
       {rows.length === 0 ? (
-        <Text c="dimmed">No items here yet.</Text>
+        <Text c="dimmed">{all.length === 0 ? "No items here yet." : "No items match this filter."}</Text>
       ) : (
-        <Table.ScrollContainer minWidth={160 * (fields.length + 2)}>
+        <Table.ScrollContainer minWidth={160 * (fields.length + 3)}>
           <Table withTableBorder withColumnBorders highlightOnHover bg="white" aria-label={`Items in ${title}`}>
             <Table.Thead>
               <Table.Tr>
@@ -230,10 +265,12 @@ function Container({
                 {fields.map((field) => (
                   <Table.Th key={field.id}>{field.name}</Table.Th>
                 ))}
+                <Table.Th w={90}>Upstream</Table.Th>
+                <Table.Th w={110}>Downstream</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {rows.map((node) => (
+              {rows.map(({ node, upstream, downstream }) => (
                 <Table.Tr key={node.id}>
                   <Table.Td style={{ whiteSpace: "nowrap" }}>{node.uid}</Table.Td>
                   <Table.Td>
@@ -244,6 +281,8 @@ function Container({
                   {fields.map((field) => (
                     <Table.Td key={field.id}>{formatValue(details.get(node.id)?.attributes[field.id])}</Table.Td>
                   ))}
+                  <Table.Td c={upstream === 0 ? "dimmed" : undefined}>{upstream}</Table.Td>
+                  <Table.Td c={downstream === 0 ? "dimmed" : undefined}>{downstream}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

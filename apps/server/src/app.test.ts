@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -440,6 +440,72 @@ test("creating a node rejects blank names and unknown sets, and a folder is not 
   expect((await add("00000000-0000-4000-8000-000000000000", { kind: "item", name: "A" })).statusCode).toBe(404);
   const folder = (await add(sys.id, { kind: "folder", name: "F" })).json().node;
   expect((await get(`/api/items/${folder.id}`, cookie)).statusCode).toBe(404);
+});
+
+test("items can be linked upstream to downstream, once per pair, and unlinked", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const req1 = (await add(sys.id, { kind: "item", name: "Req 1" })).json().node.id;
+  const req2 = (await add(sys.id, { kind: "item", name: "Req 2" })).json().node.id;
+  await post(
+    `/api/items/${req1}/revisions`,
+    { baseRevision: 1, name: "Req 1b", description: textToDoc(""), attributes: {} },
+    cookie,
+  );
+  const list = async () => (await get(`/api/projects/${projectId}/links`, cookie)).json();
+  const { linkTypes } = await list();
+  expect(linkTypes.map((t: { name: string }) => t.name)).toEqual(["Related to", "Derived from", "Verified by"]);
+  const typeId = linkTypes[1].id;
+  const link = (upstreamId: string, downstreamId: string, type = typeId) =>
+    post("/api/links", { upstreamId, downstreamId, typeId: type }, cookie);
+
+  const created = await link(need, req1);
+  expect(created.statusCode).toBe(201);
+  expect((await link(need, req2)).statusCode).toBe(201);
+  expect((await list()).links).toEqual([
+    { id: created.json().link.id, typeId, upstreamId: need, downstreamId: req1 },
+    expect.objectContaining({ upstreamId: need, downstreamId: req2 }),
+  ]);
+  // The link remembers which revisions it joined, for suspect-link checks later.
+  const stored = await db.execute(
+    sql`select upstream_revision, downstream_revision from links order by created_at limit 1`,
+  );
+  expect(stored.rows[0]).toEqual({ upstream_revision: 1, downstream_revision: 2 });
+
+  expect((await link(need, req1)).statusCode, "duplicate").toBe(409);
+  expect((await link(req1, need, linkTypes[0].id)).statusCode, "reverse duplicate").toBe(409);
+  expect((await link(need, need)).statusCode, "self").toBe(400);
+  expect((await link(need, "00000000-0000-4000-8000-000000000000")).statusCode, "missing item").toBe(404);
+  expect((await link(req1, req2, "00000000-0000-4000-8000-000000000000")).statusCode, "bad type").toBe(400);
+
+  // A deleted item's links disappear from the list; an unlinked pair can be linked again.
+  await send("DELETE", `/api/nodes/${req2}`, cookie);
+  expect((await list()).links).toHaveLength(1);
+  expect((await send("DELETE", `/api/links/${created.json().link.id}`, cookie)).statusCode).toBe(200);
+  expect((await send("DELETE", `/api/links/${created.json().link.id}`, cookie)).statusCode).toBe(404);
+  expect((await list()).links).toEqual([]);
+  expect((await link(req1, need)).statusCode).toBe(201);
+  expect((await db.execute(sql`select count(*)::int as n from links`)).rows[0]).toEqual({ n: 3 });
+  expect(await auditActions()).toEqual(expect.arrayContaining(["link.create", "link.delete"]));
+});
+
+test("two requests linking the same pair cannot both succeed, and projects cannot be linked together", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const a = (await add(sys.id, { kind: "item", name: "A" })).json().node.id;
+  const b = (await add(sys.id, { kind: "item", name: "B" })).json().node.id;
+  const { linkTypes } = (await get(`/api/projects/${(await detail()).project.id}/links`, cookie)).json();
+  const typeId = linkTypes[0].id;
+  const both = await Promise.all([
+    post("/api/links", { upstreamId: a, downstreamId: b, typeId }, cookie),
+    post("/api/links", { upstreamId: b, downstreamId: a, typeId }, cookie),
+  ]);
+  expect(both.map((r) => r.statusCode).sort()).toEqual([201, 409]);
+
+  const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project;
+  const otherSet = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0];
+  const c = (await add(otherSet.id, { kind: "item", name: "C" })).json().node.id;
+  expect((await post("/api/links", { upstreamId: a, downstreamId: c, typeId }, cookie)).statusCode).toBe(400);
 });
 
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.

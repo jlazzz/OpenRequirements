@@ -85,7 +85,7 @@ apps/
     src/links.tsx   Mantine links wired to the router: use these, not <a>
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
-    src/projects.ts, src/nodes.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
@@ -137,11 +137,11 @@ Use these terms exactly, in code, API and UI.
 | **Draft** | An author's auto-saved, private, uncommitted edits to an item. "Save version" turns it into a revision. |
 | **Attribute definition** | A custom field schema (status, priority, verification method, ASIL level…) |
 | **Revision** | An immutable snapshot of an item or link at a point in time |
-| **Link / Link type** | A typed, directional relationship (e.g. *derives from*, *verifies*, *satisfies*, *refines*) |
+| **Link / Link type** | A typed, directional relationship from an **upstream** item to a **downstream** item (e.g. *Derived from*, *Verified by*). Called "relationship" in the UI. |
 | **Baseline** | A named, immutable snapshot of a set or project at a moment (e.g. "Design Review v1.0") |
 | **Suspect link** | A link flagged for review because the item on either end changed since the link was last confirmed |
 | **Traceability matrix** | A cross-reference view of links between two sets |
-| **Coverage** | Which requirements have, or lack, downstream links (e.g. untested requirements) |
+| **Coverage** | Which items have, or lack, downstream links (e.g. untested requirements) |
 | **External reference** | A link to something outside the tool (Jira issue, Git commit, CI test result) |
 
 ## Core data model (sketch)
@@ -153,8 +153,9 @@ Project ─< ItemType                (from the project template; a set has exact
 Item ─< Draft                      (one per author; private until committed)
 Item ─< ItemRevision               (append-only: body, attributes JSONB, author, timestamp, change reason)
 ItemType ─< AttributeDefinition    (name, type, allowed values, required?)
-Project ─< LinkType                (name, direction labels; no source→target rules)
-Link ─< LinkRevision               (source item, target item, type, revisions confirmed at, suspect flag)
+Project ─< LinkType                (name; from the template; no source→target rules)
+Link                               (upstream item, downstream item, type, revisions of both ends at creation; immutable, soft-deleted)
+LinkRevision                       (Phase 2, with suspect links: re-confirmations of a link)
 Project ─< Baseline ─< BaselineEntry   (points to exact ItemRevision / LinkRevision IDs)
 Item ─< Comment, Attachment, ExternalReference
 Review ─< ReviewItem, Approval, Signature     (Phase 3)

@@ -20,6 +20,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type Attributes, api, type Draft, type Field, type Item } from "./api.ts";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
+import { Relationships } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
 import { Versions } from "./Versions.tsx";
 
@@ -246,7 +247,10 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
           </Text>
         </Stack>
       </form>
-      <Versions itemId={item.id} fields={fields} />
+      <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
+        {project && <Relationships data={project} itemId={item.id} />}
+        <Versions itemId={item.id} fields={fields} />
+      </Stack>
     </Flex>
   );
 }

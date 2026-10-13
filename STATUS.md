@@ -15,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- Bundle A built: version history and compare, auto-saved drafts, rich text (ADR 0005), relationships, traceability matrix, coverage filter (2026-10-12)
 - M1 tested by the owner (2026-10-12)
 - M1 built in 5 slices: projects from a template, folders and items with UIDs, List view, Single item view with Save version, move / rename / soft-delete (2026-10-12)
 - M0, running skeleton: built and tested by the owner (2026-10-12)
@@ -24,28 +25,25 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-**Bundle A: M2 (editing and versions) + M3 (relationships).** One owner test at the end, not per slice.
-
-- [x] M2: version history side panel; compare any two versions with a word-level diff (2026-10-12)
-- [x] M2: auto-saved private drafts; "Save version" commits the draft; discard draft (2026-10-12)
-- [x] M2: rich-text description with basic formatting, stored as editor JSON, ADR 0005 (2026-10-12)
-- [ ] M3: add a relationship by search; upstream and downstream in the item side panel
-- [ ] M3: traceability matrix between two sets
-- [ ] M3: coverage filter in List view
+- **Bundle A (M2 + M3): built, waiting for the owner's test at checkpoint A.** Do not start bundle B until the owner has tested and given feedback.
 
 ## Next
 
-Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
+Phase 1 milestones and review checkpoints are in [docs/DESIGN.md](docs/DESIGN.md) section 10.
 
-1. Finish bundle A, then the owner test (checkpoint A)
-2. Bundle B: M4 + M5
-3. Bundle C: M6 + M7
+1. Owner test of bundle A: format a description; leave and return to a draft; save versions and compare them; link items; matrix; coverage filter
+2. Fold feedback into `docs/DESIGN.md`
+3. Bundle B: M4 (reading and finding) + M5 (team)
+4. Bundle C: M6 (baselines) + M7 (data in and out)
 
 Known gaps left for later milestones or owner decision:
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.
-- Deleted folders and items cannot be restored from the screen yet.
+- Deleted folders, items and relationships cannot be restored from the screen yet.
+- Old versions can be viewed and compared, not restored.
+- Editing cells in place in List view moved from M2 to M4.
+- Version diffs compare wording; a formatting-only change is reported without detail.
 
 ## Open decisions
 

@@ -29,6 +29,13 @@
       "when": 1791853330609,
       "tag": "0003_rich_text_and_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791853685275,
+      "tag": "0004_links",
+      "breakpoints": true
     }
   ]
 }
