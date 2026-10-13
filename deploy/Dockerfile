@@ -17,6 +17,8 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/server apps/server
 COPY --from=build /app/apps/web/dist apps/web/dist
 COPY --from=build /app/packages packages
+# The attachments volume inherits this ownership, so the unprivileged user can write uploads.
+RUN mkdir -p /data/attachments && chown node:node /data/attachments
 USER node
 EXPOSE 3000
 # Node runs the TypeScript sources directly, so the server has no build step.

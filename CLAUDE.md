@@ -68,7 +68,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
 | Auth | Local accounts, scrypt hashes, session cookie; OIDC/SAML/LDAP later | in use |
-| File storage | Local disk or S3-compatible (MinIO) | proposed |
+| File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images only, type checked by content. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml` | in use |
 | End-to-end tests | Playwright | proposed |
 
@@ -85,7 +85,7 @@ apps/
     src/links.tsx   Mantine links wired to the router: use these, not <a>
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
-    src/projects.ts, src/nodes.ts, src/links.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order

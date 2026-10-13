@@ -100,6 +100,8 @@ export const nodes = pgTable(
     uid: text(),
     // Order among siblings.
     position: integer().notNull(),
+    // Items only: UID, current name, description text and field values, for search. Derived from the latest revision.
+    searchText: text().notNull().default(""),
     createdAt: createdAt(),
     deletedAt: timestamp({ withTimezone: true }),
   },
@@ -180,6 +182,20 @@ export const links = pgTable("links", {
     .references(() => users.id),
   createdAt: createdAt(),
   deletedAt: timestamp({ withTimezone: true }),
+});
+
+/** An uploaded image. The bytes are a file named by this id in the attachments directory. */
+export const attachments = pgTable("attachments", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  contentType: text().notNull(),
+  size: integer().notNull(),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
 });
 
 /** Append-only log of every write. Never update or delete rows. */

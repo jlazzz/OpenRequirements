@@ -36,6 +36,20 @@
       "when": 1791853685275,
       "tag": "0004_links",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791855578220,
+      "tag": "0005_search_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791855657857,
+      "tag": "0006_attachments",
+      "breakpoints": true
     }
   ]
 }

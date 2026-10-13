@@ -56,7 +56,9 @@ export type Field = {
 export type Attributes = Record<string, unknown>;
 export type SetItems = {
   fields: Field[];
-  items: { id: string; uid: string; name: string; attributes: Attributes; revision: number }[];
+  items: { id: string; uid: string; name: string; description: RichNode; attributes: Attributes; revision: number }[];
+  /** The signed-in user's own drafts for items of this set. */
+  drafts: { itemId: string; baseRevision: number; name: string; description: RichNode; attributes: Attributes }[];
 };
 
 /** How a field value reads in a table cell or on an item page. */
@@ -70,3 +72,16 @@ export type LinkType = { id: string; name: string };
 /** A relationship: the upstream item is the source, the downstream item derives from, verifies or otherwise depends on it. */
 export type Link = { id: string; typeId: string; upstreamId: string; downstreamId: string };
 export type ProjectLinks = { linkTypes: LinkType[]; links: Link[] };
+
+/** Uploads an image to a project and returns the address to embed in rich text. */
+export async function uploadImage(projectId: string, file: File): Promise<string> {
+  const res = await fetch(`/api/projects/${projectId}/attachments`, {
+    method: "POST",
+    headers: { "content-type": file.type },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 413) throw new Error("Image is larger than 5 MB");
+  if (!res.ok) throw new Error(data.error ?? data.message ?? `Upload failed (${res.status})`);
+  return data.src;
+}

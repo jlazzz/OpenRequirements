@@ -1,9 +1,11 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { ItemPage } from "./ItemPage.tsx";
 import { MatrixPage } from "./MatrixPage.tsx";
-import { FolderPage, ProjectHome, ProjectPage, SetPage } from "./ProjectPage.tsx";
+import { ProjectHome, ProjectPage } from "./ProjectPage.tsx";
 import { ProjectsPage } from "./ProjectsPage.tsx";
 import { Root } from "./Root.tsx";
+import { SearchPage } from "./SearchPage.tsx";
+import { FolderPage, SetPage } from "./SetView.tsx";
 
 const rootRoute = createRootRoute({ component: Root });
 const projectsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: ProjectsPage });
@@ -13,11 +15,21 @@ const projectRoute = createRoute({
   component: ProjectPage,
 });
 const inProject = { getParentRoute: () => projectRoute };
+// List view is the default; ?view=reading shows the Reading view.
+const viewSearch = (search: Record<string, unknown>): { view?: "reading" } => ({
+  view: search.view === "reading" ? "reading" : undefined,
+});
 const projectChildren = [
   createRoute({ ...inProject, path: "/", component: ProjectHome }),
-  createRoute({ ...inProject, path: "sets/$setId", component: SetPage }),
-  createRoute({ ...inProject, path: "folders/$nodeId", component: FolderPage }),
+  createRoute({ ...inProject, path: "sets/$setId", component: SetPage, validateSearch: viewSearch }),
+  createRoute({ ...inProject, path: "folders/$nodeId", component: FolderPage, validateSearch: viewSearch }),
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
+  createRoute({
+    ...inProject,
+    path: "search",
+    component: SearchPage,
+    validateSearch: (search): { q?: string } => ({ q: typeof search.q === "string" ? search.q : undefined }),
+  }),
   createRoute({
     ...inProject,
     path: "matrix",

@@ -23,6 +23,10 @@ services:
       dockerfile: deploy/Dockerfile
     environment:
       DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:-app}@db:5432/app
+      ATTACHMENTS_DIR: /data/attachments
+    volumes:
+      # Uploaded images. Back this up together with the database.
+      - attachments:/data/attachments
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
@@ -32,3 +36,4 @@ services:
 
 volumes:
   db-data:
+  attachments:

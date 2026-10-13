@@ -60,3 +60,26 @@ test("docError rejects absurd nesting", () => {
   for (let i = 0; i < 40; i++) node = { type: "blockquote", content: [node] };
   expect(docError(doc(node))).toBe("Text is nested too deeply");
 });
+
+test("tables, uploaded images and equations are accepted and read as text", () => {
+  const cell = (type: string, value: string): RichNode => ({ type, content: [p(text(value))] });
+  const rich = doc(
+    { type: "table", content: [{ type: "tableRow", content: [cell("tableHeader", "Pin"), cell("tableCell", "VCC")] }] },
+    p(text("E = "), { type: "inlineMath", attrs: { latex: "mc^2" } }),
+    { type: "blockMath", attrs: { latex: "a^2+b^2" } },
+    { type: "image", attrs: { src: "/api/attachments/123e4567-e89b-42d3-a456-426614174000", alt: "Block diagram" } },
+  );
+  expect(docError(rich)).toBeNull();
+  expect(docToText(rich)).toBe("Pin\nVCC\nE = mc^2\na^2+b^2\nBlock diagram");
+});
+
+test.each([
+  ["an external image", { type: "image", attrs: { src: "https://evil.example/track.png" } }],
+  ["a data: image", { type: "image", attrs: { src: "data:image/png;base64,AAAA" } }],
+  ["an image path outside attachments", { type: "image", attrs: { src: "/api/attachments/../session" } }],
+  ["an image with no source", { type: "image" }],
+  ["an equation with no source", { type: "inlineMath" }],
+  ["an oversized equation", { type: "blockMath", attrs: { latex: "x".repeat(2001) } }],
+])("docError rejects %s", (_name, node) => {
+  expect(docError(doc(node))).toEqual(expect.any(String));
+});

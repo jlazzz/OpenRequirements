@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -9,20 +12,22 @@ import { auditEvents } from "./db/schema.ts";
 
 const db = createDb(TEST_DATABASE_URL);
 let app: FastifyInstance;
+const attachmentsDir = mkdtempSync(join(tmpdir(), "attachments-"));
 
 const admin = { email: "Admin@Example.com", name: "Admin", password: "a long password" };
 
 beforeAll(async () => {
-  app = await buildApp(db, { loginAttemptsPerMinute: 1000 });
+  app = await buildApp(db, { loginAttemptsPerMinute: 1000, attachmentsDir });
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, audit_events cascade`,
   );
 });
 afterAll(async () => {
   await app.close();
   await db.$client.end();
+  rmSync(attachmentsDir, { recursive: true });
 });
 
 const post = (url: string, payload: object, cookie?: string) =>
@@ -317,6 +322,64 @@ test("unsafe rich text is refused when saving a version", async () => {
   expect((await save(link("https://example.com"), 1)).statusCode).toBe(201);
 });
 
+test("search finds items by UID, name, description and field values, in one project only", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const a = (await add(sys.id, { kind: "item", name: "Supply voltage" })).json().node.id;
+  const b = (await add(sys.id, { kind: "item", name: "100% duty_cycle" })).json().node.id;
+  const { fields } = (await get(`/api/items/${a}`, cookie)).json();
+  const status = fields.find((f: { name: string }) => f.name === "Status").id;
+  await post(
+    `/api/items/${a}/revisions`,
+    {
+      baseRevision: 1,
+      name: "Supply voltage",
+      description: textToDoc("Runs from a battery pack"),
+      attributes: { [status]: "Approved" },
+    },
+    cookie,
+  );
+  const search = async (q: string, project = projectId) =>
+    (await get(`/api/projects/${project}/search?q=${encodeURIComponent(q)}`, cookie)).json().ids;
+
+  expect(await search("volt")).toEqual([a]);
+  expect(await search("BATTERY pack")).toEqual([a]);
+  expect(await search("sys-002")).toEqual([b]);
+  expect(await search("approved")).toEqual([a]);
+  expect(await search("supply nomatch")).toEqual([]);
+  // Wildcard characters are searched literally.
+  expect(await search("100%")).toEqual([b]);
+  expect(await search("duty_cycle")).toEqual([b]);
+  expect(await search("dutyXcycle")).toEqual([]);
+  expect(await search("%")).toEqual([b]);
+  expect(await search("   ")).toEqual([]);
+
+  await send("DELETE", `/api/nodes/${a}`, cookie);
+  expect(await search("volt")).toEqual([]);
+  const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project;
+  expect(await search("duty", other.id)).toEqual([]);
+});
+
+test("the list of a set includes descriptions and only the signed-in user's drafts", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  await send("PUT", `/api/items/${id}/draft`, cookie, {
+    baseRevision: 1,
+    name: "Draft name",
+    description: textToDoc("d"),
+    attributes: {},
+  });
+  const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
+  expect(list.items[0]).toMatchObject({ name: "Item", description: textToDoc("") });
+  expect(list.drafts).toEqual([expect.objectContaining({ itemId: id, name: "Draft name", baseRevision: 1 })]);
+
+  await db.execute(
+    sql`insert into users (email, name, password_hash) select 'b@example.com', 'B', password_hash from users`,
+  );
+  const other = cookieOf(await post("/api/login", { email: "b@example.com", password: admin.password }));
+  expect((await get(`/api/sets/${sys.id}/items`, other)).json().drafts).toEqual([]);
+});
+
 test("two saves from the same revision cannot both succeed", async () => {
   const { cookie, sys, add } = await projectWithSets();
   const { id } = (await add(sys.id, { kind: "item", name: "A" })).json().node;
@@ -506,6 +569,50 @@ test("two requests linking the same pair cannot both succeed, and projects canno
   const otherSet = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0];
   const c = (await add(otherSet.id, { kind: "item", name: "C" })).json().node.id;
   expect((await post("/api/links", { upstreamId: a, downstreamId: c, typeId }, cookie)).statusCode).toBe(400);
+});
+
+test("an image can be uploaded, embedded in a description and read back; other files are refused", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from("fake image data"),
+  ]);
+  const upload = (payload: Buffer, type = "image/png", project = projectId) =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${project}/attachments`,
+      payload,
+      headers: { cookie, "content-type": type },
+    });
+
+  const res = await upload(png);
+  expect(res.statusCode).toBe(201);
+  const { id, src } = res.json();
+  expect(src).toBe(`/api/attachments/${id}`);
+
+  const file = await get(src, cookie);
+  expect(file.statusCode).toBe(200);
+  expect(file.headers["content-type"]).toBe("image/png");
+  expect(file.headers["x-content-type-options"]).toBe("nosniff");
+  expect(file.rawPayload.equals(png)).toBe(true);
+  expect((await get(src)).statusCode, "anonymous").toBe(401);
+
+  // The stated type is ignored: a script labelled as a PNG is refused, and a PNG labelled as JPEG is stored as PNG.
+  expect((await upload(Buffer.from("<script>alert(1)</script>"))).statusCode).toBe(400);
+  expect((await upload(png, "image/jpeg")).statusCode).toBe(201);
+  expect((await upload(Buffer.from("<svg/>"), "image/svg+xml")).statusCode).toBe(415);
+  expect((await upload(Buffer.alloc(5 * 1024 * 1024 + 1, 1))).statusCode).toBe(413);
+  expect((await upload(png, "image/png", "00000000-0000-4000-8000-000000000000")).statusCode).toBe(404);
+  expect(readdirSync(attachmentsDir)).toHaveLength(2);
+
+  const { id: itemId } = (await add(sys.id, { kind: "item", name: "Item" })).json().node;
+  const withImage = { type: "doc", content: [{ type: "image", attrs: { src, alt: "Diagram" } }] };
+  const save = (description: object, baseRevision: number) =>
+    post(`/api/items/${itemId}/revisions`, { baseRevision, name: "Item", description, attributes: {} }, cookie);
+  expect((await save(withImage, 1)).statusCode).toBe(201);
+  const external = { type: "doc", content: [{ type: "image", attrs: { src: "https://example.com/x.png" } }] };
+  expect((await save(external, 2)).statusCode).toBe(400);
 });
 
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.

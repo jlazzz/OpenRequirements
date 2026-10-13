@@ -15,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- Bundle A tested by the owner (2026-10-12)
 - Bundle A built: version history and compare, auto-saved drafts, rich text (ADR 0005), relationships, traceability matrix, coverage filter (2026-10-12)
 - M1 tested by the owner (2026-10-12)
 - M1 built in 5 slices: projects from a template, folders and items with UIDs, List view, Single item view with Save version, move / rename / soft-delete (2026-10-12)
@@ -25,7 +26,13 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundle A (M2 + M3): built, waiting for the owner's test at checkpoint A.** Do not start bundle B until the owner has tested and given feedback.
+**Bundle B: M4 (reading and finding) + M5 (team).** One owner test at the end.
+
+- [x] M4: Reading view; List view sort, filter, column picker, edit in place; search; tables, images, equations (2026-10-12)
+- [ ] M5: invitations by link; users page
+- [ ] M5: project members and roles (Admin, Editor, Reviewer, Viewer) enforced on every route
+- [ ] M5: comments on items with @mentions
+- [ ] M5: activity stream per project
 
 ## Next
 
@@ -42,7 +49,6 @@ Known gaps left for later milestones or owner decision:
 - Items cannot be nested under items, only under folders and sets.
 - Deleted folders, items and relationships cannot be restored from the screen yet.
 - Old versions can be viewed and compared, not restored.
-- Editing cells in place in List view moved from M2 to M4.
 - Version diffs compare wording; a formatting-only change is reported without detail.
 
 ## Open decisions

@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { and, eq, gt, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { attachmentRoutes } from "./attachments.ts";
 import type { Db } from "./db/client.ts";
 import { auditEvents, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
@@ -59,7 +60,7 @@ const credentials = {
 
 export async function buildApp(
   db: Db,
-  opts: { webRoot?: string; logger?: boolean; loginAttemptsPerMinute?: number } = {},
+  opts: { webRoot?: string; logger?: boolean; loginAttemptsPerMinute?: number; attachmentsDir?: string } = {},
 ) {
   const app = Fastify({ logger: opts.logger ?? false });
   await app.register(cookie);
@@ -193,6 +194,7 @@ export async function buildApp(
   projectRoutes(context);
   nodeRoutes(context);
   linkRoutes(context);
+  attachmentRoutes(context, opts.attachmentsDir ?? "data/attachments");
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

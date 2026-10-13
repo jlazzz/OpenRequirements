@@ -1,5 +1,5 @@
-import { docError, emptyDoc, formatUid, type RichNode } from "@app/shared";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { docError, docToText, emptyDoc, formatUid, type RichNode } from "@app/shared";
+import { and, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
@@ -48,6 +48,11 @@ function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
     .from(attributeDefinitions)
     .where(eq(attributeDefinitions.itemTypeId, itemTypeId))
     .orderBy(attributeDefinitions.position);
+}
+
+/** What search matches for an item: its UID, name, description text and field values. */
+function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
+  return [uid, name, docToText(description), ...Object.values(attributes).flat().map(String)].join("\n");
 }
 
 const nullableId = { type: ["string", "null"], format: "uuid" } as const;
@@ -130,6 +135,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
             kind: body.kind,
             name: body.kind === "folder" ? name : null,
             uid,
+            searchText: uid ? searchTextOf(uid, name, emptyDoc, {}) : "",
             position: (last?.max ?? 0) + 1,
           })
           .returning({ id: nodes.id });
@@ -144,6 +150,39 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);
+    },
+  );
+
+  // Search: ids of the project's live items containing every word of the query, in the UID, name, description or a field.
+  app.get(
+    "/api/projects/:projectId/search",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("projectId"),
+        querystring: { type: "object", required: ["q"], properties: { q: { type: "string", maxLength: 200 } } },
+      },
+    },
+    async (req) => {
+      const { projectId } = req.params as { projectId: string };
+      const words = (req.query as { q: string }).q.split(/\s+/).filter(Boolean).slice(0, 10);
+      if (words.length === 0) return { ids: [] };
+      // shortcut: substring scan with no index, add a pg_trgm GIN index on nodes.search_text when search nears the 500 ms budget
+      const rows = await db
+        .select({ id: nodes.id })
+        .from(nodes)
+        .innerJoin(sets, eq(sets.id, nodes.setId))
+        .where(
+          and(
+            eq(sets.projectId, projectId),
+            eq(nodes.kind, "item"),
+            isNull(nodes.deletedAt),
+            // % _ and \\ are LIKE wildcards, so they are escaped to be searched literally.
+            ...words.map((word) => ilike(nodes.searchText, `%${word.replace(/[\\%_]/g, "\\$&")}%`)),
+          ),
+        )
+        .limit(200);
+      return { ids: rows.map((r) => r.id) };
     },
   );
 
@@ -162,6 +201,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
           id: nodes.id,
           uid: nodes.uid,
           name: itemRevisions.name,
+          description: itemRevisions.description,
           attributes: itemRevisions.attributes,
           revision: itemRevisions.number,
         })
@@ -169,7 +209,19 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
         .innerJoin(nodes, eq(nodes.id, itemRevisions.itemId))
         .where(and(eq(nodes.setId, setId), isNull(nodes.deletedAt)))
         .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
-      return { fields, items };
+      // The signed-in user's own drafts in this set, so List view can show and continue them.
+      const drafts = await db
+        .select({
+          itemId: itemDrafts.itemId,
+          baseRevision: itemDrafts.baseRevision,
+          name: itemDrafts.name,
+          description: itemDrafts.description,
+          attributes: itemDrafts.attributes,
+        })
+        .from(itemDrafts)
+        .innerJoin(nodes, eq(nodes.id, itemDrafts.itemId))
+        .where(and(eq(nodes.setId, setId), eq(itemDrafts.authorId, req.user?.id as string)));
+      return { fields, items, drafts };
     },
   );
 
@@ -277,7 +329,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
       const result = await db.transaction(async (tx) => {
         // Locks the item, so two saves of the same item cannot both pass the baseRevision check.
         const [item] = await tx
-          .select({ itemTypeId: sets.itemTypeId })
+          .select({ itemTypeId: sets.itemTypeId, uid: nodes.uid })
           .from(nodes)
           .innerJoin(sets, eq(sets.id, nodes.setId))
           .where(and(eq(nodes.id, itemId), eq(nodes.kind, "item"), isNull(nodes.deletedAt)))
@@ -306,6 +358,8 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
           authorId: userId,
           changeReason: body.changeReason?.trim() || null,
         });
+        const searchText = searchTextOf(item.uid ?? "", body.name.trim(), body.description, checked.attributes);
+        await tx.update(nodes).set({ searchText }).where(eq(nodes.id, itemId));
         // The draft has become this revision.
         await tx.delete(itemDrafts).where(and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, userId)));
         await audit(tx, userId, "item.revise", "item", itemId);

@@ -1,25 +1,9 @@
-import {
-  ActionIcon,
-  Alert,
-  Box,
-  Button,
-  Flex,
-  Group,
-  Modal,
-  SegmentedControl,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ActionIcon, Alert, Box, Flex, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
-import { api, formatValue, type ProjectDetail, type ProjectSet, type SetItems, type TreeNode } from "./api.ts";
-import { RouterAnchor, RouterNavLink } from "./links.tsx";
-import { NodeActions } from "./NodeActions.tsx";
-import { useLinks } from "./Relationships.tsx";
+import { useState } from "react";
+import { api, type ProjectDetail, type TreeNode } from "./api.ts";
+import { RouterNavLink } from "./links.tsx";
 
 export function useProject() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -27,7 +11,7 @@ export function useProject() {
 }
 
 /** Children of a set (pass the set id) or of a folder (pass the folder's node id), in order. */
-function childrenOf(nodes: TreeNode[], containerId: string) {
+export function childrenOf(nodes: TreeNode[], containerId: string) {
   return nodes.filter((n) => (n.parentId ?? n.setId) === containerId);
 }
 
@@ -40,6 +24,7 @@ export function itemsWithin(nodes: TreeNode[], containerId: string): TreeNode[] 
 export function ProjectPage() {
   const project = useProject();
   const selected = useParams({ strict: false });
+  const navigate = useNavigate();
   // Everything starts expanded; this holds the ids the user has collapsed.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
@@ -134,6 +119,24 @@ export function ProjectPage() {
         <Text fw={700} p="sm" pb="xs">
           {info.name}
         </Text>
+        <search>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const q = String(new FormData(event.currentTarget).get("q")).trim();
+              if (q) navigate({ to: "/projects/$projectId/search", params: { projectId: info.id }, search: { q } });
+            }}
+          >
+            <TextInput
+              name="q"
+              aria-label="Search this project"
+              placeholder="Search this project"
+              size="xs"
+              mx="sm"
+              mb="xs"
+            />
+          </form>
+        </search>
         {branch(null, 0)}
         <RouterNavLink
           to="/projects/$projectId/matrix"
@@ -160,201 +163,5 @@ export function ProjectHome() {
       </Title>
       <Text c="dimmed">Choose a set in the explorer on the left.</Text>
     </Stack>
-  );
-}
-
-export function SetPage() {
-  const project = useProject();
-  const { setId } = useParams({ from: "/projects/$projectId/sets/$setId" });
-  const set = project.data?.sets.find((s) => s.id === setId);
-  if (!project.data || !set) return <Alert color="red">Set not found.</Alert>;
-  return <Container data={project.data} set={set} title={set.name} />;
-}
-
-export function FolderPage() {
-  const project = useProject();
-  const { nodeId } = useParams({ from: "/projects/$projectId/folders/$nodeId" });
-  const folder = project.data?.nodes.find((n) => n.id === nodeId && n.kind === "folder");
-  const set = project.data?.sets.find((s) => s.id === folder?.setId);
-  if (!project.data || !folder || !set) return <Alert color="red">Folder not found.</Alert>;
-  return <Container data={project.data} set={set} folder={folder} title={folder.name} />;
-}
-
-/** List view of a set or one of its folders: every item inside it, one column per field. */
-function Container({
-  data,
-  set,
-  folder,
-  title,
-}: {
-  data: ProjectDetail;
-  set: ProjectSet;
-  folder?: TreeNode;
-  title: string;
-}) {
-  const [adding, setAdding] = useState<"item" | "folder" | null>(null);
-  const projectId = data.project.id;
-  const list = useQuery({
-    queryKey: ["projects", projectId, "sets", set.id],
-    queryFn: () => api<SetItems>(`sets/${set.id}/items`),
-  });
-  const details = new Map(list.data?.items.map((item) => [item.id, item]));
-  const links = useLinks(projectId).data?.links ?? [];
-  const [coverage, setCoverage] = useState<"all" | "no-upstream" | "no-downstream">("all");
-  const count = (id: string, end: "upstreamId" | "downstreamId") => links.filter((l) => l[end] === id).length;
-  // An item's upstream relationships are the links where it is the downstream end, and the reverse.
-  const all = itemsWithin(data.nodes, folder?.id ?? set.id).map((node) => ({
-    node,
-    upstream: count(node.id, "downstreamId"),
-    downstream: count(node.id, "upstreamId"),
-  }));
-  const rows = all.filter(
-    (r) => coverage === "all" || (coverage === "no-upstream" ? r.upstream === 0 : r.downstream === 0),
-  );
-  const fields = list.data?.fields ?? [];
-
-  return (
-    <Stack gap="sm">
-      <Group justify="space-between" align="flex-start">
-        <div>
-          <Title order={1} size="h2">
-            {title}
-          </Title>
-          <Text c="dimmed" size="sm">
-            {folder ? `Folder in ${set.name}` : `Set of ${set.itemType} items`} · {all.length}{" "}
-            {all.length === 1 ? "item" : "items"}
-          </Text>
-        </div>
-        <Group gap="xs">
-          {folder && <NodeActions data={data} node={folder} />}
-          <Button variant="default" onClick={() => setAdding("folder")}>
-            Add folder
-          </Button>
-          <Button onClick={() => setAdding("item")}>Add item</Button>
-        </Group>
-      </Group>
-
-      {list.isError && (
-        <Alert color="red" role="alert">
-          {list.error.message}
-        </Alert>
-      )}
-      {all.length > 0 && (
-        <SegmentedControl
-          aria-label="Coverage filter"
-          size="xs"
-          style={{ alignSelf: "flex-start" }}
-          value={coverage}
-          onChange={(value) => setCoverage(value as typeof coverage)}
-          data={[
-            { value: "all", label: `All (${all.length})` },
-            { value: "no-upstream", label: `No upstream (${all.filter((r) => r.upstream === 0).length})` },
-            { value: "no-downstream", label: `No downstream (${all.filter((r) => r.downstream === 0).length})` },
-          ]}
-        />
-      )}
-      {rows.length === 0 ? (
-        <Text c="dimmed">{all.length === 0 ? "No items here yet." : "No items match this filter."}</Text>
-      ) : (
-        <Table.ScrollContainer minWidth={160 * (fields.length + 3)}>
-          <Table withTableBorder withColumnBorders highlightOnHover bg="white" aria-label={`Items in ${title}`}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={110}>ID</Table.Th>
-                <Table.Th>Name</Table.Th>
-                {fields.map((field) => (
-                  <Table.Th key={field.id}>{field.name}</Table.Th>
-                ))}
-                <Table.Th w={90}>Upstream</Table.Th>
-                <Table.Th w={110}>Downstream</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map(({ node, upstream, downstream }) => (
-                <Table.Tr key={node.id}>
-                  <Table.Td style={{ whiteSpace: "nowrap" }}>{node.uid}</Table.Td>
-                  <Table.Td>
-                    <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }}>
-                      {node.name}
-                    </RouterAnchor>
-                  </Table.Td>
-                  {fields.map((field) => (
-                    <Table.Td key={field.id}>{formatValue(details.get(node.id)?.attributes[field.id])}</Table.Td>
-                  ))}
-                  <Table.Td c={upstream === 0 ? "dimmed" : undefined}>{upstream}</Table.Td>
-                  <Table.Td c={downstream === 0 ? "dimmed" : undefined}>{downstream}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      )}
-
-      <Modal
-        opened={adding !== null}
-        onClose={() => setAdding(null)}
-        title={adding === "folder" ? "Add folder" : `Add ${set.itemType}`}
-      >
-        {adding && (
-          <AddNodeForm
-            kind={adding}
-            projectId={projectId}
-            setId={set.id}
-            parentId={folder?.id}
-            onDone={() => setAdding(null)}
-          />
-        )}
-      </Modal>
-    </Stack>
-  );
-}
-
-function AddNodeForm(props: {
-  kind: "item" | "folder";
-  projectId: string;
-  setId: string;
-  parentId?: string;
-  onDone: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const create = useMutation({
-    mutationFn: (name: string) =>
-      api<{ node: TreeNode }>(`sets/${props.setId}/nodes`, { kind: props.kind, name, parentId: props.parentId }),
-    onSuccess: async ({ node }) => {
-      await queryClient.invalidateQueries({ queryKey: ["projects", props.projectId] });
-      props.onDone();
-      if (node.kind === "item") {
-        await navigate({
-          to: "/projects/$projectId/items/$nodeId",
-          params: { projectId: props.projectId, nodeId: node.id },
-        });
-      }
-    },
-  });
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    create.mutate(String(new FormData(event.currentTarget).get("name")));
-  };
-
-  return (
-    <form onSubmit={onSubmit}>
-      <Stack gap="sm">
-        <TextInput name="name" label="Name" required maxLength={200} data-autofocus />
-        {create.isError && (
-          <Alert color="red" role="alert">
-            {create.error.message}
-          </Alert>
-        )}
-        <Group justify="flex-end">
-          <Button variant="default" onClick={props.onDone}>
-            Cancel
-          </Button>
-          <Button type="submit" loading={create.isPending}>
-            Add
-          </Button>
-        </Group>
-      </Stack>
-    </form>
   );
 }

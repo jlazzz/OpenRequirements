@@ -23,6 +23,8 @@ POSTGRES_PASSWORD=choose-a-password
 
 Set the password before the first start; changing it later does not change an existing database.
 
+Data lives in two Docker volumes: `db-data` (the database) and `attachments` (uploaded images). Back up both.
+
 **Plain HTTP only for now.** Passwords cross the network unencrypted. Use it on a trusted network only.
 
 ## Develop

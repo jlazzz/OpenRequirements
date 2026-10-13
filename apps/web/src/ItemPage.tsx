@@ -17,7 +17,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { type Attributes, api, type Draft, type Field, type Item } from "./api.ts";
+import { type Attributes, api, type Draft, type Field, type Item, uploadImage } from "./api.ts";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
 import { Relationships } from "./Relationships.tsx";
@@ -206,7 +206,12 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
-          <RichTextInput label="Description" initial={start.description} onChange={setDescription} />
+          <RichTextInput
+            label="Description"
+            initial={start.description}
+            onChange={setDescription}
+            uploadImage={(file) => uploadImage(projectId, file)}
+          />
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             {fields.map((field) => (
               <FieldInput
