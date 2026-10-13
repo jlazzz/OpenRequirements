@@ -1,4 +1,17 @@
-import { Alert, Button, Container, Group, Modal, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Container,
+  FileButton,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -11,6 +24,20 @@ export function ProjectsPage() {
   const isAdmin = useSession().data?.user?.isAdmin ?? false;
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => api<{ projects: Project[] }>("projects") });
   const [creating, { open, close }] = useDisclosure(false);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // A restore always makes a new project; it never changes an existing one.
+  const restore = useMutation({
+    mutationFn: async (file: File) => {
+      const backup = await file.text().then(JSON.parse, () => null);
+      if (!backup || typeof backup !== "object") throw new Error("This is not a backup file.");
+      return api<{ project: Project }>("projects/restore", backup);
+    },
+    onSuccess: async ({ project }) => {
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      await navigate({ to: "/projects/$projectId", params: { projectId: project.id } });
+    },
+  });
 
   return (
     <Container size="md" py="lg">
@@ -18,8 +45,25 @@ export function ProjectsPage() {
         <Title order={1} size="h2">
           Projects
         </Title>
-        {isAdmin && <Button onClick={open}>New project</Button>}
+        {isAdmin && (
+          <Group gap="xs">
+            <FileButton onChange={(file) => file && restore.mutate(file)} accept="application/json,.json">
+              {(props) => (
+                <Button variant="default" loading={restore.isPending} {...props}>
+                  Restore from backup
+                </Button>
+              )}
+            </FileButton>
+            <Button onClick={open}>New project</Button>
+          </Group>
+        )}
       </Group>
+
+      {restore.isError && (
+        <Alert color="red" role="alert" title="The backup was not restored" mb="sm">
+          {restore.error.message}
+        </Alert>
+      )}
 
       {projects.isError && (
         <Alert color="red" role="alert">

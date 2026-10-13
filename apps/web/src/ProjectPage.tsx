@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Box, Flex, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Alert, Box, Button, Flex, Group, Stack, Text, TextInput, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -147,6 +147,13 @@ export function ProjectPage() {
           py={4}
         />
         <RouterNavLink
+          to="/projects/$projectId/baselines"
+          params={{ projectId: info.id }}
+          label="Baselines"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
           to="/projects/$projectId/activity"
           params={{ projectId: info.id }}
           label="Activity"
@@ -176,6 +183,23 @@ export function ProjectHome() {
         {project.data?.project.name}
       </Title>
       <Text c="dimmed">Choose a set in the explorer on the left.</Text>
+      {project.data?.role === "admin" && (
+        <div>
+          <Button
+            component="a"
+            href={`/api/projects/${project.data.project.id}/backup`}
+            download
+            variant="default"
+            mt="md"
+          >
+            Download backup
+          </Button>
+          <Text c="dimmed" size="sm" mt={4} maw={560}>
+            One file with every item, version, relationship, comment, baseline and image of this project. An instance
+            administrator can restore it as a new project from the Projects page.
+          </Text>
+        </div>
+      )}
     </Stack>
   );
 }

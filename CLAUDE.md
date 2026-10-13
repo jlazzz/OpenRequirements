@@ -68,6 +68,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
 | Auth | Local accounts, scrypt hashes, session cookie; OIDC/SAML/LDAP later | in use |
+| Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
 | File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images only, type checked by content. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml` | in use |
 | End-to-end tests | Playwright | proposed |
@@ -86,18 +87,19 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts, src/members.ts, src/comments.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/backup.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
     src/domain/roles.ts      Role ranking and @mention matching
+    src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
-  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation
+  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare
   reqif/            ReqIF parser/serializer, standalone and reusable (empty)
-  importers/        CSV/Excel/Word import logic (empty)
+  importers/        CSV reading and writing, and mapping spreadsheet rows to items
 docs/
   PROJECT_OUTLINE.md
   adr/              Architecture Decision Records
@@ -110,7 +112,7 @@ e2e/                Playwright tests (empty)
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
 - Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for instance-admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
-- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId` or `commentId`: a hook uses those names to refuse non-members before the body is read.
+- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId` or `baselineId`: a hook uses those names to refuse non-members before the body is read.
 - `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
@@ -161,7 +163,8 @@ ItemType ─< AttributeDefinition    (name, type, allowed values, required?)
 Project ─< LinkType                (name; from the template; no source→target rules)
 Link                               (upstream item, downstream item, type, revisions of both ends at creation; immutable, soft-deleted)
 LinkRevision                       (Phase 2, with suspect links: re-confirmations of a link)
-Project ─< Baseline ─< BaselineEntry   (points to exact ItemRevision / LinkRevision IDs)
+Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
+Baseline ─< BaselineLink               (ids of the links that were live)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted)
 Project ─< Attachment              (uploaded images embedded in rich text)
 Item ─< ExternalReference          (later)

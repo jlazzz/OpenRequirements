@@ -171,6 +171,10 @@ const VERBS: Record<string, string> = {
   "link.delete": "removed the relationship",
   "comment.create": "commented on",
   "comment.delete": "deleted a comment on",
+  "baseline.create": "created baseline",
+  "item.import": "imported",
+  "project.restore": "restored the project from a backup",
+  "project.backup": "downloaded a backup",
   "member.set": "set the role of",
   "member.remove": "removed member",
 };

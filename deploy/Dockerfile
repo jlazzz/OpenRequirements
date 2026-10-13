@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
+COPY packages/importers/package.json packages/importers/
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev

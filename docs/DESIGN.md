@@ -111,6 +111,7 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 - Excel / CSV import with column mapping, and export of any List view.
 - JSON full-project backup and restore, including history and attachments.
 - Not in Phase 1: Word export, PDF export, ReqIF.
+- As built (ADR 0006): import adds new items to the set or folder being viewed; export is CSV; a restore always creates a new project and is for instance administrators.
 
 ## 9. Phase 1 scope change
 

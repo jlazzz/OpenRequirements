@@ -1,5 +1,8 @@
 import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 
+/** Stored instead of a hash for an account that cannot sign in yet: one created by restoring a backup. An invitation gives it a password. */
+export const NO_PASSWORD = "none";
+
 // Cost is stored in each hash, so it can be raised later without breaking old passwords.
 const COST = 2 ** 15;
 

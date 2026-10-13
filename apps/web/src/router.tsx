@@ -1,4 +1,5 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { BaselinePage, BaselinesPage } from "./BaselinePages.tsx";
 import { ItemPage } from "./ItemPage.tsx";
 import { MatrixPage } from "./MatrixPage.tsx";
 import { ProjectHome, ProjectPage } from "./ProjectPage.tsx";
@@ -30,6 +31,8 @@ const projectChildren = [
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
   createRoute({ ...inProject, path: "members", component: MembersPage }),
   createRoute({ ...inProject, path: "activity", component: ActivityPage }),
+  createRoute({ ...inProject, path: "baselines", component: BaselinesPage }),
+  createRoute({ ...inProject, path: "baselines/$baselineId", component: BaselinePage }),
   createRoute({
     ...inProject,
     path: "search",

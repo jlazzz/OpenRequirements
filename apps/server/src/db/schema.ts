@@ -243,6 +243,55 @@ export const comments = pgTable("comments", {
   deletedAt: timestamp({ withTimezone: true }),
 });
 
+/** A named, frozen snapshot of a set or a whole project. Rows here and in the two tables below are never changed. */
+export const baselines = pgTable("baselines", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  // Null means the whole project.
+  setId: uuid().references(() => sets.id),
+  name: text().notNull(),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+});
+
+/** One folder or item as it was when the baseline was made: where it sat, and for an item, which revision was current. */
+export const baselineEntries = pgTable(
+  "baseline_entries",
+  {
+    baselineId: uuid()
+      .notNull()
+      .references(() => baselines.id),
+    nodeId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    // Items only.
+    revisionId: uuid().references(() => itemRevisions.id),
+    parentId: uuid(),
+    position: integer().notNull(),
+    // Folders only: folder names are not versioned, so the name is copied.
+    name: text(),
+  },
+  (t) => [primaryKey({ columns: [t.baselineId, t.nodeId] })],
+);
+
+/** The relationships that were live when the baseline was made. Links never change, so the id is enough. */
+export const baselineLinks = pgTable(
+  "baseline_links",
+  {
+    baselineId: uuid()
+      .notNull()
+      .references(() => baselines.id),
+    linkId: uuid()
+      .notNull()
+      .references(() => links.id),
+  },
+  (t) => [primaryKey({ columns: [t.baselineId, t.linkId] })],
+);
+
 /** Append-only log of every write. Never update or delete rows. */
 export const auditEvents = pgTable("audit_events", {
   id: uuid().primaryKey().defaultRandom(),

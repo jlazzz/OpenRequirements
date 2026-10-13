@@ -21,7 +21,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -752,6 +752,7 @@ test("someone outside a project is refused on every route that names something i
     headers: { cookie: owner, "content-type": "image/png" },
   });
   const invitationId = (await post("/api/invitations", { email: "i@example.com" }, owner)).json().id;
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B" }, owner)).json().id;
   const outsider = await person("Olga Outsider");
   const ids: Record<string, string> = {
     projectId,
@@ -762,6 +763,7 @@ test("someone outside a project is refused on every route that names something i
     commentId,
     attachmentId: upload.json().id,
     invitationId,
+    baselineId,
     userId: outsider.id,
   };
 
@@ -840,6 +842,258 @@ test("comments record mentions and appear in the activity stream; drafts do not"
   expect(
     (await get(`/api/projects/${projectId}/activity?before=${encodeURIComponent(oldest.at)}`, owner)).json().events,
   ).toEqual([]);
+});
+
+test("a baseline freezes items, folders and relationships; later changes do not touch it", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const req = (await add(sys.id, { kind: "item", name: "Supply voltage", parentId: folder })).json().node.id;
+  const gone = (await add(sys.id, { kind: "item", name: "Doomed" })).json().node.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
+  const link = (await post("/api/links", { upstreamId: need, downstreamId: req, typeId }, cookie)).json().link.id;
+  const create = (body: object, as = cookie) => post(`/api/projects/${projectId}/baselines`, body, as);
+
+  const whole = await create({ name: " Design review 1.0 " });
+  expect(whole.statusCode).toBe(201);
+  const ofSet = (await create({ name: "Needs only", setId: un.id })).json().id;
+  expect((await create({ name: "  " })).statusCode).toBe(400);
+  expect((await create({ name: "X", setId: "00000000-0000-4000-8000-000000000000" })).statusCode).toBe(400);
+  expect((await create({ name: "X" }, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(403);
+
+  // Everything changes after the baseline: a new version, a rename, a deletion, a new item, a removed relationship.
+  await post(
+    `/api/items/${req}/revisions`,
+    { baseRevision: 1, name: "Supply voltage v2", description: textToDoc("5 V"), attributes: {} },
+    cookie,
+  );
+  await send("PATCH", `/api/nodes/${folder}`, cookie, { name: "Electrical" });
+  await send("DELETE", `/api/nodes/${gone}`, cookie);
+  await add(sys.id, { kind: "item", name: "Later" });
+  await send("DELETE", `/api/links/${link}`, cookie);
+
+  const frozen = (await get(`/api/baselines/${whole.json().id}`, cookie)).json();
+  expect(frozen.baseline).toMatchObject({ name: "Design review 1.0", setId: null, author: "Admin" });
+  const byName = Object.fromEntries(frozen.entries.map((e: { name: string }) => [e.name, e]));
+  expect(Object.keys(byName).sort()).toEqual(["Doomed", "Need", "Power", "Supply voltage"]);
+  expect(byName["Supply voltage"]).toMatchObject({
+    id: req,
+    uid: "SYS-001",
+    kind: "item",
+    parentId: folder,
+    revision: 1,
+    description: textToDoc(""),
+  });
+  expect(byName.Power).toMatchObject({ kind: "folder", revision: null });
+  expect(frozen.links).toEqual([{ id: link, typeId, upstreamId: need, downstreamId: req }]);
+
+  // A set baseline holds that set's nodes, and the relationships that touch it.
+  const part = (await get(`/api/baselines/${ofSet}`, cookie)).json();
+  expect(part.entries.map((e: { name: string }) => e.name)).toEqual(["Need"]);
+  expect(part.links).toHaveLength(1);
+
+  const list = (await get(`/api/projects/${projectId}/baselines`, cookie)).json().baselines;
+  expect(list.map((b: { name: string }) => b.name).sort()).toEqual(["Design review 1.0", "Needs only"]);
+  expect(await auditActions()).toContain("baseline.create");
+});
+
+test("a spreadsheet import creates all its items with UIDs, field values and one audit event, or nothing", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  await add(sys.id, { kind: "item", name: "Existing" });
+  const folder = (await add(sys.id, { kind: "folder", name: "Imported" })).json().node.id;
+  const { fields } = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
+  const status = fields.find((f: { name: string }) => f.name === "Status").id;
+  const bring = (body: object, as = cookie) => post(`/api/sets/${sys.id}/import`, body, as);
+
+  const bad = await bring({ items: [{ name: "Fine" }, { name: "Broken", attributes: { [status]: "Bogus" } }] });
+  expect(bad.statusCode).toBe(400);
+  expect(bad.json().error).toContain("Item 2 (Broken)");
+  expect((await bring({ items: [] })).statusCode).toBe(400);
+  expect((await bring({ items: [{ name: "A" }], parentId: sys.id })).statusCode).toBe(400);
+  expect((await bring({ items: [{ name: "A" }] }, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(
+    403,
+  );
+
+  const done = await bring({
+    parentId: folder,
+    items: [
+      { name: " Supply voltage ", description: "5 V DC\nfrom USB", attributes: { [status]: "Approved" } },
+      { name: "Max current" },
+    ],
+  });
+  expect(done.statusCode).toBe(201);
+  // The failed import used up no UIDs.
+  expect(done.json()).toEqual({ created: 2, firstUid: "SYS-002", lastUid: "SYS-003" });
+
+  const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json().items;
+  expect(list.find((i: { uid: string }) => i.uid === "SYS-002")).toMatchObject({
+    name: "Supply voltage",
+    description: textToDoc("5 V DC\nfrom USB"),
+    attributes: { [status]: "Approved" },
+    revision: 1,
+  });
+  expect((await add(sys.id, { kind: "item", name: "Next" })).json().node.uid).toBe("SYS-004");
+  expect((await auditActions()).filter((a) => a === "item.import")).toHaveLength(1);
+});
+
+test("a backup restores as a new project with history, relationships, comments, baselines and images", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const reviewer = await person("Rob Reviewer", "reviewer");
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("pixels")]);
+  const { src } = (
+    await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/attachments`,
+      payload: png,
+      headers: { cookie, "content-type": "image/png" },
+    })
+  ).json();
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const req = (await add(sys.id, { kind: "item", name: "Supply", parentId: folder })).json().node.id;
+  const doomed = (await add(sys.id, { kind: "item", name: "Doomed" })).json().node.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const status = (await get(`/api/items/${req}`, cookie)).json().fields[0].id;
+  const withImage = { type: "doc", content: [{ type: "image", attrs: { src, alt: "Diagram" } }] };
+  await post(
+    `/api/items/${req}/revisions`,
+    { baseRevision: 1, name: "Supply voltage", description: withImage, attributes: { [status]: "Approved" } },
+    cookie,
+  );
+  await send("DELETE", `/api/nodes/${doomed}`, cookie);
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
+  await post("/api/links", { upstreamId: need, downstreamId: req, typeId }, cookie);
+  await post(`/api/items/${req}/comments`, { body: "@Rob Reviewer check" }, cookie);
+  await post(`/api/projects/${projectId}/baselines`, { name: "v1" }, cookie);
+
+  expect((await get(`/api/projects/${projectId}/backup`, reviewer.cookie)).statusCode).toBe(403);
+  const file = await get(`/api/projects/${projectId}/backup`, cookie);
+  expect(file.statusCode).toBe(200);
+  expect(file.headers["content-disposition"]).toContain("attachment");
+  const backup = file.json();
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 1, project: { name: "P" } });
+  // Password hashes never leave the server.
+  expect(file.body).not.toContain("scrypt");
+
+  // The reviewer has no account where this is restored: the email differs, as it would on another server.
+  backup.users.find((u: { name: string }) => u.name === "Rob Reviewer").email = "rob@elsewhere.example";
+  expect((await post("/api/projects/restore", backup, reviewer.cookie)).statusCode).toBe(403);
+  const restored = await post("/api/projects/restore", backup, cookie);
+  expect(restored.statusCode).toBe(201);
+  const copy = restored.json().project;
+  expect(copy).toMatchObject({ name: "P (restored)" });
+  expect(copy.id).not.toBe(projectId);
+
+  const tree = (await get(`/api/projects/${copy.id}`, cookie)).json();
+  expect(tree.sets.map((s: { uidPrefix: string }) => s.uidPrefix)).toEqual(["UN", "SYS", "VER"]);
+  const names = tree.nodes.map((n: { name: string }) => n.name).sort();
+  expect(names).toEqual(["Need", "Power", "Supply voltage"]);
+  const newReq = tree.nodes.find((n: { uid: string }) => n.uid === "SYS-001");
+  expect(newReq.id).not.toBe(req);
+  expect(tree.nodes.find((n: { name: string }) => n.name === "Power").id).toBe(newReq.parentId);
+
+  // Field values are keyed by the new project's own field ids, and the image points at the copied file.
+  const item = (await get(`/api/items/${newReq.id}`, cookie)).json();
+  const newStatus = item.fields[0].id;
+  expect(newStatus).not.toBe(status);
+  expect(item.item).toMatchObject({ revision: 2, attributes: { [newStatus]: "Approved" } });
+  const newSrc = item.item.description.content[0].attrs.src;
+  expect(newSrc).not.toBe(src);
+  expect((await get(newSrc, cookie)).rawPayload.equals(png)).toBe(true);
+
+  const history = (await get(`/api/items/${newReq.id}/revisions`, cookie)).json().revisions;
+  expect(history.map((r: { number: number; name: string; author: string }) => [r.number, r.name, r.author])).toEqual([
+    [2, "Supply voltage", "Admin"],
+    [1, "Supply", "Admin"],
+  ]);
+  expect((await get(`/api/projects/${copy.id}/links`, cookie)).json().links).toHaveLength(1);
+  const [comment] = (await get(`/api/items/${newReq.id}/comments`, cookie)).json().comments;
+  expect(comment).toMatchObject({ body: "@Rob Reviewer check", author: "Admin" });
+  const [baseline] = (await get(`/api/projects/${copy.id}/baselines`, cookie)).json().baselines;
+  expect((await get(`/api/baselines/${baseline.id}`, cookie)).json().entries).toHaveLength(3);
+  expect((await get(`/api/projects/${copy.id}/search?q=voltage`, cookie)).json().ids).toEqual([newReq.id]);
+  const actions = (await get(`/api/projects/${copy.id}/activity`, cookie))
+    .json()
+    .events.map((e: { action: string }) => e.action);
+  expect(actions).toEqual(expect.arrayContaining(["project.restore", "item.revise", "baseline.create"]));
+
+  // UIDs of deleted items stay used in the copy, and the original project is untouched.
+  const newSys = tree.sets[1].id;
+  expect((await post(`/api/sets/${newSys}/nodes`, { kind: "item", name: "Next" }, cookie)).json().node.uid).toBe(
+    "SYS-003",
+  );
+  expect((await detail()).nodes).toHaveLength(3);
+
+  // The unknown person got an account that cannot sign in, is mentioned in the copy, and can take it over by invitation.
+  const members = (await get(`/api/projects/${copy.id}/members`, cookie)).json().members;
+  const rob = members.find((m: { email: string }) => m.email === "rob@elsewhere.example");
+  expect(rob).toMatchObject({ name: "Rob Reviewer", role: "reviewer" });
+  expect(comment.mentions).toEqual([rob.userId]);
+  expect((await post("/api/login", { email: "rob@elsewhere.example", password: "none" })).statusCode).toBe(401);
+  const invited = await post("/api/invitations", { email: "rob@elsewhere.example" }, cookie);
+  expect(invited.statusCode).toBe(201);
+  const accepted = await post("/api/invitations/accept", {
+    token: invited.json().token,
+    name: "Rob",
+    password: "a long password",
+  });
+  expect(accepted.json().user).toMatchObject({ id: rob.userId, isAdmin: false });
+  // An account with a password cannot be taken over this way.
+  expect((await post("/api/invitations", { email: "rob@elsewhere.example" }, cookie)).statusCode).toBe(409);
+});
+
+test("a backup that is malformed or points outside itself is refused, and leaves nothing behind", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const item = (await add(sys.id, { kind: "item", name: "A" })).json().node.id;
+  const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project;
+  const otherSet = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0].id;
+  const good = (await get(`/api/projects/${projectId}/backup`, cookie)).body;
+  type Rows = Record<string, unknown>[];
+  const restore = (change: (backup: Record<"nodes" | "itemRevisions" | "attachments" | "users", Rows>) => void) => {
+    const backup = JSON.parse(good);
+    change(backup);
+    return post("/api/projects/restore", backup, cookie);
+  };
+
+  expect((await restore((b) => Object.assign(b, { version: 2 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
+  // A node placed in another project's set.
+  const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
+  expect(foreign.statusCode).toBe(400);
+  expect(foreign.json().error).toContain("not in sets");
+  const script = { type: "doc", content: [{ type: "script" }] };
+  expect((await restore((b) => Object.assign(b.itemRevisions[0] as object, { description: script }))).statusCode).toBe(
+    400,
+  );
+  expect(
+    (await restore((b) => Object.assign(b.itemRevisions[0] as object, { attributes: { nope: 1 } }))).statusCode,
+  ).toBe(400);
+  // Two versions of one item with the same number: caught by the database.
+  const twice = await restore((b) =>
+    b.itemRevisions.push({
+      ...b.itemRevisions[0],
+      id: "00000000-0000-4000-8000-000000000001",
+    }),
+  );
+  expect(twice.statusCode).toBe(400);
+  expect(
+    (
+      await restore((b) =>
+        b.attachments.push({
+          id: "00000000-0000-4000-8000-000000000002",
+          createdBy: b.users[0]?.id,
+          createdAt: new Date().toISOString(),
+          data: Buffer.from("<script>").toString("base64"),
+        }),
+      )
+    ).statusCode,
+  ).toBe(400);
+
+  expect((await get("/api/projects", cookie)).json().projects).toHaveLength(2);
+  expect((await get(`/api/items/${item}`, cookie)).statusCode).toBe(200);
+  expect((await restore(() => {})).statusCode).toBe(201);
 });
 
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.

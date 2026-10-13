@@ -1,4 +1,5 @@
-import { docError, docToText, emptyDoc, formatUid, type RichNode } from "@app/shared";
+import { randomUUID } from "node:crypto";
+import { docError, docToText, emptyDoc, formatUid, type RichNode, textToDoc } from "@app/shared";
 import { and, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
@@ -51,7 +52,7 @@ function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
 }
 
 /** What search matches for an item: its UID, name, description text and field values. */
-function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
+export function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
   return [uid, name, docToText(description), ...Object.values(attributes).flat().map(String)].join("\n");
 }
 
@@ -147,6 +148,122 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
             .values({ itemId: node.id, number: 1, name, description: emptyDoc, authorId: userId });
         await audit(tx, userId, `${body.kind}.create`, body.kind, node.id);
         return { node: { id: node.id, setId, parentId: body.parentId ?? null, kind: body.kind, name, uid } };
+      });
+
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return reply.code(201).send(result);
+    },
+  );
+
+  // Spreadsheet import: creates many items at once, all or none. The web app maps columns to fields before calling this.
+  app.post(
+    "/api/sets/:setId/import",
+    {
+      onRequest: requireUser,
+      // Room for 2,000 items with long descriptions.
+      bodyLimit: 20 * 1024 * 1024,
+      schema: {
+        params: idParam("setId"),
+        body: {
+          type: "object",
+          required: ["items"],
+          additionalProperties: false,
+          properties: {
+            parentId: { type: "string", format: "uuid" },
+            items: {
+              type: "array",
+              minItems: 1,
+              maxItems: 2000,
+              items: {
+                type: "object",
+                required: ["name"],
+                additionalProperties: false,
+                properties: {
+                  name: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" },
+                  description: { type: "string", maxLength: 100_000 },
+                  attributes: { type: "object" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { setId } = req.params as { setId: string };
+      if (!(await access(req, reply, { setId }, "editor"))) return reply;
+      const body = req.body as {
+        parentId?: string;
+        items: { name: string; description?: string; attributes?: Record<string, unknown> }[];
+      };
+      const userId = req.user?.id as string;
+      const parentId = body.parentId ?? null;
+
+      const result = await db.transaction(async (tx) => {
+        const [set] = await tx.select().from(sets).where(eq(sets.id, setId)).for("update");
+        if (!set) return { error: [404, "Set not found"] } as const;
+        if (parentId) {
+          const [parent] = await tx
+            .select({ kind: nodes.kind })
+            .from(nodes)
+            .where(and(eq(nodes.id, parentId), eq(nodes.setId, setId), isNull(nodes.deletedAt)));
+          if (parent?.kind !== "folder") return { error: [400, "Parent must be a folder in the same set"] } as const;
+        }
+        const fields = await fieldsOf(tx, set.itemTypeId);
+        const [last] = await tx
+          .select({ max: sql<number>`coalesce(max(${nodes.position}), 0)` })
+          .from(nodes)
+          .where(and(eq(nodes.setId, setId), parentId ? eq(nodes.parentId, parentId) : isNull(nodes.parentId)));
+
+        const rows = [];
+        for (const [index, item] of body.items.entries()) {
+          const checked = checkAttributes(fields, item.attributes ?? {});
+          if ("error" in checked)
+            return { error: [400, `Item ${index + 1} (${item.name}): ${checked.error}`] } as const;
+          const name = item.name.trim();
+          const description = textToDoc(item.description ?? "");
+          const uid = formatUid(set.uidPrefix, set.uidCounter + index + 1);
+          rows.push({
+            node: {
+              id: randomUUID(),
+              setId,
+              parentId,
+              kind: "item" as const,
+              uid,
+              searchText: searchTextOf(uid, name, description, checked.attributes),
+              position: (last?.max ?? 0) + index + 1,
+            },
+            name,
+            description,
+            attributes: checked.attributes,
+          });
+        }
+        await tx
+          .update(sets)
+          .set({ uidCounter: set.uidCounter + rows.length })
+          .where(eq(sets.id, setId));
+        // Inserted in chunks: Postgres allows 65,535 values per statement.
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+          await tx.insert(nodes).values(chunk.map((r) => r.node));
+          await tx.insert(itemRevisions).values(
+            chunk.map((r) => ({
+              itemId: r.node.id,
+              number: 1,
+              name: r.name,
+              description: r.description,
+              attributes: r.attributes,
+              authorId: userId,
+              changeReason: "Imported",
+            })),
+          );
+        }
+        // One audit event for the whole import, so the activity stream is not flooded with a line per item.
+        await audit(tx, userId, "item.import", "set", setId, {
+          projectId: set.projectId,
+          label: `${rows.length} ${rows.length === 1 ? "item" : "items"} into ${set.name}`,
+        });
+        return { created: rows.length, firstUid: rows[0]?.node.uid, lastUid: rows.at(-1)?.node.uid };
       });
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });

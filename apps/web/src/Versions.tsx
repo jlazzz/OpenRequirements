@@ -14,6 +14,8 @@ type Revision = {
   author: string;
 };
 
+type Content = Pick<Revision, "number" | "name" | "description" | "attributes">;
+
 /** Side panel listing an item's versions. Choosing one shows what changed in it. */
 export function Versions({ itemId, fields }: { itemId: string; fields: Field[] }) {
   const history = useQuery({
@@ -94,7 +96,7 @@ const marks = {
 } as const;
 
 /** What differs between two versions, field by field. Without `before`, everything in `after` counts as new. */
-function RevisionDiff({ fields, before, after }: { fields: Field[]; before?: Revision; after: Revision }) {
+export function RevisionDiff({ fields, before, after }: { fields: Field[]; before?: Content; after: Content }) {
   const rows = [
     { label: "Name", from: before?.name ?? "", to: after.name },
     { label: "Description", from: before ? docToText(before.description) : "", to: docToText(after.description) },

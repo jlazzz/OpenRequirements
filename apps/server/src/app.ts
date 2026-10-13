@@ -7,6 +7,8 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
+import { backupRoutes } from "./backup.ts";
+import { baselineRoutes } from "./baselines.ts";
 import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
 import { sessions, users } from "./db/schema.ts";
@@ -212,7 +214,10 @@ export async function buildApp(
   linkRoutes(context);
   memberRoutes(context);
   commentRoutes(context);
-  attachmentRoutes(context, opts.attachmentsDir ?? "data/attachments");
+  baselineRoutes(context);
+  const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
+  attachmentRoutes(context, attachmentsDir);
+  backupRoutes(context, attachmentsDir);
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

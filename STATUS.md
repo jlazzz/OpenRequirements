@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-12
+Last updated: 2026-10-13
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Bundle C built: baselines with compare against current, spreadsheet import with column mapping, CSV export of List view, JSON backup and restore, [ADR 0006](docs/adr/0006-import-backup-and-baselines.md) (2026-10-13)
 - Repo skeleton: npm workspaces, TypeScript, Vitest (2026-10-12)
 - `CLAUDE.md` (2026-10-12)
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
@@ -27,15 +28,16 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundle B (M4 + M5): built, waiting for the owner's test at checkpoint B.** Do not start bundle C until the owner has tested and given feedback.
+- **Bundles B and C: built, waiting for the owner's test at checkpoints B and C.** Bundle C was started at the owner's request before the test of B. Phase 1 is feature-complete once both are tested.
 
 ## Next
 
 Phase 1 milestones and review checkpoints are in [docs/DESIGN.md](docs/DESIGN.md) section 10.
 
 1. Owner test of bundle B: Reading view; list sort, filter, columns, edit in place; search; table, image and equation in a description; invite a second user; roles; comments and mentions; activity
-2. Fold feedback into `docs/DESIGN.md`
-3. Bundle C: M6 (baselines) + M7 (data in and out)
+2. Owner test of bundle C: create a baseline, change things, compare; import a .csv and an .xlsx; Export CSV; download a backup and restore it
+3. Fold feedback into `docs/DESIGN.md`
+4. Dogfood: import this project's own requirements spec (it is not written yet)
 
 Known gaps left for later milestones or owner decision:
 
@@ -47,6 +49,10 @@ Known gaps left for later milestones or owner decision:
 - Accounts cannot be deactivated, and a user cannot change their own password yet.
 - Mentions do not notify anyone; they only show in the activity stream.
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
+- Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
+- Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
+- Export is CSV only (Excel opens it). No .xlsx export.
+- Backup and restore hold the whole project in memory: fine for text, slow for hundreds of megabytes of images.
 - Not checked in a browser: image upload through the editor, and inserting an equation. Both are covered by server tests only.
 
 ## Open decisions

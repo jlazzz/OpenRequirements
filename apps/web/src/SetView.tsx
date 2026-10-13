@@ -1,3 +1,5 @@
+import { toCsv } from "@app/importers";
+import { docToText } from "@app/shared";
 import {
   Alert,
   Badge,
@@ -25,6 +27,7 @@ import {
   type Attributes,
   api,
   canEdit,
+  download,
   type Field,
   formatValue,
   type ProjectDetail,
@@ -32,6 +35,7 @@ import {
   type SetItems,
   type TreeNode,
 } from "./api.ts";
+import { ImportForm } from "./ImportForm.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
@@ -60,6 +64,7 @@ type ContainerProps = { data: ProjectDetail; set: ProjectSet; folder?: TreeNode;
 /** A set or one of its folders, shown as a List view or a Reading view. */
 function Container({ data, set, folder, title }: ContainerProps) {
   const [adding, setAdding] = useState<"item" | "folder" | null>(null);
+  const [importing, setImporting] = useState(false);
   const { view } = useSearch({ strict: false });
   const navigate = useNavigate();
   const projectId = data.project.id;
@@ -98,6 +103,11 @@ function Container({ data, set, folder, title }: ContainerProps) {
               Add folder
             </Button>
           )}
+          {editor && (
+            <Button variant="default" onClick={() => setImporting(true)} disabled={!list.data}>
+              Import
+            </Button>
+          )}
           {editor && <Button onClick={() => setAdding("item")}>Add item</Button>}
         </Group>
       </Group>
@@ -127,6 +137,17 @@ function Container({ data, set, folder, title }: ContainerProps) {
             setId={set.id}
             parentId={folder?.id}
             onDone={() => setAdding(null)}
+          />
+        )}
+      </Modal>
+      <Modal opened={importing} onClose={() => setImporting(false)} size="xl" title={`Import into ${title}`}>
+        {importing && list.data && (
+          <ImportForm
+            projectId={projectId}
+            setId={set.id}
+            parentId={folder?.id}
+            fields={list.data.fields}
+            onDone={() => setImporting(false)}
           />
         )}
       </Modal>
@@ -301,6 +322,23 @@ function ListTable({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
   });
 
+  // Exports what the table shows now: the filtered, sorted rows and the chosen columns, plus each description as text.
+  const exportCsv = () => {
+    const csv = toCsv([
+      ["ID", "Name", "Description", ...shown.map((c) => c.label)],
+      ...rows.map((r) => [
+        r.item.uid,
+        r.name,
+        docToText(r.item.description),
+        ...shown.map((c) => {
+          const value = r.attributes[c.id];
+          return c.field && typeof value === "number" ? value : cell(r, c.id);
+        }),
+      ]),
+    ]);
+    download(`${title}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  };
+
   const header = (id: string, label: string, width?: number) => {
     const active = sort?.column === id;
     return (
@@ -364,6 +402,9 @@ function ListTable({
             ))}
           </Menu.Dropdown>
         </Menu>
+        <Button size="compact-sm" variant="default" onClick={exportCsv} disabled={rows.length === 0}>
+          Export CSV
+        </Button>
         {canEdit(data.role) && (
           <Switch label="Edit in place" checked={editing} onChange={(e) => setEditing(e.currentTarget.checked)} />
         )}

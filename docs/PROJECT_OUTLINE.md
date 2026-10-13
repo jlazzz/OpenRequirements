@@ -175,8 +175,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Views: document view (reads like a spec), table/grid view with filters, item detail
 - [ ] Traceability matrix (document A × document B)
 - [ ] Basic full-text search
-- [ ] CSV/Excel import (with column mapping) and export
-- [ ] JSON full-project export/import (backup and portability)
+- [x] CSV/Excel import (with column mapping) and export
+- [x] JSON full-project export/import (backup and portability)
 - [ ] Docker Compose install with docs
 - [ ] **Dogfood:** import this project's own requirements spec
 

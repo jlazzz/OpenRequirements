@@ -108,3 +108,12 @@ export type ActivityEvent = {
   entityId: string;
   data: { label?: string; mentions?: string[] } | null;
 };
+
+/** Hands the browser a file to save. */
+export function download(filename: string, content: Blob) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(content);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}

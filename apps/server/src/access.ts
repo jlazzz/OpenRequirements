@@ -5,6 +5,7 @@ import type { Db } from "./db/client.ts";
 import {
   attachments,
   auditEvents,
+  baselines,
   comments,
   itemRevisions,
   links,
@@ -26,6 +27,7 @@ export type Where = {
   linkId?: string;
   attachmentId?: string;
   commentId?: string;
+  baselineId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
@@ -54,6 +56,10 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
       .where(eq(comments.id, where.commentId));
     return rows[0]?.id;
   }
+  if (where.baselineId) {
+    return (await db.select({ id: baselines.projectId }).from(baselines).where(eq(baselines.id, where.baselineId)))[0]
+      ?.id;
+  }
   return where.projectId;
 }
 
@@ -73,9 +79,11 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
             ? { attachmentId: params.attachmentId }
             : params.commentId
               ? { commentId: params.commentId }
-              : params.projectId
-                ? { projectId: params.projectId }
-                : null;
+              : params.baselineId
+                ? { baselineId: params.baselineId }
+                : params.projectId
+                  ? { projectId: params.projectId }
+                  : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 

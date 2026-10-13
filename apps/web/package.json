@@ -14,6 +14,7 @@
     "vite": "^8.3.4"
   },
   "dependencies": {
+    "@app/importers": "*",
     "@app/shared": "*",
     "@mantine/core": "^9.7.2",
     "@mantine/hooks": "^9.7.2",
@@ -29,6 +30,7 @@
     "@tiptap/starter-kit": "^3.31.4",
     "katex": "^0.18.10",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "read-excel-file": "^9.3.12"
   }
 }

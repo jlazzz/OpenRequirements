@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, notInArray, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import { invitations, projectMembers, users } from "./db/schema.ts";
-import { hashPassword } from "./domain/password.ts";
+import { hashPassword, NO_PASSWORD } from "./domain/password.ts";
 import { ROLES, type Role } from "./domain/roles.ts";
 
 const INVITE_DAYS = 7;
@@ -62,8 +62,10 @@ export function memberRoutes({
     },
     async (req, reply) => {
       const email = (req.body as { email: string }).email.toLowerCase();
-      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-      if (existing) return reply.code(409).send({ error: "Someone with this email already has an account" });
+      const [existing] = await db.select({ hash: users.passwordHash }).from(users).where(eq(users.email, email));
+      // An account that came from a restored backup has no password yet, so it can still be invited.
+      if (existing && existing.hash !== NO_PASSWORD)
+        return reply.code(409).send({ error: "Someone with this email already has an account" });
 
       const token = randomBytes(32).toString("base64url");
       const id = await db.transaction(async (tx) => {
@@ -167,7 +169,12 @@ export function memberRoutes({
         const [created] = await tx
           .insert(users)
           .values({ email: invite.email, name: body.name.trim(), passwordHash })
-          .onConflictDoNothing()
+          // Takes over an account that a restored backup created; any other existing account stays untouched.
+          .onConflictDoUpdate({
+            target: users.email,
+            set: { name: body.name.trim(), passwordHash },
+            setWhere: eq(users.passwordHash, NO_PASSWORD),
+          })
           .returning({ id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin });
         if (!created) return null;
         await audit(tx, created.id, "user.create", "user", created.id, { label: created.email });
