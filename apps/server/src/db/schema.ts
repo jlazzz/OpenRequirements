@@ -198,13 +198,61 @@ export const attachments = pgTable("attachments", {
   createdAt: createdAt(),
 });
 
+/** Who may open a project, and with which role. Instance administrators have access to every project without a row here. */
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    // One of Role in domain/roles.ts.
+    role: text().$type<"viewer" | "reviewer" | "editor" | "admin">().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userId] })],
+);
+
+/** An invitation to create an account. The link carries a token; only its hash is stored. */
+export const invitations = pgTable("invitations", {
+  id: uuid().primaryKey().defaultRandom(),
+  email: text().notNull(),
+  tokenHash: text().notNull().unique(),
+  invitedBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
+  acceptedAt: timestamp({ withTimezone: true }),
+  revokedAt: timestamp({ withTimezone: true }),
+});
+
+export const comments = pgTable("comments", {
+  id: uuid().primaryKey().defaultRandom(),
+  itemId: uuid()
+    .notNull()
+    .references(() => nodes.id),
+  authorId: uuid()
+    .notNull()
+    .references(() => users.id),
+  body: text().notNull(),
+  // Ids of the users mentioned with @Name, resolved when the comment was posted.
+  mentions: jsonb().$type<string[]>().notNull().default([]),
+  createdAt: createdAt(),
+  deletedAt: timestamp({ withTimezone: true }),
+});
+
 /** Append-only log of every write. Never update or delete rows. */
 export const auditEvents = pgTable("audit_events", {
   id: uuid().primaryKey().defaultRandom(),
   at: createdAt(),
   actorUserId: uuid().references(() => users.id),
+  // Set when the event belongs to a project, so the project's activity stream can find it.
+  projectId: uuid().references(() => projects.id),
   action: text().notNull(),
   entityType: text().notNull(),
   entityId: text().notNull(),
-  data: jsonb(),
+  // { label }: what the entity was called at the time, e.g. "SYS-001 Supply voltage". { mentions }: user ids, on comments.
+  data: jsonb().$type<{ label?: string; mentions?: string[] }>(),
 });

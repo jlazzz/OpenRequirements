@@ -5,7 +5,7 @@ import { itemRevisions, links, linkTypes, nodes, sets } from "./db/schema.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 
-export function linkRoutes({ app, db, requireUser, audit }: AppContext) {
+export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) {
   // Every live relationship of a project. The item side panel, the matrix and the coverage filter all read this.
   app.get(
     "/api/projects/:projectId/links",
@@ -13,8 +13,9 @@ export function linkRoutes({ app, db, requireUser, audit }: AppContext) {
       onRequest: requireUser,
       schema: { params: { type: "object", required: ["projectId"], properties: { projectId: uuid } } },
     },
-    async (req) => {
+    async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
       const types = await db
         .select({ id: linkTypes.id, name: linkTypes.name })
         .from(linkTypes)
@@ -62,6 +63,7 @@ export function linkRoutes({ app, db, requireUser, audit }: AppContext) {
         typeId: string;
       };
       const userId = req.user?.id as string;
+      if (!(await access(req, reply, { nodeId: upstreamId }, "editor"))) return reply;
       if (upstreamId === downstreamId) return reply.code(400).send({ error: "An item cannot be linked to itself" });
 
       const result = await db.transaction(async (tx) => {
@@ -138,6 +140,7 @@ export function linkRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { linkId } = req.params as { linkId: string };
+      if (!(await access(req, reply, { linkId }, "editor"))) return reply;
       const removed = await db.transaction(async (tx) => {
         const rows = await tx
           .update(links)

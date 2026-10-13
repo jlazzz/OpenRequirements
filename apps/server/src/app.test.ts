@@ -21,7 +21,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, audit_events cascade`,
+    sql`truncate users, sessions, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -274,6 +274,9 @@ test("a draft is auto-saved, private to its author, and consumed by Save version
   await db.execute(
     sql`insert into users (email, name, password_hash) select 'b@example.com', 'B', password_hash from users`,
   );
+  await db.execute(
+    sql`insert into project_members (project_id, user_id, role) select p.id, u.id, 'editor' from projects p, users u where u.email = 'b@example.com'`,
+  );
   const other = cookieOf(await post("/api/login", { email: "b@example.com", password: admin.password }));
   expect((await get(`/api/items/${id}`, other)).json().draft).toBeNull();
 
@@ -375,6 +378,9 @@ test("the list of a set includes descriptions and only the signed-in user's draf
 
   await db.execute(
     sql`insert into users (email, name, password_hash) select 'b@example.com', 'B', password_hash from users`,
+  );
+  await db.execute(
+    sql`insert into project_members (project_id, user_id, role) select p.id, u.id, 'editor' from projects p, users u where u.email = 'b@example.com'`,
   );
   const other = cookieOf(await post("/api/login", { email: "b@example.com", password: admin.password }));
   expect((await get(`/api/sets/${sys.id}/items`, other)).json().drafts).toEqual([]);
@@ -613,6 +619,227 @@ test("an image can be uploaded, embedded in a description and read back; other f
   expect((await save(withImage, 1)).statusCode).toBe(201);
   const external = { type: "doc", content: [{ type: "image", attrs: { src: "https://example.com/x.png" } }] };
   expect((await save(external, 2)).statusCode).toBe(400);
+});
+
+/** Creates an account with the admin's password, optionally adds it to every project with a role, and signs it in. */
+async function person(name: string, role?: "viewer" | "reviewer" | "editor" | "admin") {
+  const email = `${name.toLowerCase().replaceAll(" ", ".")}@example.com`;
+  await db.execute(
+    sql`insert into users (email, name, password_hash) select ${email}, ${name}, password_hash from users where is_admin limit 1`,
+  );
+  if (role) {
+    await db.execute(
+      sql`insert into project_members (project_id, user_id, role) select p.id, u.id, ${role} from projects p, users u where u.email = ${email}`,
+    );
+  }
+  const res = await post("/api/login", { email, password: admin.password });
+  return { cookie: cookieOf(res), id: res.json().user.id as string };
+}
+
+test("an invitation link creates one account, once", async () => {
+  const cookie = cookieOf(await post("/api/setup", admin));
+  const invited = await post("/api/invitations", { email: "New@Example.com" }, cookie);
+  expect(invited.statusCode).toBe(201);
+  const { token, id } = invited.json();
+  expect((await get("/api/users", cookie)).json().invitations).toEqual([
+    expect.objectContaining({ id, email: "new@example.com" }),
+  ]);
+  // Only a hash of the token is stored.
+  expect(
+    (await db.execute(sql`select count(*)::int as n from invitations where token_hash = ${token}`)).rows[0],
+  ).toEqual({ n: 0 });
+
+  expect((await get(`/api/invitations/accept/${token}`)).json()).toEqual({ email: "new@example.com" });
+  expect((await get(`/api/invitations/accept/${"x".repeat(43)}`)).statusCode).toBe(404);
+  expect((await post("/api/invitations/accept", { token, name: "New", password: "short" })).statusCode).toBe(400);
+
+  const accepted = await post("/api/invitations/accept", { token, name: " New Person ", password: "a long password" });
+  expect(accepted.statusCode).toBe(200);
+  expect(accepted.json().user).toMatchObject({ email: "new@example.com", name: "New Person", isAdmin: false });
+  const theirs = cookieOf(accepted);
+  expect((await get("/api/session", theirs)).json().user.name).toBe("New Person");
+
+  // Used links, revoked links and existing accounts are all refused.
+  expect(
+    (await post("/api/invitations/accept", { token, name: "Again", password: "a long password" })).statusCode,
+  ).toBe(404);
+  expect((await post("/api/invitations", { email: "new@example.com" }, cookie)).statusCode).toBe(409);
+  const second = (await post("/api/invitations", { email: "other@example.com" }, cookie)).json();
+  expect((await send("DELETE", `/api/invitations/${second.id}`, cookie)).statusCode).toBe(200);
+  expect((await get(`/api/invitations/accept/${second.token}`)).statusCode).toBe(404);
+
+  // A new account is not an administrator and sees no projects until added to one.
+  expect((await post("/api/invitations", { email: "x@example.com" }, theirs)).statusCode).toBe(403);
+  expect((await get("/api/users", theirs)).statusCode).toBe(403);
+  expect((await get("/api/projects", theirs)).json().projects).toEqual([]);
+});
+
+test("an expired invitation is refused", async () => {
+  const cookie = cookieOf(await post("/api/setup", admin));
+  const { token } = (await post("/api/invitations", { email: "late@example.com" }, cookie)).json();
+  await db.execute(sql`update invitations set expires_at = now() - interval '1 minute'`);
+  expect((await post("/api/invitations/accept", { token, name: "Late", password: "a long password" })).statusCode).toBe(
+    404,
+  );
+});
+
+test("each project role can do exactly what it should", async () => {
+  const { cookie: owner, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const item = (await add(sys.id, { kind: "item", name: "Item" })).json().node.id;
+  const viewer = await person("Vera Viewer", "viewer");
+  const reviewer = await person("Rob Reviewer", "reviewer");
+  const editor = await person("Ed Editor", "editor");
+  const projectAdmin = await person("Pat Admin", "admin");
+  const outsider = await person("Olga Outsider");
+
+  const addItem = (cookie: string) => post(`/api/sets/${sys.id}/nodes`, { kind: "item", name: "New" }, cookie);
+  const comment = (cookie: string) => post(`/api/items/${item}/comments`, { body: "A comment" }, cookie);
+  const setRole = (cookie: string) =>
+    send("PUT", `/api/projects/${projectId}/members/${outsider.id}`, cookie, { role: "viewer" });
+  const read = (cookie: string) => get(`/api/projects/${projectId}`, cookie);
+  const codes = async (cookie: string) =>
+    [await read(cookie), await comment(cookie), await addItem(cookie), await setRole(cookie)].map((r) => r.statusCode);
+
+  //                                   read  comment  edit  manage members
+  expect(await codes(outsider.cookie)).toEqual([404, 404, 404, 404]);
+  expect(await codes(viewer.cookie)).toEqual([200, 403, 403, 403]);
+  expect(await codes(reviewer.cookie)).toEqual([200, 201, 403, 403]);
+  expect(await codes(editor.cookie)).toEqual([200, 201, 201, 403]);
+  expect(await codes(projectAdmin.cookie)).toEqual([200, 201, 201, 200]);
+  expect((await read(viewer.cookie)).json().role).toBe("viewer");
+  expect((await read(owner)).json().role).toBe("admin");
+
+  // The outsider was just added as a viewer by the project admin, and can be removed again.
+  expect((await read(outsider.cookie)).statusCode).toBe(200);
+  expect((await get("/api/projects", outsider.cookie)).json().projects).toHaveLength(1);
+  expect((await get(`/api/projects/${projectId}/candidates`, editor.cookie)).statusCode).toBe(403);
+  expect(
+    (await send("DELETE", `/api/projects/${projectId}/members/${outsider.id}`, projectAdmin.cookie)).statusCode,
+  ).toBe(200);
+  expect((await read(outsider.cookie)).statusCode).toBe(404);
+  // A project admin is not an instance admin: no account list, no new projects.
+  expect((await get("/api/users", projectAdmin.cookie)).statusCode).toBe(403);
+  expect((await post("/api/projects", { name: "X", templateId: "standard" }, projectAdmin.cookie)).statusCode).toBe(
+    403,
+  );
+  // Linking is checked too, even though its ids arrive in the body.
+  const other = (await add(sys.id, { kind: "item", name: "Other" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, owner)).json().linkTypes[0].id;
+  expect((await post("/api/links", { upstreamId: item, downstreamId: other, typeId }, viewer.cookie)).statusCode).toBe(
+    403,
+  );
+  expect(
+    (await post("/api/links", { upstreamId: item, downstreamId: other, typeId }, outsider.cookie)).statusCode,
+  ).toBe(404);
+});
+
+// Hard rule: every endpoint checks permissions. Covers every route with an id in its path, including future ones.
+test("someone outside a project is refused on every route that names something in it", async () => {
+  const { cookie: owner, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const itemId = (await add(sys.id, { kind: "item", name: "A" })).json().node.id;
+  const otherId = (await add(sys.id, { kind: "item", name: "B" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, owner)).json().linkTypes[0].id;
+  const linkId = (await post("/api/links", { upstreamId: itemId, downstreamId: otherId, typeId }, owner)).json().link
+    .id;
+  const commentId = (await post(`/api/items/${itemId}/comments`, { body: "x" }, owner)).json().id;
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+  const upload = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/attachments`,
+    payload: png,
+    headers: { cookie: owner, "content-type": "image/png" },
+  });
+  const invitationId = (await post("/api/invitations", { email: "i@example.com" }, owner)).json().id;
+  const outsider = await person("Olga Outsider");
+  const ids: Record<string, string> = {
+    projectId,
+    setId: sys.id,
+    itemId,
+    nodeId: itemId,
+    linkId,
+    commentId,
+    attachmentId: upload.json().id,
+    invitationId,
+    userId: outsider.id,
+  };
+
+  const routes = app.apiRoutes.filter((r) => !r.public && r.method !== "HEAD" && r.url.includes(":"));
+  expect(routes.length).toBeGreaterThan(20);
+  for (const { method, url } of routes) {
+    const path = url.replace(/:(\w+)/g, (_, name: string) => {
+      if (!ids[name]) throw new Error(`no test id for :${name} in ${url}; add one above`);
+      return ids[name];
+    });
+    const res = await app.inject({
+      method: method as "GET",
+      url: path,
+      payload: method === "GET" || method === "DELETE" ? undefined : {},
+      headers: { cookie: outsider.cookie },
+    });
+    expect([403, 404], `${method} ${url} answered ${res.statusCode}`).toContain(res.statusCode);
+  }
+});
+
+test("comments record mentions and appear in the activity stream; drafts do not", async () => {
+  const { cookie: owner, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const item = (await add(sys.id, { kind: "item", name: "Supply voltage" })).json().node.id;
+  const reviewer = await person("Rob Reviewer", "reviewer");
+  await person("Olga Outsider");
+  await send("PUT", `/api/items/${item}/draft`, owner, {
+    baseRevision: 1,
+    name: "x",
+    description: textToDoc(""),
+    attributes: {},
+  });
+
+  const posted = await post(
+    `/api/items/${item}/comments`,
+    { body: "  @Rob Reviewer please check. cc @Olga Outsider  " },
+    owner,
+  );
+  expect(posted.statusCode).toBe(201);
+  // Olga is not in the project, so she cannot be mentioned.
+  expect(posted.json().mentions).toEqual([reviewer.id]);
+  const mine = (await post(`/api/items/${item}/comments`, { body: "Looks fine" }, reviewer.cookie)).json().id;
+
+  const list = (await get(`/api/items/${item}/comments`, reviewer.cookie)).json().comments;
+  expect(list.map((c: { body: string; author: string }) => [c.author, c.body])).toEqual([
+    ["Admin", "@Rob Reviewer please check. cc @Olga Outsider"],
+    ["Rob Reviewer", "Looks fine"],
+  ]);
+  expect((await post(`/api/items/${item}/comments`, { body: "   " }, owner)).statusCode).toBe(400);
+
+  // Only the author or a project admin deletes a comment.
+  expect((await send("DELETE", `/api/comments/${posted.json().id}`, reviewer.cookie)).statusCode).toBe(403);
+  expect((await send("DELETE", `/api/comments/${mine}`, reviewer.cookie)).statusCode).toBe(200);
+  expect((await send("DELETE", `/api/comments/${mine}`, owner)).statusCode).toBe(404);
+  expect((await get(`/api/items/${item}/comments`, owner)).json().comments).toHaveLength(1);
+  expect((await db.execute(sql`select count(*)::int as n from comments`)).rows[0]).toEqual({ n: 2 });
+
+  const { events, more } = (await get(`/api/projects/${projectId}/activity`, reviewer.cookie)).json();
+  expect(more).toBe(false);
+  const actions = events.map((e: { action: string }) => e.action);
+  expect(actions).toEqual(
+    expect.arrayContaining(["project.create", "item.create", "comment.create", "comment.delete"]),
+  );
+  expect(actions).not.toContain("draft.create");
+  const mention = events.find(
+    (e: { action: string; data: { mentions?: string[] } }) => e.action === "comment.create" && e.data.mentions?.length,
+  );
+  expect(mention).toMatchObject({
+    actor: "Admin",
+    entityId: item,
+    data: { label: "SYS-001 Supply voltage", mentions: [reviewer.id] },
+  });
+  // Newest first, and paging by time works.
+  expect(events[0].action).toBe("comment.delete");
+  const oldest = events.at(-1);
+  expect(
+    (await get(`/api/projects/${projectId}/activity?before=${encodeURIComponent(oldest.at)}`, owner)).json().events,
+  ).toEqual([]);
 });
 
 // Hard rule: every endpoint checks permissions. This covers every registered route, including future ones.

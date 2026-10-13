@@ -5,11 +5,14 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { and, eq, gt, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
+import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
-import { auditEvents, sessions, users } from "./db/schema.ts";
+import { sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
 import { linkRoutes } from "./links.ts";
+import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
 
@@ -29,13 +32,13 @@ export type AppContext = {
   /** Use after requireUser: rejects users who are not administrators. */
   requireAdmin: Guard;
   /** Records an audit event. Call it in the same transaction as the write. */
-  audit: (
-    tx: Db | Tx,
-    actorUserId: string | null,
-    action: string,
-    entityType: string,
-    entityId: string,
-  ) => Promise<unknown>;
+  audit: typeof audit;
+  /** Project permission check: see createAccess in access.ts. Every route about project data starts with it. */
+  access: ReturnType<typeof createAccess>;
+  /** Signs a user in on this reply. */
+  startSession: (tx: Db | Tx, reply: FastifyReply, userId: string) => Promise<void>;
+  /** Limits repeated attempts on routes that take a password or token. */
+  loginLimit: { rateLimit: { max: number; timeWindow: string } };
 };
 
 declare module "fastify" {
@@ -78,9 +81,6 @@ export async function buildApp(
     }
     for (const method of [route.method].flat()) apiRoutes.push({ method, url: route.url, public: isPublic });
   });
-
-  const audit: AppContext["audit"] = (tx, actorUserId, action, entityType, entityId) =>
-    tx.insert(auditEvents).values({ actorUserId, action, entityType, entityId });
 
   async function findUser(req: FastifyRequest): Promise<SessionUser | null> {
     const token = req.cookies[SESSION_COOKIE];
@@ -190,10 +190,28 @@ export async function buildApp(
     return { ok: true };
   });
 
-  const context: AppContext = { app, db, requireUser, requireAdmin, audit };
+  const access = createAccess(db);
+  // Safety net under the per-route checks: any route whose path names something in a project answers 404 to people outside
+  // that project, before the request body is even looked at. Routes still state the role they need.
+  app.addHook("preValidation", async (req, reply) => {
+    const where = req.user ? whereFromParams(req.params as Record<string, string | undefined>) : null;
+    if (where && !(await access(req, reply, where, "viewer"))) return reply;
+  });
+  const context: AppContext = {
+    app,
+    db,
+    requireUser,
+    requireAdmin,
+    audit,
+    access,
+    startSession,
+    loginLimit,
+  };
   projectRoutes(context);
   nodeRoutes(context);
   linkRoutes(context);
+  memberRoutes(context);
+  commentRoutes(context);
   attachmentRoutes(context, opts.attachmentsDir ?? "data/attachments");
 
   if (opts.webRoot && existsSync(opts.webRoot)) {

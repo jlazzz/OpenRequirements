@@ -11,7 +11,7 @@ const uuidParam = (name: string) =>
   ({ type: "object", required: [name], properties: { [name]: { type: "string", format: "uuid" } } }) as const;
 
 /** Image upload and download. Files live in `dir`, named by attachment id, so a stored name is never user input. */
-export function attachmentRoutes({ app, db, requireUser, audit }: AppContext, dir: string) {
+export function attachmentRoutes({ app, db, requireUser, audit, access }: AppContext, dir: string) {
   // Uploads arrive as the raw file. What the file really is gets decided from its bytes, below.
   app.addContentTypeParser(
     ["image/png", "image/jpeg", "image/gif", "image/webp"],
@@ -24,6 +24,7 @@ export function attachmentRoutes({ app, db, requireUser, audit }: AppContext, di
     { onRequest: requireUser, schema: { params: uuidParam("projectId") } },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "editor"))) return reply;
       const userId = req.user?.id as string;
       const body = req.body;
       const contentType = Buffer.isBuffer(body) ? imageType(body) : null;
@@ -57,6 +58,7 @@ export function attachmentRoutes({ app, db, requireUser, audit }: AppContext, di
     { onRequest: requireUser, schema: { params: uuidParam("attachmentId") } },
     async (req, reply) => {
       const { attachmentId } = req.params as { attachmentId: string };
+      if (!(await access(req, reply, { attachmentId }, "viewer"))) return reply;
       const [row] = await db.select().from(attachments).where(eq(attachments.id, attachmentId));
       if (!row) return reply.code(404).send({ error: "Not found" });
       return (

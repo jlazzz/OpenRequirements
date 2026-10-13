@@ -29,6 +29,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 **Bundle B: M4 (reading and finding) + M5 (team).** One owner test at the end.
 
 - [x] M4: Reading view; List view sort, filter, column picker, edit in place; search; tables, images, equations (2026-10-12)
+- M5 server side is written (invitations, members, roles on every existing route, comments, activity) but has **no screens yet and no tests of its own**. Existing tests pass. Next: tests for roles (non-member gets 404, viewer cannot write), then the web screens.
 - [ ] M5: invitations by link; users page
 - [ ] M5: project members and roles (Admin, Editor, Reviewer, Viewer) enforced on every route
 - [ ] M5: comments on items with @mentions

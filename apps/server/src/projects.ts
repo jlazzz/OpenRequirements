@@ -1,6 +1,7 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { roleIn } from "./access.ts";
 import type { AppContext } from "./app.ts";
-import { attributeDefinitions, itemTypes, linkTypes, projects, sets } from "./db/schema.ts";
+import { attributeDefinitions, itemTypes, linkTypes, projectMembers, projects, sets } from "./db/schema.ts";
 import { templates } from "./domain/templates.ts";
 import { projectNodes } from "./nodes.ts";
 
@@ -20,8 +21,18 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
     })),
   }));
 
-  app.get("/api/projects", { onRequest: requireUser }, async () => {
-    const rows = await db.select().from(projects).where(isNull(projects.archivedAt)).orderBy(projects.name);
+  // Instance administrators see every project; everyone else sees the projects they are a member of.
+  app.get("/api/projects", { onRequest: requireUser }, async (req) => {
+    const user = req.user as { id: string; isAdmin: boolean };
+    const mine = db
+      .select({ id: projectMembers.projectId })
+      .from(projectMembers)
+      .where(eq(projectMembers.userId, user.id));
+    const rows = await db
+      .select()
+      .from(projects)
+      .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)))
+      .orderBy(projects.name);
     return { projects: rows };
   });
 
@@ -72,6 +83,10 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         await tx
           .insert(linkTypes)
           .values(template.linkTypes.map((name, position) => ({ projectId: created.id, name, position })));
+        // The creator manages the new project.
+        await tx
+          .insert(projectMembers)
+          .values({ projectId: created.id, userId: req.user?.id as string, role: "admin" });
         await audit(tx, req.user?.id ?? null, "project.create", "project", created.id);
         return created;
       });
@@ -88,14 +103,17 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         .select()
         .from(projects)
         .where(and(eq(projects.id, projectId), isNull(projects.archivedAt)));
-      if (!project) return reply.code(404).send({ error: "Project not found" });
+      const role = project && req.user ? await roleIn(db, req.user, projectId) : null;
+      // Not a member reads the same as not existing.
+      if (!project || !role) return reply.code(404).send({ error: "Project not found" });
       const projectSets = await db
         .select({ id: sets.id, name: sets.name, uidPrefix: sets.uidPrefix, itemType: itemTypes.name })
         .from(sets)
         .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
         .where(eq(sets.projectId, projectId))
         .orderBy(sets.position);
-      return { project, sets: projectSets, nodes: await projectNodes(db, projectId) };
+      // `role` tells the web app what to offer; the server checks every action again.
+      return { project, role, sets: projectSets, nodes: await projectNodes(db, projectId) };
     },
   );
 }

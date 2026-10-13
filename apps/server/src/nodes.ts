@@ -74,7 +74,7 @@ async function lockSetOf(tx: Tx, nodeId: string) {
   return node ? { node, live } : null;
 }
 
-export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
+export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) {
   app.post(
     "/api/sets/:setId/nodes",
     {
@@ -95,6 +95,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
+      if (!(await access(req, reply, { setId }, "editor"))) return reply;
       const body = req.body as { kind: "folder" | "item"; name: string; parentId?: string };
       const userId = req.user?.id as string;
       const name = body.name.trim();
@@ -163,8 +164,9 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
         querystring: { type: "object", required: ["q"], properties: { q: { type: "string", maxLength: 200 } } },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
       const words = (req.query as { q: string }).q.split(/\s+/).filter(Boolean).slice(0, 10);
       if (words.length === 0) return { ids: [] };
       // shortcut: substring scan with no index, add a pg_trgm GIN index on nodes.search_text when search nears the 500 ms budget
@@ -192,6 +194,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     { onRequest: requireUser, schema: { params: idParam("setId") } },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
+      if (!(await access(req, reply, { setId }, "viewer"))) return reply;
       const [set] = await db.select({ itemTypeId: sets.itemTypeId }).from(sets).where(eq(sets.id, setId));
       if (!set) return reply.code(404).send({ error: "Set not found" });
       const fields = await fieldsOf(db, set.itemTypeId);
@@ -230,6 +233,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     { onRequest: requireUser, schema: { params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
       const [item] = await db
         .select({
           id: nodes.id,
@@ -271,6 +275,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     { onRequest: requireUser, schema: { params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
       const revisions = await db
         .select({
           number: itemRevisions.number,
@@ -315,6 +320,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "editor"))) return reply;
       const body = req.body as {
         baseRevision: number;
         name: string;
@@ -393,6 +399,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "editor"))) return reply;
       const body = req.body as {
         baseRevision: number;
         name: string;
@@ -430,8 +437,9 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
   app.delete(
     "/api/items/:itemId/draft",
     { onRequest: requireUser, schema: { params: idParam("itemId") } },
-    async (req) => {
+    async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "editor"))) return reply;
       const userId = req.user?.id as string;
       await db.transaction(async (tx) => {
         const gone = await tx
@@ -460,6 +468,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { nodeId } = req.params as { nodeId: string };
+      if (!(await access(req, reply, { nodeId }, "editor"))) return reply;
       const name = (req.body as { name: string }).name.trim();
       const renamed = await db.transaction(async (tx) => {
         // Folders only: an item's name is versioned, so it changes by saving a new revision.
@@ -493,6 +502,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     },
     async (req, reply) => {
       const { nodeId } = req.params as { nodeId: string };
+      if (!(await access(req, reply, { nodeId }, "editor"))) return reply;
       const { parentId, beforeId } = req.body as { parentId: string | null; beforeId: string | null };
 
       const result = await db.transaction(async (tx) => {
@@ -539,6 +549,7 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
     { onRequest: requireUser, schema: { params: idParam("nodeId") } },
     async (req, reply) => {
       const { nodeId } = req.params as { nodeId: string };
+      if (!(await access(req, reply, { nodeId }, "editor"))) return reply;
       const deleted = await db.transaction(async (tx) => {
         const locked = await lockSetOf(tx, nodeId);
         if (!locked) return null;
