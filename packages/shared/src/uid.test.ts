@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { formatUid } from "./uid.js";
+import { formatUid } from "./uid.ts";
 
 test("formatUid pads to three digits and grows past them", () => {
   expect(formatUid("SRS", 1)).toBe("SRS-001");

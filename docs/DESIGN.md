@@ -1,0 +1,144 @@
+# Product Design
+
+Decided with the project owner on 2026-10-12 by questionnaire. Where this file and [PROJECT_OUTLINE.md](PROJECT_OUTLINE.md) disagree, this file wins.
+
+Reference product: **Jama Connect.** Follow its layout and concepts as closely as practical. Do not copy its artwork, icons, wording or branding.
+
+## 1. Structure
+
+```
+Project: Infusion Pump
+├─ ▤ User Needs            (set, type: User Need)
+│   ├─ 📁 Clinical
+│   │   ├─ UN-001
+│   │   └─ UN-002
+│   └─ 📁 Usability
+├─ ▤ System Requirements   (set, type: Requirement)
+│   ├─ 📁 Power
+│   │   └─ SYS-001
+│   └─ 📁 Comms
+└─ ▤ Verification Tests    (set, type: Test Case)
+    └─ VER-001
+```
+
+- **Project → Sets → Folders → Items.** This replaces the outline's "Document" concept.
+- A **set** holds items of exactly one **item type**. Folders nest inside a set.
+- Each item type has its own fields.
+- **UIDs** are a per-set prefix plus a counter (`SYS-001`), never reused.
+
+## 2. Screen layout
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Logo   Projects ▾   Baselines   Admin                 Search   User ▾│
+├───────────────┬───────────────────────────────────┬──────────────────┤
+│ Explorer      │ System Requirements               │ SYS-002          │
+│               │ [List] [Reading]     Filter  + Add│ ──────────────── │
+│ ▾ User Needs  │ ┌───────┬──────────────┬────────┐ │ Relationships    │
+│   ▸ Clinical  │ │ UID   │ Name         │ Status │ │  ↑ UN-010        │
+│ ▾ System Reqs │ │SYS-001│ Supply volt… │ Draft  │ │  ↓ VER-044       │
+│   ▸ Power     │ │SYS-002│ Max current  │ Review │ │ Versions (4)     │
+│   ▸ Comms     │ │SYS-003│ Battery life │ Draft  │ │ Comments (2)     │
+│ ▸ Verif Tests │ └───────┴──────────────┴────────┘ │ Activity         │
+└───────────────┴───────────────────────────────────┴──────────────────┘
+```
+
+- **Left:** explorer tree of sets, folders and items.
+- **Centre:** the selected set, folder or item.
+- **Right:** side panel for the selected item: relationships, versions, comments, activity.
+
+### Views in Phase 1
+
+| View | What it shows |
+|---|---|
+| **List view** | Table of items, selectable columns, sort and filter. Default. |
+| **Reading view** | Items one after another as continuous text, like a document. |
+| **Single item view** | One item with all fields, plus the side panel. |
+
+Trace view (upstream and downstream in columns) is not in Phase 1.
+
+## 3. Editing and versions
+
+- **Inline editing.** Click a field and type. No separate edit form.
+- **Auto-saved draft.** Typing saves to a draft, so nothing is lost. A draft is private to its author.
+- **Explicit commit.** "Save version", with an optional reason, turns the draft into a new revision that everyone sees.
+- **Conflicts** (proposed, not yet confirmed by the owner): a commit records the revision the draft started from. If someone else committed in between, the second person is shown the difference and must resolve it before committing.
+
+### Editor
+
+Bold, italic, lists, headings, links, **tables**, **images** and **equations** (LaTeX-style). Images need attachment storage, and that storage must be covered by the JSON backup.
+
+## 4. Relationships and traceability
+
+- **No relationship rules.** Any item can link to any item, with any link type.
+- **Creating a link:** in the side panel, "Add relationship", search by UID or text, choose upstream or downstream. This is the only method in Phase 1.
+- **Baselines:** named, frozen snapshot of a set or project, with compare against current.
+- **Traceability matrix:** set A down the side, set B across the top.
+- **Coverage filter:** find items with no downstream link, e.g. requirements with no test.
+- **Suspect links: not in Phase 1.** Still store, on each link, the source and target revisions it was created against, so suspect flagging can be added later without a migration of old links.
+
+## 5. Team features in Phase 1
+
+- **Invitations and roles:** Admin, Editor, Reviewer, Viewer, per project.
+- **Comments** on items, with @mentions.
+- **Activity stream** per project.
+- No email notifications. No SMTP setup at install.
+
+## 6. Project setup
+
+- **Templates only.** A new project is created from a fixed template that defines its item types, fields and sets. First template: medical device (User Needs, Requirements, Risks, Test Cases).
+- Types and fields are **not editable on screen** in Phase 1.
+- Store types and fields as per-project data anyway, not as code constants, so an admin UI can be added later.
+
+## 7. Install and hosting
+
+- **Target:** one server on a private network (on-premises or a private cloud VM), reached by a small team. Docker Compose.
+- **Plain HTTP in Phase 1.**
+  Limit: passwords and session cookies cross the network unencrypted. Acceptable only on a trusted test network. HTTPS must be added before any install at a real company.
+- Local accounts only. The first run creates the admin account.
+
+## 8. Import and export in Phase 1
+
+- Excel / CSV import with column mapping, and export of any List view.
+- JSON full-project backup and restore, including history and attachments.
+- Not in Phase 1: Word export, PDF export, ReqIF.
+
+## 9. Phase 1 scope change
+
+Moved **into** Phase 1 from Phase 2: invitations and roles, comments, activity stream, baselines, coverage filter, concurrent-edit safety.
+
+Added, not in the outline: item types and sets (Jama model), draft-and-commit editing, project templates, equations.
+
+Stays in Phase 2 or later: suspect links, relationship rules, Trace view, admin UI for types and fields, email notifications, Word / PDF / ReqIF, HTTPS.
+
+The outline estimated Phase 1 at 2–3 months of solo part-time work. With these additions, expect roughly double.
+
+## 10. Phase 1 milestones
+
+Phase 1 is built as 8 milestones. Each one ends with something the owner can open in a browser and test. **Stop at the end of each milestone** for the owner's feedback, and fold that feedback into this file before starting the next. Estimates assume solo, part-time work.
+
+| # | Milestone | What the owner can test at the end | Estimate |
+|---|---|---|---|
+| M0 | **Running skeleton** | `docker compose up` on the server; open it from another machine on the network; first run creates the admin; log in and see an empty project list | 2 weeks |
+| M1 | **Structure and items** | Create a project from the medical device template; build sets, folders and items in the explorer; items get UIDs; List view and Single item view with plain-text fields; reorder and soft-delete | 3 weeks |
+| M2 | **Editing and versions** | Inline editing with basic formatting; auto-saved draft; "Save version" with a reason; version history with a diff | 3 weeks |
+| M3 | **Relationships** | "Add relationship" by search; upstream and downstream in the side panel; traceability matrix; coverage filter | 3 weeks |
+| M4 | **Reading and finding** | Reading view; List view column picker, sort and filters; full-text search; tables, images and equations in the editor | 3 weeks |
+| M5 | **Team** | Invite a second user; roles limit what each can do; comments with @mentions; activity stream; two people editing the same item get a conflict prompt | 4 weeks |
+| M6 | **Baselines** | Create a baseline of a set or project; browse it; compare it with current | 2 weeks |
+| M7 | **Data in and out** | Import a real spreadsheet with column mapping; export a List view to Excel/CSV; JSON backup and restore; import this project's own requirements | 3 weeks |
+
+Rules that apply from M0, not from the milestone where they become visible:
+
+- Every endpoint checks permissions. Until M5 there is one role, Admin, but the check exists and is tested.
+- Every write creates an audit event. The activity stream in M5 reads from these.
+- Items are versioned from M1. M2 adds drafts and the history screen on top.
+
+Within a milestone, build the domain logic and its tests first, then the API, then the screen.
+
+## 11. Still open
+
+- Conflict handling on commit (section 3) needs the owner's confirmation.
+- Whether a draft is visible to others as "being edited by X".
+- Home screen after login: project list or a project dashboard.
+- Reviewer role: what it can do before review workflows exist (Phase 3).

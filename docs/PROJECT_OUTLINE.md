@@ -155,13 +155,14 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Read the ReqIF spec and DOORS concepts (modules, objects, attributes, links, baselines)
 - [ ] Write the tool's own requirements spec (it gets imported in Phase 1)
 - [ ] Decide on stack, license, and name; write ADRs
-- [ ] Set up repo, CI (lint, typecheck, tests), Docker dev environment, `CLAUDE.md`
+- [x] Set up repo, CI (lint, typecheck, tests), Docker dev environment, `CLAUDE.md`
 
 **Exit criteria:** Documented user problems, at least one design partner, stack/license chosen, empty app deploys via Docker Compose.
 
 ---
 
 ### Phase 1: MVP, "One person can replace their spreadsheet" (2–3 months)
+> Phase 1 scope and the data model were revised on 2026-10-12. See [DESIGN.md](DESIGN.md), which wins where it disagrees with this outline.
 **Goal:** A single user can author, organize, link, and export requirements.
 
 - [ ] Local user accounts and login
