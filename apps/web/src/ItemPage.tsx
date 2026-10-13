@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Flex,
   Group,
   MultiSelect,
   NumberInput,
@@ -19,6 +20,7 @@ import { type FormEvent, useState } from "react";
 import { type Attributes, api, type Field, type Item } from "./api.ts";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
+import { Versions } from "./Versions.tsx";
 
 type ItemData = { item: Item; fields: Field[] };
 
@@ -77,63 +79,66 @@ function ItemForm({ item, fields }: ItemData) {
   const setValue = (id: string, value: unknown) => setAttributes((previous) => ({ ...previous, [id]: value }));
 
   return (
-    <form onSubmit={onSubmit}>
-      <Stack gap="sm" maw={820}>
-        <Group gap="sm">
-          <Badge variant="light" size="lg" radius="sm">
-            {item.uid}
-          </Badge>
-          <Text c="dimmed" size="sm">
-            Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
-          </Text>
-          <Group ml="auto">{project && node && <NodeActions data={project} node={node} />}</Group>
-        </Group>
-        <TextInput
-          label="Name"
-          required
-          maxLength={200}
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-        />
-        <Textarea
-          label="Description"
-          autosize
-          minRows={4}
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-        />
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          {fields.map((field) => (
-            <FieldInput
-              key={field.id}
-              field={field}
-              value={attributes[field.id]}
-              onChange={(value) => setValue(field.id, value)}
-            />
-          ))}
-        </SimpleGrid>
-
-        {save.isError && (
-          <Alert color="red" role="alert">
-            {save.error.message}
-          </Alert>
-        )}
-        <Group align="flex-end">
+    <Flex gap="xl" align="flex-start" wrap="wrap">
+      <form onSubmit={onSubmit} style={{ flex: "1 1 480px", minWidth: 0, maxWidth: 820 }}>
+        <Stack gap="sm">
+          <Group gap="sm">
+            <Badge variant="light" size="lg" radius="sm">
+              {item.uid}
+            </Badge>
+            <Text c="dimmed" size="sm">
+              Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
+            </Text>
+            <Group ml="auto">{project && node && <NodeActions data={project} node={node} />}</Group>
+          </Group>
           <TextInput
-            label="Reason for change"
-            description="Optional. Stored with the new version."
-            maxLength={500}
-            flex={1}
-            value={changeReason}
-            onChange={(e) => setChangeReason(e.currentTarget.value)}
-            disabled={!dirty}
+            label="Name"
+            required
+            maxLength={200}
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
           />
-          <Button type="submit" disabled={!dirty} loading={save.isPending}>
-            Save version
-          </Button>
-        </Group>
-      </Stack>
-    </form>
+          <Textarea
+            label="Description"
+            autosize
+            minRows={4}
+            value={description}
+            onChange={(e) => setDescription(e.currentTarget.value)}
+          />
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            {fields.map((field) => (
+              <FieldInput
+                key={field.id}
+                field={field}
+                value={attributes[field.id]}
+                onChange={(value) => setValue(field.id, value)}
+              />
+            ))}
+          </SimpleGrid>
+
+          {save.isError && (
+            <Alert color="red" role="alert">
+              {save.error.message}
+            </Alert>
+          )}
+          <Group align="flex-end">
+            <TextInput
+              label="Reason for change"
+              description="Optional. Stored with the new version."
+              maxLength={500}
+              flex={1}
+              value={changeReason}
+              onChange={(e) => setChangeReason(e.currentTarget.value)}
+              disabled={!dirty}
+            />
+            <Button type="submit" disabled={!dirty} loading={save.isPending}>
+              Save version
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+      <Versions itemId={item.id} fields={fields} />
+    </Flex>
   );
 }
 

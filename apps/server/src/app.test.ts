@@ -217,6 +217,23 @@ test("saving an item appends a revision and keeps the old one", async () => {
   expect((await get(`/api/items/${id}`, cookie)).json().item.revision).toBe(2);
 });
 
+test("an item's history lists every version, newest first, with author and reason", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "First" })).json().node;
+  await post(
+    `/api/items/${id}/revisions`,
+    { baseRevision: 1, name: "Second", description: "d", attributes: {}, changeReason: "why" },
+    cookie,
+  );
+
+  const { revisions } = (await get(`/api/items/${id}/revisions`, cookie)).json();
+  expect(revisions).toEqual([
+    expect.objectContaining({ number: 2, name: "Second", description: "d", changeReason: "why", author: "Admin" }),
+    expect.objectContaining({ number: 1, name: "First", description: "", changeReason: null, author: "Admin" }),
+  ]);
+  expect((await get("/api/items/00000000-0000-4000-8000-000000000000/revisions", cookie)).statusCode).toBe(404);
+});
+
 test("two saves from the same revision cannot both succeed", async () => {
   const { cookie, sys, add } = await projectWithSets();
   const { id } = (await add(sys.id, { kind: "item", name: "A" })).json().node;

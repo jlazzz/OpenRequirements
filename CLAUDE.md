@@ -93,7 +93,7 @@ apps/
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
-  shared/           Types and zod validation schemas shared by web and server
+  shared/           Pure code used by both web and server: UID format, word diff
   reqif/            ReqIF parser/serializer, standalone and reusable (empty)
   importers/        CSV/Excel/Word import logic (empty)
 docs/

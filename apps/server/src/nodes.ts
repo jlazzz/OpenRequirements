@@ -2,7 +2,7 @@ import { formatUid } from "@app/shared";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
-import { attributeDefinitions, itemRevisions, nodes, sets } from "./db/schema.ts";
+import { attributeDefinitions, itemRevisions, nodes, sets, users } from "./db/schema.ts";
 import { checkAttributes } from "./domain/attributes.ts";
 import { descendantIds, placeBefore } from "./domain/tree.ts";
 
@@ -197,6 +197,32 @@ export function nodeRoutes({ app, db, requireUser, audit }: AppContext) {
       if (!item) return reply.code(404).send({ error: "Item not found" });
       const { itemTypeId, ...rest } = item;
       return { item: rest, fields: await fieldsOf(db, itemTypeId) };
+    },
+  );
+
+  // Version history of an item, newest first.
+  app.get(
+    "/api/items/:itemId/revisions",
+    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    async (req, reply) => {
+      const { itemId } = req.params as { itemId: string };
+      const revisions = await db
+        .select({
+          number: itemRevisions.number,
+          name: itemRevisions.name,
+          description: itemRevisions.description,
+          attributes: itemRevisions.attributes,
+          changeReason: itemRevisions.changeReason,
+          createdAt: itemRevisions.createdAt,
+          author: users.name,
+        })
+        .from(itemRevisions)
+        .innerJoin(nodes, eq(nodes.id, itemRevisions.itemId))
+        .innerJoin(users, eq(users.id, itemRevisions.authorId))
+        .where(and(eq(nodes.id, itemId), eq(nodes.kind, "item"), isNull(nodes.deletedAt)))
+        .orderBy(desc(itemRevisions.number));
+      if (revisions.length === 0) return reply.code(404).send({ error: "Item not found" });
+      return { revisions };
     },
   );
 

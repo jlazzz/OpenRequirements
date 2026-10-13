@@ -15,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- M1 tested by the owner (2026-10-12)
 - M1 built in 5 slices: projects from a template, folders and items with UIDs, List view, Single item view with Save version, move / rename / soft-delete (2026-10-12)
 - M0, running skeleton: built and tested by the owner (2026-10-12)
 - CI passes on GitHub (2026-10-12)
@@ -23,15 +24,19 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **M1, structure and items: built, waiting for the owner's test.** Do not start M2 until the owner has tested and given feedback.
+**M2, editing and versions.** Slices, each testable in the browser:
+
+1. [x] Version history side panel; compare any two versions with a word-level diff (2026-10-12)
+2. [ ] Auto-saved private drafts; "Save version" commits the draft; discard draft
+3. [ ] Rich-text description with basic formatting (TipTap). Needs a decision on the stored format, recorded as an ADR.
+4. [ ] Inline editing of simple fields in List view
 
 ## Next
 
 Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner test of M1: create a project, folders and items; edit and save; reorder, move and delete
-2. Fold M1 feedback into `docs/DESIGN.md`
-3. M2, editing and versions: inline editing, auto-saved drafts, version history with a diff
+1. Owner look at M2 slice 1
+2. M2 slice 2: auto-saved drafts
 
 Known gaps left for later milestones or owner decision:
 
