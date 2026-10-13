@@ -158,6 +158,72 @@ test("items get sequential UIDs per set and a first revision; folders nest them"
   expect(await auditActions()).toEqual(expect.arrayContaining(["folder.create", "item.create"]));
 });
 
+test("a set lists its fields in template order and each item's current values", async () => {
+  const { cookie, sys, un, add } = await projectWithSets();
+  const folder = (await add(sys.id, { kind: "folder", name: "F" })).json().node;
+  await add(sys.id, { kind: "item", name: "Nested", parentId: folder.id });
+  await add(un.id, { kind: "item", name: "Elsewhere" });
+
+  const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
+  expect(list.fields.map((f: { name: string }) => f.name)).toEqual([
+    "Status",
+    "Priority",
+    "Verification method",
+    "Rationale",
+  ]);
+  expect(list.fields[0]).toMatchObject({ type: "enum", options: ["Draft", "In review", "Approved", "Rejected"] });
+  expect(list.items).toEqual([
+    expect.objectContaining({ uid: "SYS-001", name: "Nested", attributes: {}, revision: 1 }),
+  ]);
+  expect((await get("/api/sets/00000000-0000-4000-8000-000000000000/items", cookie)).statusCode).toBe(404);
+});
+
+test("saving an item appends a revision and keeps the old one", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "Supply voltage" })).json().node;
+  const { fields } = (await get(`/api/items/${id}`, cookie)).json();
+  const status = fields.find((f: { name: string }) => f.name === "Status").id;
+  const rationale = fields.find((f: { name: string }) => f.name === "Rationale").id;
+  const save = (body: object) =>
+    post(`/api/items/${id}/revisions`, { name: "Supply voltage", description: "", attributes: {}, ...body }, cookie);
+
+  const saved = await save({
+    baseRevision: 1,
+    description: "5 V DC",
+    attributes: { [status]: "Approved", [rationale]: "" },
+    changeReason: " USB ",
+  });
+  expect(saved.statusCode).toBe(201);
+  expect(saved.json()).toEqual({ revision: 2 });
+
+  const { item } = (await get(`/api/items/${id}`, cookie)).json();
+  expect(item).toMatchObject({ revision: 2, description: "5 V DC", attributes: { [status]: "Approved" } });
+  const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
+  expect(list.items[0]).toMatchObject({ revision: 2, attributes: { [status]: "Approved" } });
+
+  const history = await db.execute(sql`select number, description, change_reason from item_revisions order by number`);
+  expect(history.rows).toEqual([
+    { number: 1, description: "", change_reason: null },
+    { number: 2, description: "5 V DC", change_reason: "USB" },
+  ]);
+  expect(await auditActions()).toContain("item.revise");
+
+  // A save that started from an old revision must not overwrite the newer one.
+  expect((await save({ baseRevision: 1, description: "stale" })).statusCode).toBe(409);
+  expect((await save({ baseRevision: 2, attributes: { [status]: "Bogus" } })).statusCode).toBe(400);
+  expect((await save({ baseRevision: 2, name: " " })).statusCode).toBe(400);
+  expect((await get(`/api/items/${id}`, cookie)).json().item.revision).toBe(2);
+});
+
+test("two saves from the same revision cannot both succeed", async () => {
+  const { cookie, sys, add } = await projectWithSets();
+  const { id } = (await add(sys.id, { kind: "item", name: "A" })).json().node;
+  const save = (name: string) =>
+    post(`/api/items/${id}/revisions`, { baseRevision: 1, name, description: "", attributes: {} }, cookie);
+  const codes = (await Promise.all([save("B"), save("C")])).map((r) => r.statusCode).sort();
+  expect(codes).toEqual([201, 409]);
+});
+
 test("concurrent creates in one set never share a UID", async () => {
   const { sys, add } = await projectWithSets();
   const results = await Promise.all(Array.from({ length: 8 }, (_, i) => add(sys.id, { kind: "item", name: `R${i}` })));

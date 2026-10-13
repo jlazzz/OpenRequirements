@@ -19,6 +19,7 @@ export type Item = {
   uid: string;
   name: string;
   description: string;
+  attributes: Attributes;
   revision: number;
   revisedAt: string;
 };
@@ -34,4 +35,23 @@ export async function api<T>(path: string, body?: object): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message ?? data.error ?? `Request failed (${res.status})`);
   return data;
+}
+export type Field = {
+  id: string;
+  name: string;
+  type: "text" | "number" | "enum" | "multi_enum" | "date" | "boolean";
+  options: string[] | null;
+};
+/** Field values of an item, keyed by field id. */
+export type Attributes = Record<string, unknown>;
+export type SetItems = {
+  fields: Field[];
+  items: { id: string; uid: string; name: string; attributes: Attributes; revision: number }[];
+};
+
+/** How a field value reads in a table cell or on an item page. */
+export function formatValue(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return Array.isArray(value) ? value.join(", ") : String(value);
 }

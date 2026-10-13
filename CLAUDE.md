@@ -87,6 +87,7 @@ apps/
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/projects.ts, src/nodes.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
+    src/domain/attributes.ts Validates field values against an item type's field definitions
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links

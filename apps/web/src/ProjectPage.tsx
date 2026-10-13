@@ -15,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { api, type ProjectDetail, type ProjectSet, type TreeNode } from "./api.ts";
+import { api, formatValue, type ProjectDetail, type ProjectSet, type SetItems, type TreeNode } from "./api.ts";
 import { RouterAnchor, RouterNavLink } from "./links.tsx";
 
 export function useProject() {
@@ -26,6 +26,11 @@ export function useProject() {
 /** Children of a set (pass the set id) or of a folder (pass the folder's node id), in order. */
 function childrenOf(nodes: TreeNode[], containerId: string) {
   return nodes.filter((n) => (n.parentId ?? n.setId) === containerId);
+}
+
+/** Every item inside a set or folder, including those in sub-folders, in explorer order. */
+function itemsWithin(nodes: TreeNode[], containerId: string): TreeNode[] {
+  return childrenOf(nodes, containerId).flatMap((n) => (n.kind === "item" ? [n] : itemsWithin(nodes, n.id)));
 }
 
 /** Project frame: explorer on the left, the selected set, folder or item on the right. */
@@ -164,7 +169,7 @@ export function FolderPage() {
   return <Container data={project.data} set={set} folder={folder} title={folder.name} />;
 }
 
-/** A set or one of its folders: what it contains, and buttons to add to it. */
+/** List view of a set or one of its folders: every item inside it, one column per field. */
 function Container({
   data,
   set,
@@ -178,7 +183,13 @@ function Container({
 }) {
   const [adding, setAdding] = useState<"item" | "folder" | null>(null);
   const projectId = data.project.id;
-  const rows = childrenOf(data.nodes, folder?.id ?? set.id);
+  const list = useQuery({
+    queryKey: ["projects", projectId, "sets", set.id],
+    queryFn: () => api<SetItems>(`sets/${set.id}/items`),
+  });
+  const details = new Map(list.data?.items.map((item) => [item.id, item]));
+  const rows = itemsWithin(data.nodes, folder?.id ?? set.id);
+  const fields = list.data?.fields ?? [];
 
   return (
     <Stack gap="sm">
@@ -188,7 +199,8 @@ function Container({
             {title}
           </Title>
           <Text c="dimmed" size="sm">
-            {folder ? `Folder in ${set.name}` : `Set of ${set.itemType} items`} · UID prefix {set.uidPrefix}
+            {folder ? `Folder in ${set.name}` : `Set of ${set.itemType} items`} · {rows.length}{" "}
+            {rows.length === 1 ? "item" : "items"}
           </Text>
         </div>
         <Group gap="xs">
@@ -199,42 +211,42 @@ function Container({
         </Group>
       </Group>
 
+      {list.isError && (
+        <Alert color="red" role="alert">
+          {list.error.message}
+        </Alert>
+      )}
       {rows.length === 0 ? (
-        <Text c="dimmed">Nothing here yet.</Text>
+        <Text c="dimmed">No items here yet.</Text>
       ) : (
-        <Table withTableBorder highlightOnHover bg="white">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th w={120}>UID</Table.Th>
-              <Table.Th>Name</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((node) => (
-              <Table.Tr key={node.id}>
-                <Table.Td>
-                  {node.uid ?? (
-                    <Text c="dimmed" size="sm" span>
-                      Folder
-                    </Text>
-                  )}
-                </Table.Td>
-                <Table.Td>
-                  <RouterAnchor
-                    to={
-                      node.kind === "folder"
-                        ? "/projects/$projectId/folders/$nodeId"
-                        : "/projects/$projectId/items/$nodeId"
-                    }
-                    params={{ projectId, nodeId: node.id }}
-                  >
-                    {node.name}
-                  </RouterAnchor>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={160 * (fields.length + 2)}>
+          <Table withTableBorder withColumnBorders highlightOnHover bg="white" aria-label={`Items in ${title}`}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={110}>ID</Table.Th>
+                <Table.Th>Name</Table.Th>
+                {fields.map((field) => (
+                  <Table.Th key={field.id}>{field.name}</Table.Th>
+                ))}
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((node) => (
+                <Table.Tr key={node.id}>
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>{node.uid}</Table.Td>
+                  <Table.Td>
+                    <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }}>
+                      {node.name}
+                    </RouterAnchor>
+                  </Table.Td>
+                  {fields.map((field) => (
+                    <Table.Td key={field.id}>{formatValue(details.get(node.id)?.attributes[field.id])}</Table.Td>
+                  ))}
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal

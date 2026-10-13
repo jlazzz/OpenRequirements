@@ -134,6 +134,8 @@ Rules that apply from M0, not from the milestone where they become visible:
 - Every write creates an audit event. The activity stream in M5 reads from these.
 - Items are versioned from M1. M2 adds drafts and the history screen on top.
 
+M1 ships a plain edit form on the Single item view: change fields, then "Save version" appends a revision. A save is refused if someone else saved a newer version first. M2 replaces the form with inline editing and auto-saved drafts; the save endpoint stays.
+
 Within a milestone, build the domain logic and its tests first, then the API, then the screen.
 
 ## 11. Still open

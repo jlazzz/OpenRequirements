@@ -26,16 +26,16 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 1. [x] Create a project from the Standard template; explorer lists its sets (2026-10-12)
 2. [x] Folders and items in a set: create, UIDs, explorer tree (2026-10-12)
-3. [ ] List view of a set or folder
-4. [ ] Single item view with the type's fields, plain text
+3. [x] List view of a set or folder, one column per field (2026-10-12)
+4. [x] Single item view: edit name, description and fields; "Save version" appends a revision (2026-10-12)
 5. [ ] Reorder and soft-delete
 
 ## Next
 
 Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner look at M1 slice 2
-2. M1 slice 3: List view of a set or folder, with the type's fields as columns
+1. Owner look at M1 slices 3 and 4
+2. M1 slice 5: rename folders, move and reorder, soft-delete. Then the M1 owner test.
 
 ## Open decisions
 
