@@ -115,7 +115,7 @@ The outline estimated Phase 1 at 2–3 months of solo part-time work. With these
 
 ## 10. Phase 1 milestones
 
-Phase 1 is built as 8 milestones. Each one ends with something the owner can open in a browser and test. **Stop at the end of each milestone** for the owner's feedback, and fold that feedback into this file before starting the next. Estimates assume solo, part-time work.
+Phase 1 is built as 8 milestones. Each one ends with something the owner can open in a browser and test. Stop for the owner's feedback at the review checkpoints below, and fold that feedback into this file before continuing. Estimates assume solo, part-time work.
 
 | # | Milestone | What the owner can test at the end | Estimate |
 |---|---|---|---|
@@ -127,6 +127,18 @@ Phase 1 is built as 8 milestones. Each one ends with something the owner can ope
 | M5 | **Team** | Invite a second user; roles limit what each can do; comments with @mentions; activity stream; two people editing the same item get a conflict prompt | 4 weeks |
 | M6 | **Baselines** | Create a baseline of a set or project; browse it; compare it with current | 2 weeks |
 | M7 | **Data in and out** | Import a real spreadsheet with column mapping; export a List view to Excel/CSV; JSON backup and restore; import this project's own requirements | 3 weeks |
+
+### Review checkpoints
+
+The owner asked on 2026-10-12 for fewer, larger reviews. From M2 on, milestones are built in bundles with one owner test per bundle:
+
+| Checkpoint | Milestones | What the owner tests |
+|---|---|---|
+| A | M2 + M3 | Write and format items, drafts, versions; link items; matrix and coverage |
+| B | M4 + M5 | Reading view, filters, search, tables and images; a second user, roles, comments, activity |
+| C | M6 + M7 | Baselines; spreadsheet import and export; backup and restore |
+
+Inside a bundle, do not stop for review. Make technical choices without asking and record significant ones as ADRs. Stop early only for a product decision the owner must make, or a blocker.
 
 Rules that apply from M0, not from the milestone where they become visible:
 

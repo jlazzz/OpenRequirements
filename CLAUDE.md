@@ -44,7 +44,7 @@ Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
 ## How to work
 
 - **Small slices.** One feature per session or branch, taken from the current phase checklist in the outline. Plan first, then implement, then write tests.
-- **One milestone at a time.** Phase 1 is split into milestones M0 to M7 in `docs/DESIGN.md` section 10. Work only on the current one named in `STATUS.md`. When it is done, stop and give the owner the steps to test it. Do not start the next milestone until the owner has tested and given feedback.
+- **Work in bundles, review at checkpoints.** Phase 1 milestones M0 to M7 and the review checkpoints A, B, C are in `docs/DESIGN.md` section 10. Build the whole current bundle named in `STATUS.md` without stopping for review. At the checkpoint, stop and give the owner the steps to test it. Do not start the next bundle until the owner has tested and given feedback.
 - **Domain logic first.** Build versioning, baselines and suspect links as pure, tested modules in `apps/server/src/domain/` before wiring up any API or UI. No database or HTTP imports in that folder.
 - **Record decisions.** When a session makes a significant decision, write an ADR in `docs/adr/` as `NNNN-short-title.md`.
 - **Update the status.** At the end of every session that changes the project, update `STATUS.md`: move finished work to Done with the date, set In progress and Next, and bump "Last updated". Tick the matching checklist items in `docs/PROJECT_OUTLINE.md`.

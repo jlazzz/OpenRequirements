@@ -24,19 +24,23 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-**M2, editing and versions.** Slices, each testable in the browser:
+**Bundle A: M2 (editing and versions) + M3 (relationships).** One owner test at the end, not per slice.
 
-1. [x] Version history side panel; compare any two versions with a word-level diff (2026-10-12)
-2. [ ] Auto-saved private drafts; "Save version" commits the draft; discard draft
-3. [ ] Rich-text description with basic formatting (TipTap). Needs a decision on the stored format, recorded as an ADR.
-4. [ ] Inline editing of simple fields in List view
+- [x] M2: version history side panel; compare any two versions with a word-level diff (2026-10-12)
+- [ ] M2: auto-saved private drafts; "Save version" commits the draft; discard draft
+- [ ] M2: rich-text description with basic formatting (TipTap); record the stored format as an ADR
+- [ ] M2: inline editing of simple fields in List view
+- [ ] M3: add a relationship by search; upstream and downstream in the item side panel
+- [ ] M3: traceability matrix between two sets
+- [ ] M3: coverage filter in List view
 
 ## Next
 
 Phase 1 milestones M0 to M7 are in [docs/DESIGN.md](docs/DESIGN.md) section 10. Each ends with an owner test.
 
-1. Owner look at M2 slice 1
-2. M2 slice 2: auto-saved drafts
+1. Finish bundle A, then the owner test (checkpoint A)
+2. Bundle B: M4 + M5
+3. Bundle C: M6 + M7
 
 Known gaps left for later milestones or owner decision:
 
