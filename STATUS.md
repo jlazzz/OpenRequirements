@@ -15,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 - License decided: AGPL-3.0 + CLA, [ADR 0001](docs/adr/0001-license-agpl-3.0.md) (2026-10-12)
 - Pushed to GitHub, `development` branch (2026-10-12)
 - Stack decided: Fastify and Drizzle, ADRs 0002 and 0003 (2026-10-12)
+- Bundle B built: reading view, list tools, search, tables/images/equations, invitations, project roles, comments, activity stream (2026-10-12)
 - Bundle A tested by the owner (2026-10-12)
 - Bundle A built: version history and compare, auto-saved drafts, rich text (ADR 0005), relationships, traceability matrix, coverage filter (2026-10-12)
 - M1 tested by the owner (2026-10-12)
@@ -26,31 +27,27 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-**Bundle B: M4 (reading and finding) + M5 (team).** One owner test at the end.
-
-- [x] M4: Reading view; List view sort, filter, column picker, edit in place; search; tables, images, equations (2026-10-12)
-- M5 server side is written (invitations, members, roles on every existing route, comments, activity) but has **no screens yet and no tests of its own**. Existing tests pass. Next: tests for roles (non-member gets 404, viewer cannot write), then the web screens.
-- [ ] M5: invitations by link; users page
-- [ ] M5: project members and roles (Admin, Editor, Reviewer, Viewer) enforced on every route
-- [ ] M5: comments on items with @mentions
-- [ ] M5: activity stream per project
+- **Bundle B (M4 + M5): built, waiting for the owner's test at checkpoint B.** Do not start bundle C until the owner has tested and given feedback.
 
 ## Next
 
 Phase 1 milestones and review checkpoints are in [docs/DESIGN.md](docs/DESIGN.md) section 10.
 
-1. Owner test of bundle A: format a description; leave and return to a draft; save versions and compare them; link items; matrix; coverage filter
+1. Owner test of bundle B: Reading view; list sort, filter, columns, edit in place; search; table, image and equation in a description; invite a second user; roles; comments and mentions; activity
 2. Fold feedback into `docs/DESIGN.md`
-3. Bundle B: M4 (reading and finding) + M5 (team)
-4. Bundle C: M6 (baselines) + M7 (data in and out)
+3. Bundle C: M6 (baselines) + M7 (data in and out)
 
 Known gaps left for later milestones or owner decision:
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.
-- Deleted folders, items and relationships cannot be restored from the screen yet.
+- Deleted folders, items, relationships and comments cannot be restored from the screen yet.
 - Old versions can be viewed and compared, not restored.
 - Version diffs compare wording; a formatting-only change is reported without detail.
+- Accounts cannot be deactivated, and a user cannot change their own password yet.
+- Mentions do not notify anyone; they only show in the activity stream.
+- Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
+- Not checked in a browser: image upload through the editor, and inserting an equation. Both are covered by server tests only.
 
 ## Open decisions
 

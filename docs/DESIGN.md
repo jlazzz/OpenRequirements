@@ -83,9 +83,14 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 
 ## 5. Team features in Phase 1
 
-- **Invitations and roles:** Admin, Editor, Reviewer, Viewer, per project.
-- **Comments** on items, with @mentions.
-- **Activity stream** per project.
+- **Accounts by invitation link.** An instance administrator creates a link for an email address and sends it themselves. The link works once and expires after 7 days. No email server is needed.
+- **Two levels of permission.**
+  - *Instance administrator:* manages accounts and invitations, creates projects, and is Admin in every project.
+  - *Project role,* each including the ones before it: **Viewer** reads; **Reviewer** also comments; **Editor** also changes items, folders and relationships; **Admin** also manages the project's members.
+- **A project is invisible to people who are not members.** They get "not found", not "forbidden".
+- **Comments** on items are plain text. `@Name` mentions a project member; the "@ Mention" button inserts the name. Authors and project admins can delete a comment.
+- **Mentions** are shown in the activity stream ("and mentioned you", with a filter). There are no notifications yet.
+- **Activity stream** per project: creations, new versions, moves, deletions, relationships, comments and membership changes. Drafts never appear.
 - No email notifications. No SMTP setup at install.
 
 ## 6. Project setup

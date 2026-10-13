@@ -13,15 +13,18 @@ import {
   Text,
   Textarea,
   TextInput,
+  Title,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { type Attributes, api, type Draft, type Field, type Item, uploadImage } from "./api.ts";
+import { type Attributes, api, canEdit, type Draft, type Field, formatValue, type Item, uploadImage } from "./api.ts";
+import { Comments } from "./Comments.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
 import { Relationships } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
+import { RichView } from "./RichView.tsx";
 import { Versions } from "./Versions.tsx";
 
 type ItemData = { item: Item; fields: Field[]; draft: Draft | null };
@@ -30,6 +33,7 @@ type ItemData = { item: Item; fields: Field[]; draft: Draft | null };
 export function ItemPage() {
   const { nodeId } = useParams({ from: "/projects/$projectId/items/$nodeId" });
   const item = useQuery({ queryKey: ["items", nodeId], queryFn: () => api<ItemData>(`items/${nodeId}`) });
+  const project = useProject().data;
   // Bumped to throw away the form's state, e.g. after discarding a draft.
   const [epoch, setEpoch] = useState(0);
 
@@ -41,6 +45,7 @@ export function ItemPage() {
       </Alert>
     );
   }
+  if (!canEdit(project?.role)) return <ItemReadOnly {...item.data} />;
   // The key resets the form whenever another item, or a newer version of this one, is shown.
   return (
     <ItemForm
@@ -48,6 +53,46 @@ export function ItemPage() {
       {...item.data}
       onReset={() => setEpoch((n) => n + 1)}
     />
+  );
+}
+
+/** What viewers and reviewers see: the saved version, with nothing to edit. */
+function ItemReadOnly({ item, fields }: ItemData) {
+  const project = useProject().data;
+  return (
+    <Flex gap="xl" align="flex-start" wrap="wrap">
+      <Stack gap="sm" style={{ flex: "1 1 480px", minWidth: 0, maxWidth: 820 }}>
+        <Group gap="sm">
+          <Badge variant="light" size="lg" radius="sm">
+            {item.uid}
+          </Badge>
+          <Text c="dimmed" size="sm">
+            Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
+          </Text>
+        </Group>
+        <Title order={1} size="h3">
+          {item.name}
+        </Title>
+        <RichView doc={item.description} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} component="dl" m={0}>
+          {fields.map((field) => (
+            <div key={field.id}>
+              <Text component="dt" size="sm" fw={600}>
+                {field.name}
+              </Text>
+              <Text component="dd" m={0}>
+                {formatValue(item.attributes[field.id]) || "—"}
+              </Text>
+            </div>
+          ))}
+        </SimpleGrid>
+      </Stack>
+      <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
+        {project && <Relationships data={project} itemId={item.id} />}
+        {project && <Comments data={project} itemId={item.id} />}
+        <Versions itemId={item.id} fields={fields} />
+      </Stack>
+    </Flex>
   );
 }
 
@@ -254,6 +299,7 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
       </form>
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
         {project && <Relationships data={project} itemId={item.id} />}
+        {project && <Comments data={project} itemId={item.id} />}
         <Versions itemId={item.id} fields={fields} />
       </Stack>
     </Flex>

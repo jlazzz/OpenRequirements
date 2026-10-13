@@ -12,7 +12,7 @@ import {
   Title,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useLocation } from "@tanstack/react-router";
 import type { FormEvent } from "react";
 import { api, type Session, type User } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
@@ -23,6 +23,8 @@ export function useSession() {
 
 export function Root() {
   const session = useSession();
+  // An invited person has no account yet, so the invitation page is shown without signing in.
+  const invited = useLocation({ select: (location) => location.pathname.startsWith("/invite/") });
 
   if (session.isPending) {
     return (
@@ -40,6 +42,7 @@ export function Root() {
       </Center>
     );
   }
+  if (invited) return <Outlet />;
   if (session.data.needsSetup) return <AuthForm mode="setup" />;
   if (!session.data.user) return <AuthForm mode="login" />;
   return <Shell user={session.data.user} />;
@@ -114,6 +117,11 @@ function Shell({ user }: { user: User }) {
           <RouterAnchor to="/" c="white" size="sm">
             Projects
           </RouterAnchor>
+          {user.isAdmin && (
+            <RouterAnchor to="/users" c="white" size="sm" ml="lg">
+              Users
+            </RouterAnchor>
+          )}
         </nav>
         <Text size="sm" ml="auto">
           {user.name}

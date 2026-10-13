@@ -35,7 +35,7 @@ Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
 1. **Never hard-delete items.** Soft delete only. Deleted items stay in history and baselines.
 2. **History is append-only.** Never update or delete a revision row. A change is a new revision.
 3. **Every write creates an audit event.** One exception: auto-saving a draft is audited when the draft starts and when it is discarded, not on every keystroke save.
-4. **Every endpoint checks permissions**, and that check has a test.
+4. **Every endpoint checks permissions**, and that check has a test. A route about project data starts with `access(req, reply, where, role)`. A new path parameter needs a test id in the "someone outside a project" test.
 5. **UIDs are never reused**, even after deletion.
 6. **Everything goes through the API.** The UI uses the same public API that integrations use. No back doors.
 7. **Migrations are forward-only** and safe on large tables.
@@ -85,10 +85,12 @@ apps/
     src/links.tsx   Mantine links wired to the router: use these, not <a>
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
-    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts   Feature route files: one per feature, taking `AppContext`
+    src/access.ts   Permission check (`createAccess`), role lookup and `audit`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts, src/members.ts, src/comments.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
+    src/domain/roles.ts      Role ranking and @mention matching
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
@@ -107,7 +109,9 @@ e2e/                Playwright tests (empty)
 - Tests sit next to the code as `*.test.ts`.
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
-- Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
+- Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for instance-admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
+- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId` or `commentId`: a hook uses those names to refuse non-members before the body is read.
+- `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
 - Every write calls `audit(...)` in the same transaction as the change.
@@ -147,8 +151,9 @@ Use these terms exactly, in code, API and UI.
 ## Core data model (sketch)
 
 ```
-Organization ─< Membership >─ User
-Organization ─< Project ─< Set ─< Node (tree: folder | item)
+User ─< ProjectMember >─ Project   (role; no Organization level yet: one instance is one organization)
+Invitation                         (email, token hash, expiry; accepted once)
+Project ─< Set ─< Node (tree: folder | item)
 Project ─< ItemType                (from the project template; a set has exactly one)
 Item ─< Draft                      (one per author; private until committed)
 Item ─< ItemRevision               (append-only: body, attributes JSONB, author, timestamp, change reason)
@@ -157,9 +162,11 @@ Project ─< LinkType                (name; from the template; no source→targe
 Link                               (upstream item, downstream item, type, revisions of both ends at creation; immutable, soft-deleted)
 LinkRevision                       (Phase 2, with suspect links: re-confirmations of a link)
 Project ─< Baseline ─< BaselineEntry   (points to exact ItemRevision / LinkRevision IDs)
-Item ─< Comment, Attachment, ExternalReference
+Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted)
+Project ─< Attachment              (uploaded images embedded in rich text)
+Item ─< ExternalReference          (later)
 Review ─< ReviewItem, Approval, Signature     (Phase 3)
-AuditEvent                          (append-only log of every write)
+AuditEvent                          (append-only log of every write; project id and a label feed the activity stream)
 ```
 
 ## Key design decisions
@@ -169,7 +176,7 @@ AuditEvent                          (append-only log of every write)
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
 - **Suspect links (Phase 2):** each link records which revisions of its source and target were last confirmed. Store those revision IDs from Phase 1 on; flagging comes later.
 - **Ordering:** set trees use fractional indexing or ordered lists, so reordering does not rewrite every row.
-- **Permissions:** role-based (Admin, Editor, Reviewer, Viewer) per project. Document-level overrides come later.
+- **Permissions:** per project: Viewer reads, Reviewer also comments, Editor also changes items and relationships, Admin also manages members. An instance administrator (`users.is_admin`) is Admin in every project, manages accounts and creates projects. Set-level overrides come later.
 
 ## Performance budgets
 

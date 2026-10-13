@@ -146,6 +146,20 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
+        <RouterNavLink
+          to="/projects/$projectId/activity"
+          params={{ projectId: info.id }}
+          label="Activity"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
+          to="/projects/$projectId/members"
+          params={{ projectId: info.id }}
+          label="Members"
+          pl={26}
+          py={4}
+        />
       </Box>
       <Box flex={1} p="lg" style={{ overflow: "auto" }}>
         <Outlet />

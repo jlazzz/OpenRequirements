@@ -6,6 +6,8 @@ import { ProjectsPage } from "./ProjectsPage.tsx";
 import { Root } from "./Root.tsx";
 import { SearchPage } from "./SearchPage.tsx";
 import { FolderPage, SetPage } from "./SetView.tsx";
+import { ActivityPage, MembersPage } from "./TeamPages.tsx";
+import { InvitePage, UsersPage } from "./UsersPage.tsx";
 
 const rootRoute = createRootRoute({ component: Root });
 const projectsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: ProjectsPage });
@@ -14,6 +16,8 @@ const projectRoute = createRoute({
   path: "projects/$projectId",
   component: ProjectPage,
 });
+const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "users", component: UsersPage });
+const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "invite/$token", component: InvitePage });
 const inProject = { getParentRoute: () => projectRoute };
 // List view is the default; ?view=reading shows the Reading view.
 const viewSearch = (search: Record<string, unknown>): { view?: "reading" } => ({
@@ -24,6 +28,8 @@ const projectChildren = [
   createRoute({ ...inProject, path: "sets/$setId", component: SetPage, validateSearch: viewSearch }),
   createRoute({ ...inProject, path: "folders/$nodeId", component: FolderPage, validateSearch: viewSearch }),
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
+  createRoute({ ...inProject, path: "members", component: MembersPage }),
+  createRoute({ ...inProject, path: "activity", component: ActivityPage }),
   createRoute({
     ...inProject,
     path: "search",
@@ -43,7 +49,7 @@ const projectChildren = [
 ];
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([projectsRoute, projectRoute.addChildren(projectChildren)]),
+  routeTree: rootRoute.addChildren([projectsRoute, usersRoute, inviteRoute, projectRoute.addChildren(projectChildren)]),
 });
 
 declare module "@tanstack/react-router" {

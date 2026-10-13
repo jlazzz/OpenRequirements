@@ -24,6 +24,7 @@ import { type FormEvent, useRef, useState } from "react";
 import {
   type Attributes,
   api,
+  canEdit,
   type Field,
   formatValue,
   type ProjectDetail,
@@ -67,6 +68,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
     queryFn: () => api<SetItems>(`sets/${set.id}/items`),
   });
   const count = itemsWithin(data.nodes, folder?.id ?? set.id).length;
+  const editor = canEdit(data.role);
 
   return (
     <Stack gap="sm">
@@ -90,11 +92,13 @@ function Container({ data, set, folder, title }: ContainerProps) {
               { value: "reading", label: "Reading" },
             ]}
           />
-          {folder && <NodeActions data={data} node={folder} />}
-          <Button variant="default" onClick={() => setAdding("folder")}>
-            Add folder
-          </Button>
-          <Button onClick={() => setAdding("item")}>Add item</Button>
+          {editor && folder && <NodeActions data={data} node={folder} />}
+          {editor && (
+            <Button variant="default" onClick={() => setAdding("folder")}>
+              Add folder
+            </Button>
+          )}
+          {editor && <Button onClick={() => setAdding("item")}>Add item</Button>}
         </Group>
       </Group>
 
@@ -360,7 +364,9 @@ function ListTable({
             ))}
           </Menu.Dropdown>
         </Menu>
-        <Switch label="Edit in place" checked={editing} onChange={(e) => setEditing(e.currentTarget.checked)} />
+        {canEdit(data.role) && (
+          <Switch label="Edit in place" checked={editing} onChange={(e) => setEditing(e.currentTarget.checked)} />
+        )}
         {drafted.length > 0 && (
           <Group gap="xs" ml="auto">
             <Text size="sm">

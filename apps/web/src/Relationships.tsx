@@ -15,7 +15,7 @@ import {
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, type ProjectDetail, type ProjectLinks, type TreeNode } from "./api.ts";
+import { api, canEdit, type ProjectDetail, type ProjectLinks, type TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 
 type Direction = "upstream" | "downstream";
@@ -34,6 +34,7 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
   const queryClient = useQueryClient();
   const links = useLinks(projectId);
   const [adding, setAdding] = useState<Direction | null>(null);
+  const editor = canEdit(data.role);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["projects", projectId, "links"] });
   const remove = useMutation({
     mutationFn: (linkId: string) => api(`links/${linkId}`, undefined, "DELETE"),
@@ -53,14 +54,16 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
           <Text size="sm" fw={600}>
             {direction === "upstream" ? "Upstream" : "Downstream"} ({rows.length})
           </Text>
-          <Button
-            size="compact-xs"
-            variant="default"
-            aria-label={`Add ${direction} relationship`}
-            onClick={() => setAdding(direction)}
-          >
-            Add
-          </Button>
+          {editor && (
+            <Button
+              size="compact-xs"
+              variant="default"
+              aria-label={`Add ${direction} relationship`}
+              onClick={() => setAdding(direction)}
+            >
+              Add
+            </Button>
+          )}
         </Group>
         {rows.length === 0 && (
           <Text size="sm" c="dimmed">
@@ -83,16 +86,18 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
                     {typeName(link.typeId)}
                   </Text>
                 </Box>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="sm"
-                  aria-label={`Remove relationship with ${other.uid}`}
-                  onClick={() => remove.mutate(link.id)}
-                  loading={remove.isPending && remove.variables === link.id}
-                >
-                  ×
-                </ActionIcon>
+                {editor && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    aria-label={`Remove relationship with ${other.uid}`}
+                    onClick={() => remove.mutate(link.id)}
+                    loading={remove.isPending && remove.variables === link.id}
+                  >
+                    ×
+                  </ActionIcon>
+                )}
               </Group>
             ),
         )}

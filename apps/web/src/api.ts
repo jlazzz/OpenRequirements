@@ -14,7 +14,11 @@ export type TreeNode = {
   /** Items only. */
   uid: string | null;
 };
-export type ProjectDetail = { project: Project; sets: ProjectSet[]; nodes: TreeNode[] };
+export type Role = "viewer" | "reviewer" | "editor" | "admin";
+/** `role` is the signed-in user's role in the project. It only decides what the screens offer; the server checks every action. */
+export type ProjectDetail = { project: Project; role: Role; sets: ProjectSet[]; nodes: TreeNode[] };
+export const canEdit = (role: Role | undefined) => role === "editor" || role === "admin";
+export const canComment = (role: Role | undefined) => role !== undefined && role !== "viewer";
 export type Item = {
   id: string;
   setId: string;
@@ -85,3 +89,22 @@ export async function uploadImage(projectId: string, file: File): Promise<string
   if (!res.ok) throw new Error(data.error ?? data.message ?? `Upload failed (${res.status})`);
   return data.src;
 }
+
+export type Member = { userId: string; name: string; email: string; role: Role };
+export type Comment = {
+  id: string;
+  body: string;
+  mentions: string[];
+  createdAt: string;
+  authorId: string;
+  author: string;
+};
+export type ActivityEvent = {
+  id: string;
+  at: string;
+  actor: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  data: { label?: string; mentions?: string[] } | null;
+};
