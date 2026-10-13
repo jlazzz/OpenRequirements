@@ -43,7 +43,8 @@ Project: Infusion Pump
 └───────────────┴───────────────────────────────────┴──────────────────┘
 ```
 
-- **Left:** explorer tree of sets, folders and items.
+- **Left:** explorer tree of sets, folders and items. Owner feedback, 2026-10-13: it must stay usable with hundreds of items, like Jama's. So rows are compact and on one line, each has an icon for set, folder or item, folders open and close and start closed, and the panel can be dragged wider.
+- **Item state.** The enum field named "Status" is an item's state. Every view that shows several items shows it with a fixed colour per state: explorer (dot), List, Reading, matrix, search, baseline.
 - **Centre:** the selected set, folder or item.
 - **Right:** side panel for the selected item: relationships, versions, comments, activity.
 
@@ -111,6 +112,7 @@ Bold, italic, lists, headings, links, **tables**, **images** and **equations** (
 - Excel / CSV import with column mapping, and export of any List view.
 - JSON full-project backup and restore, including history and attachments.
 - Not in Phase 1: Word export, PDF export, ReqIF.
+- Reading view has "Print or save as PDF": the browser prints the document without the explorer and toolbars. A designed PDF or Word export stays in Phase 2.
 - As built (ADR 0006): import adds new items to the set or folder being viewed; export is CSV; a restore always creates a new project and is for instance administrators.
 
 ## 9. Phase 1 scope change

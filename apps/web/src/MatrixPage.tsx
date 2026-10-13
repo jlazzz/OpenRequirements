@@ -4,6 +4,7 @@ import type { TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
+import { StatusBadge, StatusDot } from "./Status.tsx";
 
 /** Traceability matrix: the items of one set down the side, another set across the top, a mark where two are linked. */
 export function MatrixPage() {
@@ -62,10 +63,11 @@ export function MatrixPage() {
                   {cols.map((col) => (
                     <Table.Th key={col.id} ta="center" style={{ whiteSpace: "nowrap" }}>
                       <Tooltip label={col.name}>
-                        <RouterAnchor {...item(col)} size="sm">
+                        <RouterAnchor {...item(col)} size="sm" mr={4}>
                           {col.uid}
                         </RouterAnchor>
                       </Tooltip>
+                      <StatusDot status={col.status} />
                     </Table.Th>
                   ))}
                 </Table.Tr>
@@ -74,9 +76,10 @@ export function MatrixPage() {
                 {rows.map((row) => (
                   <Table.Tr key={row.id}>
                     <Table.Th scope="row" fw={400}>
-                      <RouterAnchor {...item(row)} size="sm">
+                      <RouterAnchor {...item(row)} size="sm" mr={6}>
                         {row.uid} {row.name}
                       </RouterAnchor>
+                      <StatusBadge status={row.status} />
                     </Table.Th>
                     {cols.map((col) => (
                       <Table.Td key={col.id} ta="center" bg={linked(row, col) ? "blue.0" : undefined}>

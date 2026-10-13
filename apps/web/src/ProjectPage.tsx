@@ -1,9 +1,11 @@
 import { ActionIcon, Alert, Box, Button, Flex, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import { useLocalStorage } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect } from "react";
 import { api, type ProjectDetail, type TreeNode } from "./api.ts";
 import { RouterNavLink } from "./links.tsx";
+import { KindIcon, StatusDot } from "./Status.tsx";
 
 export function useProject() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -25,8 +27,28 @@ export function ProjectPage() {
   const project = useProject();
   const selected = useParams({ strict: false });
   const navigate = useNavigate();
-  // Everything starts expanded; this holds the ids the user has collapsed.
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Sets start open and folders closed, so a project with hundreds of items opens as a short list.
+  // This holds the ids the user has switched the other way, and is remembered per browser.
+  const [toggled, setToggled] = useLocalStorage<string[]>({
+    key: `explorer-toggled:${selected.projectId}`,
+    defaultValue: [],
+  });
+  const nodeList = project.data?.nodes;
+  const selectedNodeId = selected.nodeId;
+  // Opens the folders around the selected item, so it is always visible after following a link.
+  useEffect(() => {
+    const closed: string[] = [];
+    let at = nodeList?.find((n) => n.id === selectedNodeId);
+    while (at?.parentId) {
+      const parentId = at.parentId;
+      closed.push(parentId);
+      at = nodeList?.find((n) => n.id === parentId);
+    }
+    setToggled((previous) => {
+      const missing = closed.filter((id) => !previous.includes(id));
+      return missing.length > 0 ? [...previous, ...missing] : previous;
+    });
+  }, [nodeList, selectedNodeId, setToggled]);
 
   if (project.isPending) return null;
   if (project.isError) {
@@ -39,11 +61,8 @@ export function ProjectPage() {
   const { project: info, sets, nodes } = project.data;
   const selectedId = selected.nodeId ?? selected.setId;
   const toggle = (id: string) =>
-    setCollapsed((previous) => {
-      const next = new Set(previous);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+    setToggled((previous) => (previous.includes(id) ? previous.filter((other) => other !== id) : [...previous, id]));
+  const folderIds = nodes.filter((n) => n.kind === "folder").map((n) => n.id);
 
   /** One explorer level: each row is an expand button (when it has children) and a link. */
   const branch = (containerId: string | null, depth: number) => {
@@ -56,22 +75,30 @@ export function ProjectPage() {
         {rows.map(({ id, node, set }) => {
           const label = set ? set.name : node.kind === "item" ? `${node.uid} ${node.name}` : node.name;
           const hasChildren = nodes.some((n) => (n.parentId ?? n.setId) === id);
-          const open = !collapsed.has(id);
+          const open = Boolean(set) !== toggled.includes(id);
           const link = {
             label,
             active: id === selectedId,
             "aria-current": id === selectedId ? ("page" as const) : undefined,
-            py: 4,
+            py: 1,
+            px: 6,
+            noWrap: true,
+            // Lets a long name be cut short with "…" instead of widening the explorer.
+            style: { flex: 1, minWidth: 0 },
+            title: label,
             fw: set ? 600 : undefined,
+            leftSection: <KindIcon kind={set ? "set" : node.kind} />,
+            rightSection: node?.kind === "item" ? <StatusDot status={node.status} /> : undefined,
+            styles: { section: { marginInlineEnd: 6 }, label: { fontSize: "var(--mantine-font-size-sm)" } },
           };
           return (
             <li key={id}>
-              <Group gap={0} wrap="nowrap" pl={depth * 16 + 4}>
+              <Group gap={0} wrap="nowrap" pl={depth * 14 + 2}>
                 {hasChildren ? (
                   <ActionIcon
                     variant="subtle"
                     color="gray"
-                    size="sm"
+                    size="xs"
                     aria-expanded={open}
                     aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
                     onClick={() => toggle(id)}
@@ -79,7 +106,7 @@ export function ProjectPage() {
                     {open ? "▾" : "▸"}
                   </ActionIcon>
                 ) : (
-                  <Box w={22} style={{ flexShrink: 0 }} />
+                  <Box w={18} style={{ flexShrink: 0 }} />
                 )}
                 {set ? (
                   <RouterNavLink
@@ -108,13 +135,23 @@ export function ProjectPage() {
   };
 
   return (
-    <Flex h="100%">
+    <Flex h="100%" className="print-flow">
       <Box
         component="nav"
         aria-label="Explorer"
-        w={300}
+        className="print-hide"
+        w={320}
+        miw={200}
+        maw="60vw"
         bg="gray.0"
-        style={{ borderRight: "1px solid var(--mantine-color-gray-3)", overflow: "auto", flexShrink: 0 }}
+        // Drag the bottom-right corner to make the explorer wider or narrower.
+        style={{
+          borderRight: "1px solid var(--mantine-color-gray-3)",
+          overflowX: "hidden",
+          overflowY: "auto",
+          flexShrink: 0,
+          resize: "horizontal",
+        }}
       >
         <Text fw={700} p="sm" pb="xs">
           {info.name}
@@ -137,6 +174,20 @@ export function ProjectPage() {
             />
           </form>
         </search>
+        <Group gap={4} mx="sm" mb={4}>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="gray"
+            onClick={() => setToggled(folderIds)}
+            disabled={folderIds.length === 0}
+          >
+            Expand all
+          </Button>
+          <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setToggled([])}>
+            Collapse all
+          </Button>
+        </Group>
         {branch(null, 0)}
         <RouterNavLink
           to="/projects/$projectId/matrix"
@@ -175,7 +226,7 @@ export function ProjectPage() {
           py={4}
         />
       </Box>
-      <Box flex={1} p="lg" style={{ overflow: "auto" }}>
+      <Box flex={1} p="lg" className="print-flow" style={{ overflow: "auto" }}>
         <Outlet />
       </Box>
     </Flex>

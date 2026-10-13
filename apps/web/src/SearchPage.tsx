@@ -4,6 +4,7 @@ import { useSearch } from "@tanstack/react-router";
 import { api } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { useProject } from "./ProjectPage.tsx";
+import { StatusBadge } from "./Status.tsx";
 
 /** Items of the project whose ID, name, description or field values contain every word searched for. */
 export function SearchPage() {
@@ -42,6 +43,7 @@ export function SearchPage() {
             <Table.Tr>
               <Table.Th w={130}>ID</Table.Th>
               <Table.Th>Name</Table.Th>
+              <Table.Th>Status</Table.Th>
               <Table.Th>Set</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -53,6 +55,9 @@ export function SearchPage() {
                   <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }}>
                     {node.name}
                   </RouterAnchor>
+                </Table.Td>
+                <Table.Td>
+                  <StatusBadge status={node.status} />
                 </Table.Td>
                 <Table.Td>{project.sets.find((s) => s.id === node.setId)?.name}</Table.Td>
               </Table.Tr>

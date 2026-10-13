@@ -1,4 +1,5 @@
 import "@mantine/core/styles.css";
+import "./print.css";
 import { createTheme, MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";

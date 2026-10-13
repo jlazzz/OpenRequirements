@@ -13,6 +13,8 @@ export type TreeNode = {
   name: string;
   /** Items only. */
   uid: string | null;
+  /** Items only: the value of the item's Status field, if it has one. */
+  status?: string | null;
 };
 export type Role = "viewer" | "reviewer" | "editor" | "admin";
 /** `role` is the signed-in user's role in the project. It only decides what the screens offer; the server checks every action. */

@@ -118,7 +118,16 @@ function Shell({ user }: { user: User }) {
 
   return (
     <>
-      <Group component="header" h={TOPBAR_HEIGHT} px="md" gap="lg" bg="dark.7" c="white" wrap="nowrap">
+      <Group
+        component="header"
+        className="print-hide"
+        h={TOPBAR_HEIGHT}
+        px="md"
+        gap="lg"
+        bg="dark.7"
+        c="white"
+        wrap="nowrap"
+      >
         <Text fw={700}>Requirements</Text>
         <nav aria-label="Main">
           <RouterAnchor to="/" c="white" size="sm">
@@ -137,7 +146,7 @@ function Shell({ user }: { user: User }) {
           Sign out
         </Button>
       </Group>
-      <main style={{ height: `calc(100vh - ${TOPBAR_HEIGHT}px)`, overflow: "auto" }}>
+      <main className="print-flow" style={{ height: `calc(100vh - ${TOPBAR_HEIGHT}px)`, overflow: "auto" }}>
         <Outlet />
       </main>
       <Modal opened={changing} onClose={() => setChanging(false)} title={`${user.name}: change password`}>

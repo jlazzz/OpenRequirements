@@ -212,6 +212,11 @@ test("saving an item appends a revision and keeps the old one", async () => {
   expect(item).toMatchObject({ revision: 2, description: textToDoc("5 V DC"), attributes: { [status]: "Approved" } });
   const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
   expect(list.items[0]).toMatchObject({ revision: 2, attributes: { [status]: "Approved" } });
+  // The project tree carries each item's state, for the explorer and other overviews.
+  const tree = (
+    await get(`/api/projects/${(await get("/api/projects", cookie)).json().projects[0].id}`, cookie)
+  ).json();
+  expect(tree.nodes).toEqual([expect.objectContaining({ id, status: "Approved" })]);
 
   const history = await db.execute(sql`select number, description, change_reason from item_revisions order by number`);
   expect(history.rows).toEqual([

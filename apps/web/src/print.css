@@ -1,0 +1,13 @@
+/* biome-ignore-all lint/complexity/noImportantStyles: these must win over the inline styles the components set */
+/* Printing, which is also how a page is saved as a PDF: only the content, flowing over as many pages as it needs. */
+@media print {
+  .print-hide {
+    display: none !important;
+  }
+  .print-flow {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    padding: 0 !important;
+  }
+}

@@ -41,6 +41,7 @@ import { NodeActions } from "./NodeActions.tsx";
 import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { RichView } from "./RichView.tsx";
+import { StatusBadge } from "./Status.tsx";
 
 export function SetPage() {
   const project = useProject();
@@ -87,7 +88,12 @@ function Container({ data, set, folder, title }: ContainerProps) {
             {count === 1 ? "item" : "items"}
           </Text>
         </div>
-        <Group gap="xs">
+        <Group gap="xs" className="print-hide">
+          {view === "reading" && (
+            <Button variant="default" onClick={() => window.print()}>
+              Print or save as PDF
+            </Button>
+          )}
           <SegmentedControl
             aria-label="View"
             value={view === "reading" ? "reading" : "list"}
@@ -170,12 +176,15 @@ function ReadingView({ data, list, containerId }: { data: ProjectDetail; list: S
         </section>
       ) : (
         <article key={node.id} style={{ marginBottom: 16 }}>
-          <Text fw={600}>
-            <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }} inherit>
-              {node.uid}
-            </RouterAnchor>{" "}
-            {node.name}
-          </Text>
+          <Group gap="xs" wrap="nowrap" align="baseline">
+            <Text fw={600}>
+              <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }} inherit>
+                {node.uid}
+              </RouterAnchor>{" "}
+              {node.name}
+            </Text>
+            <StatusBadge status={node.status} />
+          </Group>
           <RichView doc={details.get(node.id)?.description ?? { type: "doc" }} />
         </article>
       ),
@@ -484,6 +493,8 @@ function ListTable({
                           value={row.attributes[column.id]}
                           onChange={(value) => change(row, { attributes: { ...row.attributes, [column.id]: value } })}
                         />
+                      ) : column.field?.name === "Status" ? (
+                        <StatusBadge status={row.attributes[column.id]} />
                       ) : (
                         cell(row, column.id)
                       )}

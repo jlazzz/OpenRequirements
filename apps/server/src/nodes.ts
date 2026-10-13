@@ -10,7 +10,10 @@ import { descendantIds, placeBefore } from "./domain/tree.ts";
 const idParam = (name: string) =>
   ({ type: "object", required: [name], properties: { [name]: { type: "string", format: "uuid" } } }) as const;
 
-/** Every live folder and item of a project, in sibling order, with each item's current name. */
+/**
+ * Every live folder and item of a project, in sibling order, with each item's current name and state.
+ * An item's state is the value of its type's enum field named "Status", when the type has one.
+ */
 export async function projectNodes(db: Db, projectId: string) {
   // shortcut: loads every node of the project at once, switch to loading per folder when projects reach tens of thousands of items
   const rows = await db
@@ -27,14 +30,30 @@ export async function projectNodes(db: Db, projectId: string) {
     .where(and(eq(sets.projectId, projectId), isNull(nodes.deletedAt)))
     .orderBy(nodes.position);
   const latest = await db
-    .selectDistinctOn([itemRevisions.itemId], { itemId: itemRevisions.itemId, name: itemRevisions.name })
+    .selectDistinctOn([itemRevisions.itemId], {
+      itemId: itemRevisions.itemId,
+      name: itemRevisions.name,
+      status: sql<string | null>`${itemRevisions.attributes} ->> ${attributeDefinitions.id}::text`,
+    })
     .from(itemRevisions)
     .innerJoin(nodes, eq(nodes.id, itemRevisions.itemId))
     .innerJoin(sets, eq(sets.id, nodes.setId))
+    .leftJoin(
+      attributeDefinitions,
+      and(
+        eq(attributeDefinitions.itemTypeId, sets.itemTypeId),
+        eq(attributeDefinitions.name, "Status"),
+        eq(attributeDefinitions.type, "enum"),
+      ),
+    )
     .where(eq(sets.projectId, projectId))
     .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
-  const itemNames = new Map(latest.map((r) => [r.itemId, r.name]));
-  return rows.map((n) => ({ ...n, name: n.kind === "item" ? (itemNames.get(n.id) ?? "") : (n.name ?? "") }));
+  const current = new Map(latest.map((r) => [r.itemId, r]));
+  return rows.map((n) => ({
+    ...n,
+    name: n.kind === "item" ? (current.get(n.id)?.name ?? "") : (n.name ?? ""),
+    status: current.get(n.id)?.status ?? null,
+  }));
 }
 
 /** An item type's field definitions, in display order. */

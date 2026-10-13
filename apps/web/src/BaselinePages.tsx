@@ -23,6 +23,7 @@ import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { RichView } from "./RichView.tsx";
+import { StatusBadge } from "./Status.tsx";
 import { RevisionDiff } from "./Versions.tsx";
 
 type Baseline = { id: string; name: string; setId: string | null; createdAt: string; author: string };
@@ -177,7 +178,8 @@ export function BaselinePage() {
       : new Map<string, BaselineChange>();
     const added = itemsWithin(project.nodes, set.id).filter((n) => changes.get(n.id) === "added");
     const rows = [...frozen, ...added].filter((row) => !differencesOnly || changes.has(row.id));
-    return { set, now, changes, rows, total: frozen.length };
+    const statusField = now?.fields.find((f) => f.name === "Status" && f.type === "enum")?.id ?? "";
+    return { set, now, changes, rows, total: frozen.length, statusField };
   });
   const differences = sections.reduce((sum, section) => sum + section.changes.size, 0);
 
@@ -217,7 +219,7 @@ export function BaselinePage() {
         />
       </Group>
 
-      {sections.map(({ set, changes, rows, total }) => (
+      {sections.map(({ set, changes, rows, total, statusField }) => (
         <section key={set.id}>
           <Title order={2} size="h4" mb={4}>
             {set.name}{" "}
@@ -235,6 +237,7 @@ export function BaselinePage() {
                 <Table.Tr>
                   <Table.Th w={130}>ID</Table.Th>
                   <Table.Th>Name</Table.Th>
+                  <Table.Th w={120}>Status then</Table.Th>
                   <Table.Th w={200}>Folder</Table.Th>
                   <Table.Th w={90}>Version</Table.Th>
                   <Table.Th w={150}>Compared with now</Table.Th>
@@ -251,6 +254,9 @@ export function BaselinePage() {
                         </UnstyledButton>
                       </Table.Td>
                       <Table.Td c={change === "added" ? "dimmed" : undefined}>{row.name}</Table.Td>
+                      <Table.Td>
+                        <StatusBadge status={frozenById.get(row.id)?.attributes?.[statusField]} />
+                      </Table.Td>
                       <Table.Td>{change !== "added" && row.parentId && frozenById.get(row.parentId)?.name}</Table.Td>
                       <Table.Td>{frozenById.get(row.id)?.revision}</Table.Td>
                       <Table.Td>
