@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (wave 4 merged)
+Last updated: 2026-10-14 (A2 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A2 slice 3, validation pack: `npm run validation-pack` builds a zip for a release through the API (baseline `vX.Y.Z` made if missing; Word, ReqIF and CSV of it, traceability matrix, per-requirement verification with the CI run of each result, manifest with image digest and SBOM hash); `release.yml` job `validation-pack` attaches it when `REQ_URL` and `REQ_TOKEN` exist; [user guide](docs/user-guide/validation-pack.md). Tried against a scratch instance loaded by `npm run dogfood`; the workflow job has never run. No browser versions, known-gaps list, or Postgres version in it; no route or migration (2026-10-14)
 - CI upload to the tool: `ci.yml` writes `junit.xml` and runs `scripts/ci/upload-results.ts` (JUnit with the `// @req` UID put in front of each test name, labelled with commit, branch and run URL; then the `@req` scanner) when the secrets `REQ_URL` and `REQ_TOKEN` exist, not on fork PRs. Tried against a scratch server with a real token; the workflow itself has never run on GitHub, and a local instance is unreachable from GitHub runners. Only tests with a `@req` tag match (2026-10-14)
 - A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
