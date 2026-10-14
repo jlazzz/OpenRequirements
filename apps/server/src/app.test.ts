@@ -1027,6 +1027,9 @@ test("someone outside a project is refused on every route that names something i
     testRunId: (await get(`/api/test-cycles/${testCycleId}`, owner)).json().runs[0].id,
     webhookId: (await post(`/api/projects/${projectId}/webhooks`, { url: "http://127.0.0.1:9/hook" }, owner)).json().id,
     referenceId: (await post(`/api/items/${itemId}/references`, { url: "https://example.com/x" }, owner)).json().id,
+    itemTypeId: (await get(`/api/projects/${projectId}/types`, owner)).json().itemTypes[0].id,
+    fieldId: (await get(`/api/projects/${projectId}/types`, owner)).json().itemTypes[0].fields[0].id,
+    linkTypeId: typeId,
     integrationId: (
       await post(`/api/projects/${projectId}/integrations`, { kind: "github", baseUrl: "http://127.0.0.1:9" }, owner)
     ).json().id,
@@ -1362,7 +1365,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 7, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 8, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1529,7 +1532,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 8 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 9 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));

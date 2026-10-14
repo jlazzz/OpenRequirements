@@ -30,6 +30,7 @@ import { reviewRoutes } from "./reviews.ts";
 import { testPlanRoutes } from "./testplans.ts";
 import { testRunRoutes } from "./testruns.ts";
 import { traceRoutes } from "./trace.ts";
+import { typeRoutes } from "./types.ts";
 import { verificationRoutes } from "./verification.ts";
 import { webhookRoutes } from "./webhooks.ts";
 
@@ -459,6 +460,7 @@ export async function buildApp(
     takeReauth,
   };
   projectRoutes(context);
+  typeRoutes(context);
   nodeRoutes(context);
   linkRoutes(context);
   traceRoutes(context);

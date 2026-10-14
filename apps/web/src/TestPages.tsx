@@ -486,14 +486,14 @@ export function TestPlanPage() {
   const groups = [...new Set(cases.map((c) => c.group).filter(Boolean))].sort();
 
   // Where test cases can be added from: a whole set of test cases, one of its folders, or every test case linked by
-  // "Verified by" to the items of another set.
+  // the verifying relationship type ("Verified by") to the items of another set.
   const testSets = project.sets.filter(isTestSet);
   const isTestCase = (id: string) => testSets.some((set) => set.id === nodes.get(id)?.setId);
   const pathOf = (folder: TreeNode): string => {
     const parent = folder.parentId ? nodes.get(folder.parentId) : undefined;
     return parent ? `${pathOf(parent)} / ${folder.name}` : folder.name;
   };
-  const verifiedBy = links?.linkTypes.find((type) => /^verified by$/i.test(type.name.trim()))?.id;
+  const verifying = new Set(links?.linkTypes.filter((type) => type.role === "verifies").map((type) => type.id));
   const sources = [
     { group: "A whole set", items: testSets.map((set) => ({ value: `in:${set.id}`, label: set.name })) },
     {
@@ -515,7 +515,7 @@ export function TestPlanPage() {
     if (kind === "in") return inside;
     const verified = new Set(inside);
     const tests = (links?.links ?? [])
-      .filter((link) => link.typeId === verifiedBy && verified.has(link.upstreamId) && isTestCase(link.downstreamId))
+      .filter((link) => verifying.has(link.typeId) && verified.has(link.upstreamId) && isTestCase(link.downstreamId))
       .map((link) => link.downstreamId);
     return [...new Set(tests)];
   };

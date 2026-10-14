@@ -194,7 +194,8 @@ function AddRelationship(props: {
   onDone: () => void;
 }) {
   const { data, links, itemId, direction } = props;
-  const [typeId, setTypeId] = useState(links.linkTypes[0]?.id ?? null);
+  const offered = links.linkTypes.filter((t) => !t.archivedAt);
+  const [typeId, setTypeId] = useState(offered[0]?.id ?? null);
   const [query, setQuery] = useState("");
   const create = useMutation({
     mutationFn: (otherId: string) =>
@@ -225,7 +226,7 @@ function AddRelationship(props: {
     <Stack gap="sm">
       <Select
         label="Relationship type"
-        data={links.linkTypes.map((t) => ({ value: t.id, label: t.name }))}
+        data={offered.map((t) => ({ value: t.id, label: t.name }))}
         value={typeId}
         onChange={setTypeId}
         allowDeselect={false}

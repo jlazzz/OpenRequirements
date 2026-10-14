@@ -7,28 +7,40 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Version 5 added itemTypes.role,
 // test plans with their cases, cycles, runs and step results, and verificationResults.runId and defectUrl.
 // Version 6 added attachments.name, resultAttachments (which replace verificationResults.attachmentId), baselineVerification
-// and testCycles.baselineId. Version 7 added externalReferences. Older files are still restored.
-export const BACKUP_VERSION = 7;
+// and testCycles.baselineId. Version 7 added externalReferences. Version 8 added archivedAt on itemTypes,
+// attributeDefinitions, sets and linkTypes, attributeDefinitions.archivedOptions and linkTypes.role.
+// Older files are still restored.
+export const BACKUP_VERSION = 8;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | 5 | 6 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
   users: { id: string; email: string; name: string }[];
   members: { userId: string; role: "viewer" | "reviewer" | "editor" | "admin" }[];
-  itemTypes: { id: string; name: string; role: "test" | null }[];
+  itemTypes: { id: string; name: string; role: "test" | null; archivedAt: string | null }[];
   attributeDefinitions: {
     id: string;
     itemTypeId: string;
     name: string;
     type: string;
     options: string[] | null;
+    archivedOptions: string[];
     position: number;
+    archivedAt: string | null;
   }[];
-  sets: { id: string; itemTypeId: string; name: string; uidPrefix: string; uidCounter: number; position: number }[];
+  sets: {
+    id: string;
+    itemTypeId: string;
+    name: string;
+    uidPrefix: string;
+    uidCounter: number;
+    position: number;
+    archivedAt: string | null;
+  }[];
   nodes: {
     id: string;
     setId: string;
@@ -52,7 +64,7 @@ export type Backup = {
     statusOnly: boolean;
     createdAt: string;
   }[];
-  linkTypes: { id: string; name: string; position: number }[];
+  linkTypes: { id: string; name: string; role: "verifies" | null; position: number; archivedAt: string | null }[];
   links: {
     id: string;
     linkTypeId: string;
@@ -353,7 +365,10 @@ export function backupError(backup: Backup): string | null {
     const badText = docError(revision.description);
     if (badText) return `${where}: ${badText}`;
     const itemTypeId = typeOfSet.get(item.setId);
-    const fields = backup.attributeDefinitions.filter((field) => field.itemTypeId === itemTypeId);
+    // Old versions may hold values since taken out of a field's list.
+    const fields = backup.attributeDefinitions
+      .filter((field) => field.itemTypeId === itemTypeId)
+      .map((field) => ({ ...field, options: field.options && [...field.options, ...(field.archivedOptions ?? [])] }));
     const checked = checkAttributes(fields, revision.attributes);
     if ("error" in checked) return `${where}: ${checked.error}`;
   }

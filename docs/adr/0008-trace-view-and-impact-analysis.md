@@ -20,7 +20,7 @@ The owner asked for a Jama-style Trace view, impact analysis, a coverage summary
 
 ### Coverage has a target set
 
-"Reaches a test" means: some item downstream, at any depth, is in the target set. The target is chosen on the Trace view and sent as `?target=`. Left out, it is the first set whose item type name contains "test". Item types have no "is verification" flag; adding one would need a migration and an admin screen, and the picker covers the need.
+"Reaches a test" means: some item downstream, at any depth, is in the target set. The target is chosen on the Trace view and sent as `?target=`. Left out, it is the first set whose item type name contains "test". Item types have no "is verification" flag; adding one would need a migration and an admin screen, and the picker covers the need. Since then the default is the first set whose item type has the role `test` ([ADR 0018](0018-editable-types-and-roles.md)).
 
 Coverage looks at any depth, whatever number of levels the columns show.
 

@@ -85,7 +85,7 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         );
         await tx
           .insert(linkTypes)
-          .values(template.linkTypes.map((name, position) => ({ projectId: created.id, name, position })));
+          .values(template.linkTypes.map((type, position) => ({ projectId: created.id, ...type, position })));
         // The creator manages the new project.
         await tx
           .insert(projectMembers)
@@ -120,7 +120,7 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         })
         .from(sets)
         .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
-        .where(eq(sets.projectId, projectId))
+        .where(and(eq(sets.projectId, projectId), isNull(sets.archivedAt)))
         .orderBy(sets.position);
       // `role` tells the web app what to offer; the server checks every action again.
       return { project, role, sets: projectSets, nodes: await projectNodes(db, projectId) };

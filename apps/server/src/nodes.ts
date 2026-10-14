@@ -46,6 +46,7 @@ export async function projectNodes(db: Db, projectId: string) {
         eq(attributeDefinitions.itemTypeId, sets.itemTypeId),
         eq(attributeDefinitions.name, "Status"),
         eq(attributeDefinitions.type, "enum"),
+        isNull(attributeDefinitions.archivedAt),
       ),
     )
     .where(eq(sets.projectId, projectId))
@@ -58,7 +59,7 @@ export async function projectNodes(db: Db, projectId: string) {
   }));
 }
 
-/** An item type's field definitions, in display order. */
+/** An item type's field definitions, in display order. Removed fields are left out. */
 export function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
   return db
     .select({
@@ -68,7 +69,7 @@ export function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
       options: attributeDefinitions.options,
     })
     .from(attributeDefinitions)
-    .where(eq(attributeDefinitions.itemTypeId, itemTypeId))
+    .where(and(eq(attributeDefinitions.itemTypeId, itemTypeId), isNull(attributeDefinitions.archivedAt)))
     .orderBy(attributeDefinitions.position);
 }
 
@@ -412,7 +413,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
           return { error: [409, "Someone else saved a newer version of this item first."] } as const;
         }
         const fields = await fieldsOf(tx, item.itemTypeId);
-        const checked = checkAttributes(fields, body.attributes);
+        const checked = checkAttributes(fields, body.attributes, current.attributes);
         if ("error" in checked) return { error: [400, checked.error] } as const;
 
         const revision = current.number + 1;
@@ -713,7 +714,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
         let changed = 0;
         for (const now of current) {
           const uid = items.find((item) => item.id === now.itemId)?.uid ?? "";
-          const checked = checkAttributes(fields, { ...now.attributes, ...patch });
+          const checked = checkAttributes(fields, { ...now.attributes, ...patch }, now.attributes);
           if ("error" in checked) return { error: [400, `${uid}: ${checked.error}`] } as const;
           // An item that already has these values gets no new version.
           if (isDeepStrictEqual(checked.attributes, now.attributes)) continue;
@@ -763,7 +764,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
         })
         .from(nodes)
         .innerJoin(sets, eq(sets.id, nodes.setId))
-        .where(and(eq(sets.projectId, projectId), isNotNull(nodes.deletedAt)))
+        .where(and(eq(sets.projectId, projectId), isNotNull(nodes.deletedAt), isNull(sets.archivedAt)))
         .orderBy(desc(nodes.deletedAt), nodes.position)
         .limit(500);
       return {
@@ -782,7 +783,13 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
       const restored = await db.transaction(async (tx) => {
         const [node] = await tx.select().from(nodes).where(eq(nodes.id, nodeId));
         if (!node?.deletedAt) return null;
-        await tx.select({ id: sets.id }).from(sets).where(eq(sets.id, node.setId)).for("update");
+        // Nothing comes back into a removed set.
+        const [set] = await tx
+          .select({ archivedAt: sets.archivedAt })
+          .from(sets)
+          .where(eq(sets.id, node.setId))
+          .for("update");
+        if (set?.archivedAt) return null;
         // One delete stamps the node and its contents with the same time, which is how the group is found again.
         const group = await tx
           .select({ id: nodes.id, parentId: nodes.parentId, kind: nodes.kind })

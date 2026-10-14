@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { stepsError } from "@app/shared";
 
 export type FieldDef = { id: string; name: string; type: string; options: string[] | null };
@@ -29,14 +30,20 @@ function valueError({ type, options }: FieldDef, value: unknown): string | null 
 
 /**
  * Checks field values (keyed by field id) against an item type's field definitions.
- * Returns the values with empty ones removed, or the first problem found.
+ * Returns the values with empty ones removed, or the first problem found. A value equal to the one in `kept` (the
+ * item's current version) is kept unchecked: it was valid when saved, though its field or option may since be removed.
  */
 export function checkAttributes(
   fields: FieldDef[],
   values: Record<string, unknown>,
+  kept: Record<string, unknown> = {},
 ): { attributes: Record<string, unknown> } | { error: string } {
   const attributes: Record<string, unknown> = {};
   for (const [id, value] of Object.entries(values)) {
+    if (id in kept && isDeepStrictEqual(value, kept[id])) {
+      attributes[id] = value;
+      continue;
+    }
     const field = fields.find((f) => f.id === id);
     if (!field) return { error: `Unknown field: ${id}` };
     if (value === null || value === "" || (Array.isArray(value) && value.length === 0)) continue;

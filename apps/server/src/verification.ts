@@ -25,9 +25,6 @@ const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const MAX_NOTE = 2000;
 const MAX_EVIDENCE = 20;
 
-/** The relationship type that says a test verifies a requirement. Matched by name, because types come from the template. */
-const isVerifiedBy = (name: string) => /^verified by$/i.test(name.trim());
-
 /**
  * The live items of a project and whether they are test cases. `revision` and `revisedAt` are the latest version that
  * changed more than Status: the one results are judged against (ADR 0010). `latest` is the newest version of any kind.
@@ -108,13 +105,16 @@ export async function areUploadsOf(db: Db | Tx, projectId: string, ids: string[]
 
 /**
  * Verification of a whole project: the status of every item that is not a test case, from the tests linked to it
- * by "Verified by" (the test is the downstream end), and the latest result of every test case that has one.
+ * by a relationship type with the role "verifies" (the test is the downstream end), and the latest result of every test case that has one.
  */
 export async function projectVerification(db: Db | Tx, projectId: string) {
   const items = await currentItems(db, projectId);
   const byId = new Map(items.map((i) => [i.id, i]));
-  const types = await db.select().from(linkTypes).where(eq(linkTypes.projectId, projectId));
-  const verifying = new Set(types.filter((t) => isVerifiedBy(t.name)).map((t) => t.id));
+  const types = await db
+    .select({ id: linkTypes.id })
+    .from(linkTypes)
+    .where(and(eq(linkTypes.projectId, projectId), eq(linkTypes.role, "verifies")));
+  const verifying = new Set(types.map((t) => t.id));
   // The latest result of each test case.
   const latest = new Map<string, { id: string; outcome: Outcome; revision: number; recordedAt: Date }>();
   const rows = await db

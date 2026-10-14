@@ -97,7 +97,7 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/export.ts, src/notifications.ts, src/recovery.ts, src/webhooks.ts, src/references.ts, src/oidc.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/types.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/export.ts, src/notifications.ts, src/recovery.ts, src/webhooks.ts, src/references.ts, src/oidc.ts   Feature route files: one per feature, taking `AppContext`
     src/mail.ts     Email outbox, the mail loop, and `notify()`, which writes notifications in the caller's transaction
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
@@ -137,7 +137,7 @@ e2e/                Playwright tests (empty)
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
 - Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for instance-admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
-- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId`, `reviewId`, `testPlanId`, `testCycleId`, `testRunId`, `webhookId`, `referenceId` or `integrationId`: a hook uses those names to refuse non-members before the body is read.
+- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId`, `reviewId`, `testPlanId`, `testCycleId`, `testRunId`, `webhookId`, `referenceId`, `integrationId`, `itemTypeId`, `fieldId` or `linkTypeId`: a hook uses those names to refuse non-members before the body is read.
 - `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
@@ -193,11 +193,12 @@ Use these terms exactly, in code, API and UI.
 User ─< ProjectMember >─ Project   (role; no Organization level yet: one instance is one organization)
 Invitation                         (email, token hash, expiry; accepted once)
 Project ─< Set ─< Node (tree: folder | item; external id from an import)
-Project ─< ItemType                (from the project template; a set has exactly one)
+Project ─< ItemType                (from the project template, then edited by a project admin; role "test" or none; a set has exactly one)
 Item ─< Draft                      (one per author; private until committed)
 Item ─< ItemRevision               (append-only: body, attributes JSONB, author, timestamp, change reason, status-only flag)
-ItemType ─< AttributeDefinition    (name, type, allowed values, required?)
-Project ─< LinkType                (name; from the template; no source→target rules)
+ItemType ─< AttributeDefinition    (name, type, allowed values and removed ones, required?)
+ItemType, AttributeDefinition, Set, LinkType: removed softly (`archivedAt`), never deleted
+Project ─< LinkType                (name; role "verifies" or none; from the template, then edited; no source→target rules)
 Link                               (upstream item, downstream item, type, revisions of both ends at creation; immutable, soft-deleted)
 Link ─< LinkRevision               (append-only: one per confirmation of a suspect link, with the revisions of both ends confirmed against)
 Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
@@ -229,7 +230,7 @@ User ─< PasswordReset               (token hash, expiry, used at; made by the 
 - **Versioning:** append-only revision tables. The "current" state is the latest revision. Baselines reference revision IDs, so they cost nothing to create and can never drift.
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision. When someone saved first, a three-way merge per field resolves it; others see who has a draft, never its content ([ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md)).
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
-- **Verification:** results are stored, the status is computed, never stored. Only direct "Verified by" links count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
+- **Verification:** results are stored, the status is computed, never stored. Only direct links of a type with the role `verifies` ("Verified by") count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
 - **Evidence and reports:** evidence files hang on a result, or on a run and its steps; only images are ever shown, everything else is a download. Baselines freeze verification status. Reports are computed from stored runs and results, nothing new is stored ([ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md)).
 - **Bulk item actions:** `POST /api/sets/:setId/bulk` deletes, moves or sets a field on up to 500 items of one set, all or none, with one audit event and (for edits) one new version per item.
 - **Test runs:** step results are append-only and a run's state is computed. Finishing a run appends an ordinary verification result at the version the cycle froze, so the status rule has one source. A Reviewer executes runs assigned to them, an Editor any run ([ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md)).

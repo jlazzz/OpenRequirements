@@ -269,6 +269,13 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
+        <RouterNavLink
+          to="/projects/$projectId/types"
+          params={{ projectId: info.id }}
+          label="Item types"
+          pl={26}
+          py={4}
+        />
         {project.data?.role === "admin" && (
           <RouterNavLink
             to="/projects/$projectId/integrations"

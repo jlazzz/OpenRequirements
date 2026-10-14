@@ -298,7 +298,7 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
           const count = counts.find((c) => c.setId === setId);
           if (!now || !count) throw new Error("matched item has no revision");
           const name = node.name.trim();
-          const checked = checkAttributes(count.fields, { ...now.attributes, ...node.attributes });
+          const checked = checkAttributes(count.fields, { ...now.attributes, ...node.attributes }, now.attributes);
           if ("error" in checked) return { error: [400, `Item "${name}" (${uid}): ${checked.error}`] } as const;
           const next = { name, description: node.description ?? now.description, attributes: checked.attributes };
           revisionOf.set(id, now.number);
@@ -333,7 +333,10 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
           return { error: [409, `You have unsaved drafts of ${uids}. Save or discard them first.`] } as const;
         }
 
-        const types = await tx.select({ id: linkTypes.id }).from(linkTypes).where(eq(linkTypes.projectId, projectId));
+        const types = await tx
+          .select({ id: linkTypes.id })
+          .from(linkTypes)
+          .where(and(eq(linkTypes.projectId, projectId), isNull(linkTypes.archivedAt)));
         // Relationships that already exist between matched items are left as they are.
         const existing =
           matchedIds.length < 2

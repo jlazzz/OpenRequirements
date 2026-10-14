@@ -17,6 +17,7 @@ import { SuspectPage } from "./SuspectPage.tsx";
 import { ActivityPage, MembersPage } from "./TeamPages.tsx";
 import { TestCyclePage, TestPlanPage, TestPlansPage, TestRunPage } from "./TestPages.tsx";
 import { TrashPage } from "./TrashPage.tsx";
+import { TypesPage } from "./TypesPage.tsx";
 import { InvitePage, ResetPasswordPage, UsersPage } from "./UsersPage.tsx";
 
 const rootRoute = createRootRoute({ component: Root });
@@ -65,6 +66,7 @@ const projectChildren = [
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
   createRoute({ ...inProject, path: "items/$nodeId/impact", component: ImpactPage }),
   createRoute({ ...inProject, path: "members", component: MembersPage }),
+  createRoute({ ...inProject, path: "types", component: TypesPage }),
   createRoute({ ...inProject, path: "integrations", component: IntegrationsPage }),
   createRoute({ ...inProject, path: "activity", component: ActivityPage }),
   createRoute({ ...inProject, path: "trash", component: TrashPage }),

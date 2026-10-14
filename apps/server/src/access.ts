@@ -4,13 +4,16 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Db } from "./db/client.ts";
 import {
   attachments,
+  attributeDefinitions,
   auditEvents,
   baselines,
   comments,
   externalReferences,
   integrations,
   itemRevisions,
+  itemTypes,
   links,
+  linkTypes,
   nodes,
   projectMembers,
   projects,
@@ -43,10 +46,20 @@ export type Where = {
   webhookId?: string;
   referenceId?: string;
   integrationId?: string;
+  itemTypeId?: string;
+  fieldId?: string;
+  linkTypeId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
-  if (where.setId) return (await db.select({ id: sets.projectId }).from(sets).where(eq(sets.id, where.setId)))[0]?.id;
+  if (where.setId) {
+    // A removed set is empty and reads as gone.
+    const rows = await db
+      .select({ id: sets.projectId })
+      .from(sets)
+      .where(and(eq(sets.id, where.setId), isNull(sets.archivedAt)));
+    return rows[0]?.id;
+  }
   if (where.nodeId) {
     const rows = await db
       .select({ id: sets.projectId })
@@ -117,6 +130,26 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
       .where(eq(externalReferences.id, where.referenceId));
     return rows[0]?.id;
   }
+  if (where.itemTypeId || where.fieldId) {
+    const rows = await db
+      .select({ id: itemTypes.projectId })
+      .from(itemTypes)
+      .where(
+        eq(
+          itemTypes.id,
+          where.itemTypeId ??
+            db
+              .select({ id: attributeDefinitions.itemTypeId })
+              .from(attributeDefinitions)
+              .where(eq(attributeDefinitions.id, where.fieldId as string)),
+        ),
+      );
+    return rows[0]?.id;
+  }
+  if (where.linkTypeId) {
+    return (await db.select({ id: linkTypes.projectId }).from(linkTypes).where(eq(linkTypes.id, where.linkTypeId)))[0]
+      ?.id;
+  }
   return where.projectId;
 }
 
@@ -152,9 +185,15 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
                             ? { referenceId: params.referenceId }
                             : params.integrationId
                               ? { integrationId: params.integrationId }
-                              : params.projectId
-                                ? { projectId: params.projectId }
-                                : null;
+                              : params.itemTypeId
+                                ? { itemTypeId: params.itemTypeId }
+                                : params.fieldId
+                                  ? { fieldId: params.fieldId }
+                                  : params.linkTypeId
+                                    ? { linkTypeId: params.linkTypeId }
+                                    : params.projectId
+                                      ? { projectId: params.projectId }
+                                      : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 

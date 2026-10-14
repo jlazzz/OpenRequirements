@@ -63,7 +63,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, 4, 5, 6, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, 5, 6, 7, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -71,17 +71,43 @@ const backupSchema = {
     itemTypes: {
       type: "array",
       // `role` is not in files older than version 5: their test case types are found by name, as the tool did then.
-      items: { ...row({ id, name: text(200), role: { enum: ["test", null] } }), required: ["id", "name"] },
+      // `archivedAt` is not in files older than version 8, nor in any of the other collections that have it.
+      items: {
+        ...row({ id, name: text(200), role: { enum: ["test", null] }, archivedAt: { ...whenOrNull, default: null } }),
+        required: ["id", "name"],
+      },
     },
-    attributeDefinitions: rows({
-      id,
-      itemTypeId: id,
-      name: text(200),
-      type: text(20),
-      options: { type: ["array", "null"], items: text(200) },
-      position: count,
-    }),
-    sets: rows({ id, itemTypeId: id, name: text(200), uidPrefix: text(20), uidCounter: count, position: count }),
+    attributeDefinitions: {
+      type: "array",
+      items: {
+        ...row({
+          id,
+          itemTypeId: id,
+          name: text(200),
+          type: text(20),
+          options: { type: ["array", "null"], items: text(200) },
+          archivedOptions: { type: "array", items: text(200), default: [] },
+          position: count,
+          archivedAt: { ...whenOrNull, default: null },
+        }),
+        required: ["id", "itemTypeId", "name", "type", "options", "position"],
+      },
+    },
+    sets: {
+      type: "array",
+      items: {
+        ...row({
+          id,
+          itemTypeId: id,
+          name: text(200),
+          uidPrefix: text(20),
+          uidCounter: count,
+          position: count,
+          archivedAt: { ...whenOrNull, default: null },
+        }),
+        required: ["id", "itemTypeId", "name", "uidPrefix", "uidCounter", "position"],
+      },
+    },
     nodes: rows({
       id,
       setId: id,
@@ -122,7 +148,20 @@ const backupSchema = {
         ],
       },
     },
-    linkTypes: rows({ id, name: text(200), position: count }),
+    linkTypes: {
+      type: "array",
+      items: {
+        // `role` is not in files older than version 8: there, the type named "Verified by" counted for verification.
+        ...row({
+          id,
+          name: text(200),
+          role: { enum: ["verifies", null] },
+          position: count,
+          archivedAt: { ...whenOrNull, default: null },
+        }),
+        required: ["id", "name", "position"],
+      },
+    },
     links: rows({
       id,
       linkTypeId: id,
@@ -451,19 +490,26 @@ export function backupRoutes(
           userId: m.userId,
           role: m.role,
         })),
-        itemTypes: types.map(({ id, name, role }) => ({ id, name, role })),
+        itemTypes: types.map(({ id, name, role, archivedAt }) => ({
+          id,
+          name,
+          role,
+          archivedAt: isoOrNull(archivedAt),
+        })),
         attributeDefinitions: types.length
-          ? await db
-              .select()
-              .from(attributeDefinitions)
-              .where(
-                inArray(
-                  attributeDefinitions.itemTypeId,
-                  types.map((t) => t.id),
-                ),
-              )
+          ? (
+              await db
+                .select()
+                .from(attributeDefinitions)
+                .where(
+                  inArray(
+                    attributeDefinitions.itemTypeId,
+                    types.map((t) => t.id),
+                  ),
+                )
+            ).map((field) => ({ ...field, archivedAt: isoOrNull(field.archivedAt) }))
           : [],
-        sets: projectSets.map(({ projectId: _, ...set }) => set),
+        sets: projectSets.map(({ projectId: _, ...set }) => ({ ...set, archivedAt: isoOrNull(set.archivedAt) })),
         nodes: allNodes.map(({ searchText: _, ...node }) => ({
           ...node,
           createdAt: iso(node.createdAt),
@@ -475,7 +521,10 @@ export function backupRoutes(
             createdAt: iso(r.createdAt),
           }),
         ),
-        linkTypes: (await db.select().from(linkTypes).where(inProject(linkTypes))).map(({ projectId: _, ...t }) => t),
+        linkTypes: (await db.select().from(linkTypes).where(inProject(linkTypes))).map(({ projectId: _, ...t }) => ({
+          ...t,
+          archivedAt: isoOrNull(t.archivedAt),
+        })),
         links: (await db.select().from(links).where(inProject(links))).map(({ projectId: _, ...link }) => ({
           ...link,
           createdAt: iso(link.createdAt),
@@ -691,10 +740,18 @@ export function backupRoutes(
           const role = (type: { name: string; role?: "test" | null }) =>
             type.role === undefined ? (/test/i.test(type.name) ? ("test" as const) : null) : type.role;
           for (const part of parts(backup.itemTypes)) {
-            await tx.insert(itemTypes).values(part.map((t) => ({ ...t, projectId, role: role(t) })));
+            await tx
+              .insert(itemTypes)
+              .values(part.map((t) => ({ ...t, projectId, role: role(t), archivedAt: dateOrNull(t.archivedAt) })));
           }
-          for (const part of parts(backup.attributeDefinitions)) await tx.insert(attributeDefinitions).values(part);
-          for (const part of parts(backup.sets)) await tx.insert(sets).values(part.map((s) => ({ ...s, projectId })));
+          for (const part of parts(backup.attributeDefinitions)) {
+            await tx
+              .insert(attributeDefinitions)
+              .values(part.map((field) => ({ ...field, archivedAt: dateOrNull(field.archivedAt) })));
+          }
+          for (const part of parts(backup.sets)) {
+            await tx.insert(sets).values(part.map((s) => ({ ...s, projectId, archivedAt: dateOrNull(s.archivedAt) })));
+          }
 
           // What search matches is derived from each item's latest version, so it is rebuilt, not trusted from the file.
           const latest = new Map<string, Backup["itemRevisions"][number]>();
@@ -720,7 +777,12 @@ export function backupRoutes(
             await tx.insert(itemRevisions).values(part.map((r) => ({ ...r, createdAt: date(r.createdAt) })));
           }
           for (const part of parts(backup.linkTypes)) {
-            await tx.insert(linkTypes).values(part.map((t) => ({ ...t, projectId })));
+            // Files older than version 8 have no role: there, the type named "Verified by" counted for verification.
+            const role = (t: { name: string; role?: "verifies" | null }) =>
+              t.role === undefined ? (/^verified by$/i.test(t.name.trim()) ? ("verifies" as const) : null) : t.role;
+            await tx
+              .insert(linkTypes)
+              .values(part.map((t) => ({ ...t, projectId, role: role(t), archivedAt: dateOrNull(t.archivedAt) })));
           }
           for (const part of parts(backup.links)) {
             await tx.insert(links).values(

@@ -91,7 +91,8 @@ export function formatValue(value: unknown): string {
   return value.every((entry) => typeof entry === "string") ? value.join(", ") : stepsToText(value as Step[]);
 }
 
-export type LinkType = { id: string; name: string };
+/** A relationship type. `role: "verifies"` marks the one whose links count for verification; a removed one only names old links. */
+export type LinkType = { id: string; name: string; role: "verifies" | null; archivedAt: string | null };
 /** A relationship: the upstream item is the source, the downstream item derives from, verifies or otherwise depends on it. */
 export type Link = { id: string; typeId: string; upstreamId: string; downstreamId: string };
 type Ends<T> = { upstream: T; downstream: T };

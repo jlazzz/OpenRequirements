@@ -127,6 +127,13 @@
       "when": 1791988511809,
       "tag": "0017_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791994220268,
+      "tag": "0018_editable_types",
+      "breakpoints": true
     }
   ]
 }

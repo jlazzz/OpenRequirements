@@ -128,7 +128,8 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
       const types = await db
-        .select({ id: linkTypes.id, name: linkTypes.name })
+        // Removed types are listed too, to name the links that still have them; `archivedAt` keeps them out of pickers.
+        .select({ id: linkTypes.id, name: linkTypes.name, role: linkTypes.role, archivedAt: linkTypes.archivedAt })
         .from(linkTypes)
         .where(eq(linkTypes.projectId, projectId))
         .orderBy(linkTypes.position);
@@ -175,7 +176,7 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
         const [type] = await tx
           .select({ id: linkTypes.id })
           .from(linkTypes)
-          .where(and(eq(linkTypes.id, typeId), eq(linkTypes.projectId, projectId)));
+          .where(and(eq(linkTypes.id, typeId), eq(linkTypes.projectId, projectId), isNull(linkTypes.archivedAt)));
         if (!type) return { error: [400, "Unknown relationship type"] } as const;
 
         const [existing] = await tx

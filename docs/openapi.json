@@ -293,6 +293,82 @@
         }
       }
     },
+    "/api/fields/{fieldId}": {
+      "delete": {
+        "tags": [
+          "fields"
+        ],
+        "parameters": [
+          {
+            "name": "fieldId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "fields"
+        ],
+        "parameters": [
+          {
+            "name": "fieldId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/integrations/{integrationId}": {
       "delete": {
         "tags": [
@@ -442,6 +518,145 @@
           }
         },
         "security": []
+      }
+    },
+    "/api/item-types/{itemTypeId}": {
+      "delete": {
+        "tags": [
+          "item-types"
+        ],
+        "parameters": [
+          {
+            "name": "itemTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "item-types"
+        ],
+        "parameters": [
+          {
+            "name": "itemTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "role": {
+                    "enum": [
+                      "test",
+                      null
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/item-types/{itemTypeId}/fields": {
+      "post": {
+        "tags": [
+          "item-types"
+        ],
+        "parameters": [
+          {
+            "name": "itemTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "type": {
+                    "enum": [
+                      "text",
+                      "number",
+                      "enum",
+                      "multi_enum",
+                      "date",
+                      "boolean",
+                      "steps"
+                    ]
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
       }
     },
     "/api/items/{itemId}": {
@@ -909,6 +1124,76 @@
                   "changeReason": {
                     "type": "string",
                     "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/link-types/{linkTypeId}": {
+      "delete": {
+        "tags": [
+          "link-types"
+        ],
+        "parameters": [
+          {
+            "name": "linkTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "link-types"
+        ],
+        "parameters": [
+          {
+            "name": "linkTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "role": {
+                    "enum": [
+                      "verifies",
+                      null
+                    ]
                   }
                 }
               }
@@ -1892,6 +2177,108 @@
         }
       }
     },
+    "/api/projects/{projectId}/item-types": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "role": {
+                    "enum": [
+                      "test",
+                      null
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/link-types": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "role": {
+                    "enum": [
+                      "verifies",
+                      null
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/links": {
       "get": {
         "tags": [
@@ -2256,6 +2643,61 @@
         }
       }
     },
+    "/api/projects/{projectId}/sets": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "uidPrefix",
+                  "itemTypeId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  },
+                  "uidPrefix": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9]{0,9}$"
+                  },
+                  "itemTypeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/test-plans": {
       "get": {
         "tags": [
@@ -2323,6 +2765,29 @@
       }
     },
     "/api/projects/{projectId}/trash": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/types": {
       "get": {
         "tags": [
           "projects"
@@ -2527,7 +2992,8 @@
                       4,
                       5,
                       6,
-                      7
+                      7,
+                      8
                     ]
                   },
                   "exportedAt": {
@@ -2634,6 +3100,14 @@
                             "test",
                             null
                           ]
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "default": null
                         }
                       }
                     }
@@ -2678,9 +3152,25 @@
                             "maxLength": 200
                           }
                         },
+                        "archivedOptions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "default": []
+                        },
                         "position": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "default": null
                         }
                       }
                     }
@@ -2722,6 +3212,14 @@
                         "position": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "default": null
                         }
                       }
                     }
@@ -2876,9 +3374,23 @@
                           "type": "string",
                           "maxLength": 200
                         },
+                        "role": {
+                          "enum": [
+                            "verifies",
+                            null
+                          ]
+                        },
                         "position": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "default": null
                         }
                       }
                     }
@@ -4162,6 +4674,72 @@
           }
         },
         "security": []
+      }
+    },
+    "/api/sets/{setId}": {
+      "delete": {
+        "tags": [
+          "sets"
+        ],
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "sets"
+        ],
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "\\S"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
       }
     },
     "/api/sets/{setId}/bulk": {

@@ -126,7 +126,7 @@ export const projects = pgTable("projects", {
   archivedAt: timestamp({ withTimezone: true }),
 });
 
-/** A kind of item with its own fields. Created from the project template; stored per project so it can become editable later. */
+/** A kind of item with its own fields. Created from the project template, then edited by a project admin. */
 export const itemTypes = pgTable("item_types", {
   id: uuid().primaryKey().defaultRandom(),
   projectId: uuid()
@@ -135,6 +135,8 @@ export const itemTypes = pgTable("item_types", {
   name: text().notNull(),
   // "test" marks the type whose items are test cases: they take results, steps and runs. Null for every other type.
   role: text().$type<"test">(),
+  // Removed by an admin. Kept so old versions and baselines still read; only a type no set uses can be removed.
+  archivedAt: timestamp({ withTimezone: true }),
 });
 
 export const attributeDefinitions = pgTable("attribute_definitions", {
@@ -147,7 +149,11 @@ export const attributeDefinitions = pgTable("attribute_definitions", {
   type: text().notNull(),
   // Allowed values, for enum and multi_enum only.
   options: jsonb().$type<string[]>(),
+  // Values removed from `options`. Old versions may still hold them; new values may not use them.
+  archivedOptions: jsonb().$type<string[]>().notNull().default([]),
   position: integer().notNull(),
+  // Removed by an admin. Old versions keep the field's values.
+  archivedAt: timestamp({ withTimezone: true }),
 });
 
 /** A container holding items of exactly one item type. */
@@ -166,6 +172,8 @@ export const sets = pgTable(
     // Last UID number handed out. Only ever increases, so UIDs are never reused.
     uidCounter: integer().notNull().default(0),
     position: integer().notNull(),
+    // Removed by an admin. Only an empty set can be removed; its UID prefix stays taken, so UIDs are never reused.
+    archivedAt: timestamp({ withTimezone: true }),
   },
   (t) => [unique().on(t.projectId, t.uidPrefix)],
 );
@@ -248,7 +256,11 @@ export const linkTypes = pgTable("link_types", {
     .notNull()
     .references(() => projects.id),
   name: text().notNull(),
+  // "verifies" marks the type whose links count for verification: the test case is the downstream end.
+  role: text().$type<"verifies">(),
   position: integer().notNull(),
+  // Removed by an admin: offered for no new link. Existing links keep it.
+  archivedAt: timestamp({ withTimezone: true }),
 });
 
 /** A directional relationship between two items of one project. Rows are never changed, only soft-deleted. */

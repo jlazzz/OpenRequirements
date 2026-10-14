@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (bundle H)
+Last updated: 2026-10-14 (bundle I, J5 slice 1)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J5 slice 1, editable item types: a project admin adds, renames and removes item types, fields, enum values, sets and relationship types on the "Item types" page. Remove is soft (`archivedAt`); old versions keep their values. Roles `test` and `verifies` replace the name rules, [ADR 0018](docs/adr/0018-editable-types-and-roles.md). Backup format version 8. Not checked in a browser (2026-10-14)
 - J5 slice 2, baseline to baseline: `GET /api/baselines/:baselineId/compare?with=` reports item, relationship (added, removed, became or stopped being suspect) and frozen verification differences; a "Compare with another baseline" picker on the baseline page (server test) (2026-10-14)
 - J5 slice 6, exports: the traceability matrix exports as CSV and Word from the rows on screen, a baseline exports as CSV with each item's frozen verification status and suspect relationships (new route `/api/baselines/:baselineId/csv`, entry in the baseline Export menu). `toDocx` takes an optional table. No new dependency (2026-10-14)
 - J5 slice 3: Trace view filters by relationship type and Status, traces a baseline (relationships and suspect flags as frozen), and draws 100 items at a time with "Show more". The project home page lists per set: items, not covered, suspect, verification. No new route or migration (2026-10-14)
@@ -50,6 +51,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J5 slice 1 (editable item types, fields, sets, relationship types): built, waiting for the owner's test.** Checkpoint: add a field to an item type, rename "Verified by" and see verification still work.
 - J5 slice 2 (baseline to baseline compare): built, waiting for the owner's test. Checkpoint: pick another baseline on a baseline page.
 - **J5 slice 6 (matrix and baseline exports): built, waiting for the owner's test.** Not checked in a browser.
 - **J5 slice 3 (trace filters, project dashboard): built, waiting for the owner's test.** Checkpoint: filter a trace by type and Status, trace a baseline, read the project home page.
@@ -96,7 +98,7 @@ Known gaps left for later milestones or owner decision:
 - Trace view: tracing a baseline shows current names and states, and drops items deleted since. The server still walks every item of the set; "show more" only limits the rows drawn.
 - Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
 - Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
-- Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. The relationship type is found by the name "Verified by". Tokens do not expire and show no "last used" date.
+- Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. Tokens do not expire and show no "last used" date.
 - Reviews: participants cannot be changed after creation, a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: no password expiry, lockout or inactivity timeout, and the audit log is not tamper-evident. Opening a review does not set Status to "In review".
 - Comparing two baselines lists differences only; it has no field-level diff.
 - Import updates items but never moves them, and an empty cell cannot clear a field. At most 5,000 folders and items per file. A folder name with "/" cannot be given in the Folder column.

@@ -98,7 +98,7 @@ export function ReqifImportPage() {
       queryFn: () => api<SetItems>(`sets/${set.id}/items`),
     })),
   });
-  const linkTypes = useLinks(projectId).data?.linkTypes;
+  const linkTypes = useLinks(projectId).data?.linkTypes.filter((t) => !t.archivedAt);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [mapping, setMapping] = useState<ReqifMapping>({ specifications: {}, relations: {} });
   const [problem, setProblem] = useState<string | null>(null);

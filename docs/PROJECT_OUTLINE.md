@@ -169,9 +169,9 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Projects and documents (create, rename, archive)
 - [ ] Document tree: headings and requirements, drag-to-reorder, nesting
 - [ ] Requirement editor: rich text (tables, images), auto-generated UIDs
-- [ ] Custom attribute definitions (text, number, enum, multi-enum, date, boolean)
+- [x] Custom attribute definitions (text, number, enum, multi-enum, date, boolean). Editable per project by its admin, 2026-10-14
 - [ ] Per-item revision history with a diff view
-- [ ] Link types (configurable) and links between items, including across documents
+- [x] Link types (configurable) and links between items, including across documents. Types editable per project, 2026-10-14
 - [ ] Views: document view (reads like a spec), table/grid view with filters, item detail
 - [ ] Traceability matrix (document A × document B)
 - [ ] Basic full-text search

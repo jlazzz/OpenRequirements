@@ -7,8 +7,8 @@ export type Template = {
   /** `role: "test"` marks the type whose items are test cases: they take results, steps and runs. */
   itemTypes: { name: string; role?: "test"; fields: { name: string; type: FieldType; options?: string[] }[] }[];
   sets: { name: string; uidPrefix: string; itemType: string }[];
-  /** Relationship types offered when linking two items. The first is the default. */
-  linkTypes: string[];
+  /** Relationship types offered when linking two items. The first is the default. `role: "verifies"` marks the one whose links count for verification. */
+  linkTypes: { name: string; role?: "verifies" }[];
 };
 
 type Field = Template["itemTypes"][number]["fields"][number];
@@ -41,7 +41,7 @@ export const templates: Template[] = [
       { name: "System Requirements", uidPrefix: "SYS", itemType: "Requirement" },
       { name: "Verification Tests", uidPrefix: "VER", itemType: "Test Case" },
     ],
-    linkTypes: ["Related to", "Derived from", "Verified by"],
+    linkTypes: [{ name: "Related to" }, { name: "Derived from" }, { name: "Verified by", role: "verifies" }],
   },
   {
     id: "spacecraft",
@@ -132,6 +132,12 @@ export const templates: Template[] = [
       { name: "System Tests", uidPrefix: "SVT", itemType: "Test Case" },
       { name: "Mission Validation", uidPrefix: "VAL", itemType: "Test Case" },
     ],
-    linkTypes: ["Derived from", "Verified by", "Mitigated by", "Interfaces with", "Related to"],
+    linkTypes: [
+      { name: "Derived from" },
+      { name: "Verified by", role: "verifies" },
+      { name: "Mitigated by" },
+      { name: "Interfaces with" },
+      { name: "Related to" },
+    ],
   },
 ];

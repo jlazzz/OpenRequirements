@@ -28,7 +28,7 @@ A result can be recorded on an item whose item type name contains "test". This i
 3. Every test has a current pass: **passing**.
 4. Otherwise: **not run**.
 
-Only direct "Verified by" relationships count, with the requirement upstream and the test case downstream. The relationship type is found by its name. A blocked test counts as not run: it has verified nothing and has not failed.
+Only direct "Verified by" relationships count, with the requirement upstream and the test case downstream. The relationship type is found by its name (since [ADR 0018](0018-editable-types-and-roles.md): by its role, `verifies`). A blocked test counts as not run: it has verified nothing and has not failed.
 
 The status is computed on every request, like suspect links and the trace. Every item that is not a test case gets a status.
 
@@ -73,4 +73,4 @@ Backups carry `verificationResults`. Version 1 and 2 files still restore. Tokens
 - Results recorded against a requirement go out of date on any new version of it, even a typo fix. That is the same strictness as suspect links, and there is no "still valid" confirmation yet.
 - A "Verified by" relationship made the wrong way round (test upstream) is ignored by the status.
 - Baselines do not freeze verification status.
-- Renaming the "Verified by" relationship type, once types are editable, would break the rule. Add a flag on the type then.
+- Renaming the "Verified by" relationship type, once types are editable, would break the rule. Add a flag on the type then. Done: `link_types.role`, [ADR 0018](0018-editable-types-and-roles.md).

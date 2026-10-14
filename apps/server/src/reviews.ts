@@ -518,6 +518,7 @@ export function reviewRoutes({
           eq(attributeDefinitions.itemTypeId, sets.itemTypeId),
           eq(attributeDefinitions.name, "Status"),
           eq(attributeDefinitions.type, "enum"),
+          isNull(attributeDefinitions.archivedAt),
         ),
       )
       .where(inArray(itemRevisions.itemId, ids))
