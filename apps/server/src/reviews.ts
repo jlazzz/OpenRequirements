@@ -21,6 +21,7 @@ import {
 import { verifyPassword } from "./domain/password.ts";
 import { closedState, itemOutcome, MARKS, type Mark, signatureDigest } from "./domain/review.ts";
 import { roleAllows } from "./domain/roles.ts";
+import { notify } from "./mail.ts";
 import { searchTextOf } from "./nodes.ts";
 import { loadRuns } from "./testruns.ts";
 
@@ -85,7 +86,7 @@ async function loadReview(db: Db | Tx, reviewId: string) {
 }
 
 /** Reviews: people look at a baseline's frozen items, comment, mark them reviewed, and approvers sign a decision on each. */
-export function reviewRoutes({ app, db, requireUser, requireSession, audit, access, loginLimit }: AppContext) {
+export function reviewRoutes({ app, db, requireUser, requireSession, audit, access, loginLimit, mail }: AppContext) {
   /** Locks an open review for a write, so marks, signatures and closing cannot interleave. */
   async function lockOpen(tx: Tx, reviewId: string) {
     const [row] = await tx.select({ state: reviews.state }).from(reviews).where(eq(reviews.id, reviewId)).for("update");
@@ -195,6 +196,18 @@ export function reviewRoutes({ app, db, requireUser, requireSession, audit, acce
           .insert(reviewParticipants)
           .values([...roles].map(([userId, role]) => ({ reviewId: row.id, userId, role })));
         await audit(tx, req.user?.id ?? null, "review.create", "review", row.id, { projectId, label: name });
+        await notify(
+          tx,
+          mail,
+          [...roles].map(([userId, role]) => ({
+            userId,
+            projectId,
+            kind: "review" as const,
+            text: `${req.user?.name} asked you to ${role === "approver" ? "approve" : "review"} “${name}”`,
+            path: `/projects/${projectId}/reviews/${row.id}`,
+            actorId: req.user?.id ?? null,
+          })),
+        );
         return row.id;
       });
       return reply.code(201).send({ id });

@@ -27,7 +27,68 @@ export const users = pgTable("users", {
   createdAt: createdAt(),
   // Set when an administrator deactivates the account: it cannot sign in, but its history stays.
   deactivatedAt: timestamp({ withTimezone: true }),
+  // How notifications reach this person by email: one email each, one daily digest, or none.
+  emailNotifications: text().$type<"each" | "digest" | "off">().notNull().default("each"),
+  // When the last daily digest was queued for this person.
+  digestSentAt: timestamp({ withTimezone: true }),
 });
+
+/** A one-time link to set a new password, from "Forgot password" or from an administrator. Only its hash is stored. */
+export const passwordResets = pgTable("password_resets", {
+  id: uuid().primaryKey().defaultRandom(),
+  userId: uuid()
+    .notNull()
+    .references(() => users.id),
+  tokenHash: text().notNull().unique(),
+  // The administrator who made the link. Null when the person asked for it themself.
+  createdBy: uuid().references(() => users.id),
+  createdAt: createdAt(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
+  usedAt: timestamp({ withTimezone: true }),
+});
+
+/**
+ * Something a person should know about: a mention, a review invitation, a relationship that became suspect, a test run
+ * assigned. Written in the same transaction as the audited action. Only `readAt` ever changes.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    kind: text().$type<"mention" | "review" | "suspect" | "run">().notNull(),
+    text: text().notNull(),
+    // Where it leads in the web app, e.g. /projects/<id>/items/<id>.
+    path: text().notNull(),
+    actorId: uuid().references(() => users.id),
+    createdAt: createdAt(),
+    readAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.userId, t.createdAt)],
+);
+
+/** Emails waiting to be sent, and those sent. The mail loop in mail.ts sends them and retries failures with backoff. */
+export const outbox = pgTable(
+  "outbox",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    to: text().notNull(),
+    subject: text().notNull(),
+    body: text().notNull(),
+    createdAt: createdAt(),
+    // When the next try is due. Pushed back after each failure.
+    dueAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    attempts: integer().notNull().default(0),
+    lastError: text(),
+    sentAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.sentAt, t.dueAt)],
+);
 
 export const sessions = pgTable("sessions", {
   // SHA-256 of the cookie token, so a database leak does not leak usable sessions.

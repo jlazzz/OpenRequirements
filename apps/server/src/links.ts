@@ -1,9 +1,11 @@
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
-import type { AppContext } from "./app.ts";
+import { describe } from "./access.ts";
+import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { itemRevisions, linkRevisions, links, linkTypes, nodes, sets } from "./db/schema.ts";
 import { changedEnds } from "./domain/suspect.ts";
+import { type MailConfig, type Notice, notify } from "./mail.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const revision = { type: "integer", minimum: 1 } as const;
@@ -57,6 +59,61 @@ export async function liveLinks(
     const current = { upstream: currentUp, downstream: currentDown };
     return { ...link, confirmed, current, changed: changedEnds(confirmed, current) };
   });
+}
+
+/**
+ * Call in a transaction before new versions of `itemIds` are saved. The function it returns, called after the save,
+ * notifies whoever saved the far end of each relationship that has just become suspect.
+ */
+export async function watchSuspect(
+  tx: Tx,
+  mail: MailConfig,
+  projectId: string,
+  itemIds: string[],
+  actor: { id: string; name: string },
+) {
+  const touching = await tx
+    .select({ id: links.id })
+    .from(links)
+    .where(and(isNull(links.deletedAt), or(inArray(links.upstreamId, itemIds), inArray(links.downstreamId, itemIds))));
+  if (touching.length === 0) return async () => {};
+  const ids = touching.map((link) => link.id);
+  const wasSuspect = new Set(
+    (await liveLinks(tx, projectId, { ids }))
+      .filter((l) => l.changed.upstream || l.changed.downstream)
+      .map((l) => l.id),
+  );
+  return async () => {
+    const notices: Notice[] = [];
+    for (const link of await liveLinks(tx, projectId, { ids })) {
+      if (wasSuspect.has(link.id) || !(link.changed.upstream || link.changed.downstream)) continue;
+      const ends = [
+        [link.upstreamId, link.downstreamId],
+        [link.downstreamId, link.upstreamId],
+      ] as const;
+      for (const [changed, other] of ends) {
+        if (!itemIds.includes(changed)) continue;
+        const [last] = await tx
+          .select({ authorId: itemRevisions.authorId })
+          .from(itemRevisions)
+          .where(eq(itemRevisions.itemId, other))
+          .orderBy(desc(itemRevisions.number))
+          .limit(1);
+        if (!last) continue;
+        const changedLabel = (await describe(tx, "item", changed)).label;
+        const otherLabel = (await describe(tx, "item", other)).label;
+        notices.push({
+          userId: last.authorId,
+          projectId,
+          kind: "suspect",
+          text: `${actor.name} changed ${changedLabel}. Its relationship with ${otherLabel}, which you saved last, is now suspect.`,
+          path: `/projects/${projectId}/items/${other}`,
+          actorId: actor.id,
+        });
+      }
+    }
+    await notify(tx, mail, notices);
+  };
 }
 
 export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) {

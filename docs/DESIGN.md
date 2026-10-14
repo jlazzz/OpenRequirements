@@ -62,7 +62,7 @@ Project: Infusion Pump
 - **Inline editing.** Click a field and type. No separate edit form.
 - **Auto-saved draft.** Typing saves to a draft, so nothing is lost. A draft is private to its author.
 - **Explicit commit.** "Save version", with an optional reason, turns the draft into a new revision that everyone sees.
-- **Conflicts** (proposed, not yet confirmed by the owner): a commit records the revision the draft started from. If someone else committed in between, the second person is shown the difference and must resolve it before committing.
+- **Conflicts:** a commit records the revision the draft started from. If someone else committed in between, the second person gets a merge panel: changes to different fields combine by themselves; for each field both changed, they keep theirs or take the other. Others see that someone has a draft of an item, never its content ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md)).
 
 ### Editor
 
@@ -179,6 +179,4 @@ Within a milestone, build the domain logic and its tests first, then the API, th
 
 ## 11. Still open
 
-- Conflict handling on commit (section 3) needs the owner's confirmation.
-- Whether a draft is visible to others as "being edited by X".
 - Home screen after login: project list or a project dashboard.

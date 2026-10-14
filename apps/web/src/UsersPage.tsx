@@ -5,6 +5,7 @@ import {
   Container,
   CopyButton,
   Group,
+  PasswordInput,
   Stack,
   Table,
   Text,
@@ -13,7 +14,7 @@ import {
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { api, type Session, type User } from "./api.ts";
 import { useSession } from "./Root.tsx";
 
@@ -28,8 +29,14 @@ export function UsersPage() {
   const accounts = useQuery({ queryKey: ["users"], queryFn: () => api<Accounts>("users") });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["users"] });
   const invite = useMutation({
-    mutationFn: (email: string) => api<{ email: string; token: string }>("invitations", { email }),
+    mutationFn: (email: string) => api<{ email: string; token: string; emailed: boolean }>("invitations", { email }),
     onSuccess: refresh,
+  });
+  const reset = useMutation({
+    mutationFn: async (user: User) => ({
+      user,
+      ...(await api<{ token: string; emailed: boolean }>(`users/${user.id}/password-reset`, {})),
+    }),
   });
   const revoke = useMutation({
     mutationFn: (id: string) => api(`invitations/${id}`, undefined, "DELETE"),
@@ -53,9 +60,9 @@ export function UsersPage() {
         <Title order={1} size="h2">
           Users
         </Title>
-        {(accounts.isError || invite.isError || revoke.isError) && (
+        {(accounts.isError || invite.isError || revoke.isError || reset.isError) && (
           <Alert color="red" role="alert">
-            {(accounts.error ?? invite.error ?? revoke.error)?.message}
+            {(accounts.error ?? invite.error ?? revoke.error ?? reset.error)?.message}
           </Alert>
         )}
 
@@ -72,28 +79,21 @@ export function UsersPage() {
             </Group>
           </form>
           {invite.data && (
-            <Alert color="blue" mt="sm" title={`Send this link to ${invite.data.email}`}>
-              <Stack gap="xs" align="flex-start">
-                <Text size="sm">
-                  No email is sent for you. The link works once, for 7 days, and is shown only now. After they join, add
-                  them to a project under that project's Members.
-                </Text>
-                <TextInput
-                  aria-label="Invitation link"
-                  value={link}
-                  readOnly
-                  w="100%"
-                  onFocus={(e) => e.currentTarget.select()}
-                />
-                <CopyButton value={link}>
-                  {({ copied, copy }) => (
-                    <Button size="compact-sm" variant="default" onClick={copy}>
-                      {copied ? "Copied" : "Copy link"}
-                    </Button>
-                  )}
-                </CopyButton>
-              </Stack>
-            </Alert>
+            <LinkAlert
+              title={
+                invite.data.emailed
+                  ? `Invitation emailed to ${invite.data.email}`
+                  : `Send this link to ${invite.data.email}`
+              }
+              label="Invitation link"
+              link={link}
+            >
+              {invite.data.emailed
+                ? "If it does not arrive, send them this link yourself. "
+                : "No email is sent for you. "}
+              The link works once, for 7 days, and is shown only now. After they join, add them to a project under that
+              project's Members.
+            </LinkAlert>
           )}
         </section>
 
@@ -129,6 +129,20 @@ export function UsersPage() {
               {setActive.error.message}
             </Alert>
           )}
+          {reset.data && (
+            <LinkAlert
+              title={
+                reset.data.emailed
+                  ? `Password reset link emailed to ${reset.data.user.name}`
+                  : `Send this link to ${reset.data.user.name}`
+              }
+              label="Password reset link"
+              link={`${window.location.origin}/reset-password/${reset.data.token}`}
+            >
+              It lets them choose a new password, once, within 3 days, and is shown only now. Their current password
+              keeps working until then.
+            </LinkAlert>
+          )}
           <Table withTableBorder bg="var(--mantine-color-body)">
             <Table.Thead>
               <Table.Tr>
@@ -157,6 +171,18 @@ export function UsersPage() {
                   <Table.Td>{user.email}</Table.Td>
                   <Table.Td>{new Date(user.createdAt).toLocaleDateString()}</Table.Td>
                   <Table.Td ta="right">
+                    {!user.deactivatedAt && (
+                      <Button
+                        size="compact-sm"
+                        variant="default"
+                        mr="xs"
+                        aria-label={`Make a password reset link for ${user.name}`}
+                        onClick={() => reset.mutate(user)}
+                        loading={reset.isPending && reset.variables?.id === user.id}
+                      >
+                        Reset link
+                      </Button>
+                    )}
                     {user.id !== me && (
                       <Button
                         size="compact-sm"
@@ -178,6 +204,96 @@ export function UsersPage() {
   );
 }
 
+/** A one-time link for the administrator to copy. */
+function LinkAlert({
+  title,
+  label,
+  link,
+  children,
+}: {
+  title: string;
+  label: string;
+  link: string;
+  children: ReactNode;
+}) {
+  return (
+    <Alert color="blue" mt="sm" mb="xs" title={title}>
+      <Stack gap="xs" align="flex-start">
+        <Text size="sm">{children}</Text>
+        <TextInput aria-label={label} value={link} readOnly w="100%" onFocus={(e) => e.currentTarget.select()} />
+        <CopyButton value={link}>
+          {({ copied, copy }) => (
+            <Button size="compact-sm" variant="default" onClick={copy}>
+              {copied ? "Copied" : "Copy link"}
+            </Button>
+          )}
+        </CopyButton>
+      </Stack>
+    </Alert>
+  );
+}
+
+/** Where a password reset link lands: choose a new password, which also signs the person in. */
+export function ResetPasswordPage() {
+  const { token } = useParams({ from: "/reset-password/$token" });
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const link = useQuery({
+    queryKey: ["password-reset", token],
+    queryFn: () => api<{ email: string }>(`password/reset/${token}`),
+  });
+  const reset = useMutation({
+    mutationFn: (fields: object) => api<{ user: User }>("password/reset", { token, ...fields }),
+    onSuccess: async ({ user }) => {
+      queryClient.clear();
+      queryClient.setQueryData<Session>(["session"], (old) => ({ ...old, user, needsSetup: false }));
+      await navigate({ to: "/" });
+    },
+  });
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    reset.mutate(Object.fromEntries(new FormData(event.currentTarget)));
+  };
+
+  return (
+    <Container size={400} py={80}>
+      {link.isError && (
+        <Alert color="red" role="alert" title="This link cannot be used">
+          {link.error.message}
+        </Alert>
+      )}
+      {link.data && (
+        <form onSubmit={onSubmit}>
+          <Stack gap="sm">
+            <Title order={1} size="h3">
+              Choose a new password
+            </Title>
+            <Text c="dimmed" size="sm">
+              For {link.data.email}. You are signed out everywhere else once it is set.
+            </Text>
+            <PasswordInput
+              name="password"
+              label="New password"
+              description="At least 12 characters."
+              required
+              minLength={12}
+              autoComplete="new-password"
+            />
+            {reset.isError && (
+              <Alert color="red" role="alert">
+                {reset.error.message}
+              </Alert>
+            )}
+            <Button type="submit" loading={reset.isPending}>
+              Set password and sign in
+            </Button>
+          </Stack>
+        </form>
+      )}
+    </Container>
+  );
+}
+
 /** Where an invitation link lands: choose a name and password to create the account. */
 export function InvitePage() {
   const { token } = useParams({ from: "/invite/$token" });
@@ -191,7 +307,7 @@ export function InvitePage() {
     mutationFn: (fields: object) => api<{ user: User }>("invitations/accept", { token, ...fields }),
     onSuccess: async ({ user }) => {
       queryClient.clear();
-      queryClient.setQueryData<Session>(["session"], { user, needsSetup: false });
+      queryClient.setQueryData<Session>(["session"], (old) => ({ ...old, user, needsSetup: false }));
       await navigate({ to: "/" });
     },
   });

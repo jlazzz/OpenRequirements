@@ -20,6 +20,7 @@ import { useParams } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type Attributes, api, canEdit, type Draft, type Field, formatValue, type Item, uploadImage } from "./api.ts";
 import { Comments } from "./Comments.tsx";
+import { EditingNotice, MergePanel } from "./Merge.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
 import { Relationships } from "./Relationships.tsx";
@@ -61,6 +62,7 @@ export function ItemPage() {
 /** What viewers and reviewers see: the saved version, with nothing to edit. */
 function ItemReadOnly({ item, fields }: ItemData) {
   const project = useProject().data;
+  const queryClient = useQueryClient();
   return (
     <Flex gap="xl" align="flex-start" wrap="wrap">
       <Stack gap="sm" style={{ flex: "1 1 480px", minWidth: 0, maxWidth: 820 }}>
@@ -72,6 +74,12 @@ function ItemReadOnly({ item, fields }: ItemData) {
             Version {item.revision} · saved {new Date(item.revisedAt).toLocaleString()}
           </Text>
         </Group>
+        <EditingNotice
+          itemId={item.id}
+          revision={item.revision}
+          dirty={false}
+          onNewer={() => queryClient.invalidateQueries({ queryKey: ["items", item.id] })}
+        />
         <Title order={1} size="h3">
           {item.name}
         </Title>
@@ -117,6 +125,8 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
   // The version these edits started from. Older than the current one when someone saved in the meantime.
   const [base, setBase] = useState(draft?.baseRevision ?? item.revision);
   const [draftStatus, setDraftStatus] = useState<"none" | "saving" | "saved" | "error">(draft ? "saved" : "none");
+  // Bumped to load merged content into the description editor, which only reads its content when it mounts.
+  const [editorKey, setEditorKey] = useState(0);
 
   const stale = base < item.revision;
   const dirty =
@@ -171,6 +181,12 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
       queryClient.invalidateQueries({ queryKey: ["items", item.id] }),
       queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
     ]);
+  /** Loads the newest version. These edits stay in the draft, so the form comes back with them and offers to merge. */
+  const catchUp = async () => {
+    flush.current?.();
+    await inFlight.current;
+    await refresh();
+  };
   const save = useMutation({
     mutationFn: async () => {
       await settle();
@@ -178,8 +194,13 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
     },
     // Refreshes this item, the explorer and any open List view. The new version number remounts this form.
     onSuccess: refresh,
-    onError: () => {
+    onError: async (error: Error & { status?: number }) => {
       stopped.current = false;
+      // Someone saved first: keep every edit in the draft, then reload into the merge screen.
+      if (error.status === 409) {
+        await api(`items/${item.id}/draft`, JSON.parse(body), "PUT");
+        await refresh();
+      }
     },
   });
   const discard = useMutation({
@@ -226,28 +247,25 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
             <Group ml="auto">{project && node && <NodeActions data={project} node={node} />}</Group>
           </Group>
 
-          {stale && (
-            <Alert color="yellow" title={`Version ${item.revision} was saved after you started this draft`}>
-              <Stack gap="xs" align="flex-start">
-                <Text size="sm">
-                  Your draft began from version {base}. Open the newer version under Versions to see what changed.
-                  Keeping your draft means saving it will replace those changes.
-                </Text>
-                <Group gap="xs">
-                  <Button size="compact-sm" variant="default" onClick={() => setBase(item.revision)}>
-                    Keep my draft
-                  </Button>
-                  <Button
-                    size="compact-sm"
-                    variant="default"
-                    onClick={() => discard.mutate()}
-                    loading={discard.isPending}
-                  >
-                    Discard my draft
-                  </Button>
-                </Group>
-              </Stack>
-            </Alert>
+          {stale ? (
+            <MergePanel
+              itemId={item.id}
+              fields={fields}
+              base={base}
+              mine={{ name, description, attributes }}
+              theirs={item}
+              onApply={(merged) => {
+                setName(merged.name);
+                setDescription(merged.description);
+                setAttributes(merged.attributes);
+                setBase(item.revision);
+                setEditorKey((n) => n + 1);
+              }}
+              onDiscard={() => discard.mutate()}
+              discarding={discard.isPending}
+            />
+          ) : (
+            <EditingNotice itemId={item.id} revision={item.revision} dirty={dirty} onNewer={catchUp} />
           )}
 
           <TextInput
@@ -258,8 +276,9 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
             onChange={(e) => setName(e.currentTarget.value)}
           />
           <RichTextInput
+            key={editorKey}
             label="Description"
-            initial={start.description}
+            initial={description}
             onChange={setDescription}
             uploadImage={(file) => uploadImage(projectId, file)}
           />

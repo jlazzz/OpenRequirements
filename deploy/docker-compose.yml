@@ -26,6 +26,13 @@ services:
       ATTACHMENTS_DIR: /data/attachments
       # The largest image or evidence file that can be uploaded, in megabytes.
       MAX_ATTACHMENT_MB: ${MAX_ATTACHMENT_MB:-25}
+      # Set with the https profile (see caddy below): secure cookies, HSTS, and links in emails start with https://DOMAIN.
+      DOMAIN: ${DOMAIN:-}
+      # Sends email (notifications, password resets, invitations), e.g. smtps://user:pass@smtp.example.com. Unset: no email.
+      SMTP_URL: ${SMTP_URL:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # The address people open the app at, for links in emails. Defaults to https://DOMAIN, or http://localhost:3000.
+      PUBLIC_URL: ${PUBLIC_URL:-}
     volumes:
       # Uploaded images and evidence files. Back this up together with the database.
       - attachments:/data/attachments
@@ -36,6 +43,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # HTTPS with automatic certificates from Let's Encrypt. Off unless deploy/.env has COMPOSE_PROFILES=https and DOMAIN set.
+  # Ports 80 and 443 must reach this machine from the internet for the certificate to be issued.
+  caddy:
+    image: caddy:2
+    profiles: [https]
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to app:3000
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Certificates. Losing them means asking Let's Encrypt again, which is rate limited.
+      - caddy-data:/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
 volumes:
+  caddy-data:
   db-data:
   attachments:

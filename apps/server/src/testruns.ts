@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { FastifyRequest } from "fastify";
 import { roleIn } from "./access.ts";
@@ -23,6 +23,7 @@ import {
 import { roleAllows } from "./domain/roles.ts";
 import { runOutcome, runState, runSteps } from "./domain/testrun.ts";
 import { OUTCOMES, type Outcome } from "./domain/verification.ts";
+import { notify } from "./mail.ts";
 import { areUploadsOf, loadEvidence } from "./verification.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -130,7 +131,7 @@ export const runSummary = ({ steps, ...run }: Run) => ({
 });
 
 /** Test cycles and runs: assigning runs, executing them step by step, finishing them and closing a cycle. */
-export function testRunRoutes({ app, db, requireUser, audit, access }: AppContext) {
+export function testRunRoutes({ app, db, requireUser, audit, access, mail }: AppContext) {
   /**
    * Locks the cycle of a run (or the cycle itself), so step results, finishing, assigning and closing run one at a time.
    * Returns the cycle, or undefined when there is none.
@@ -264,7 +265,29 @@ export function testRunRoutes({ app, db, requireUser, audit, access }: AppContex
         if ((await tx.$count(testRuns, inCycle)) !== runIds.length) {
           return { error: [400, "A run is not part of this test cycle"] } as const;
         }
+        // Only runs that were not already this person's are news to them.
+        const fresh = body.assigneeId
+          ? await tx
+              .select({ id: testRuns.id })
+              .from(testRuns)
+              .where(and(inCycle, or(isNull(testRuns.assigneeId), ne(testRuns.assigneeId, body.assigneeId))))
+          : [];
         await tx.update(testRuns).set({ assigneeId: body.assigneeId }).where(inCycle);
+        if (body.assigneeId && fresh.length > 0) {
+          await notify(tx, mail, [
+            {
+              userId: body.assigneeId,
+              projectId,
+              kind: "run",
+              text: `${req.user?.name} assigned you ${fresh.length === 1 ? "a test run" : `${fresh.length} test runs`} in ${cycle.name}`,
+              path:
+                fresh.length === 1
+                  ? `/projects/${projectId}/runs/${fresh[0]?.id}`
+                  : `/projects/${projectId}/cycles/${testCycleId}`,
+              actorId: req.user?.id ?? null,
+            },
+          ]);
+        }
         await audit(tx, req.user?.id ?? null, body.assigneeId ? "run.assign" : "run.unassign", "cycle", testCycleId, {
           projectId,
           label: `${cycle.name}: ${runIds.length} ${runIds.length === 1 ? "run" : "runs"}${person ? ` to ${person.name}` : ""}`,

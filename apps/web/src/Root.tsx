@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Button,
   Center,
   Divider,
@@ -21,6 +22,7 @@ import { Outlet, useLocation } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { api, type Session, type User } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
+import { EmailSetting, NotificationBell } from "./Notifications.tsx";
 import { Tokens } from "./Tokens.tsx";
 
 export function useSession() {
@@ -29,8 +31,10 @@ export function useSession() {
 
 export function Root() {
   const session = useSession();
-  // An invited person has no account yet, so the invitation page is shown without signing in.
-  const invited = useLocation({ select: (location) => location.pathname.startsWith("/invite/") });
+  // An invited person has no account yet, and someone resetting their password cannot sign in: both pages are public.
+  const invited = useLocation({
+    select: (location) => /^\/(invite|reset-password)\//.test(location.pathname),
+  });
 
   if (session.isPending) {
     return (
@@ -50,21 +54,24 @@ export function Root() {
   }
   if (invited) return <Outlet />;
   if (session.data.needsSetup) return <AuthForm mode="setup" />;
-  if (!session.data.user) return <AuthForm mode="login" />;
+  if (!session.data.user) return <AuthForm mode="login" canRecover={session.data.mail === true} />;
   return <Shell user={session.data.user} />;
 }
 
-function AuthForm({ mode }: { mode: "setup" | "login" }) {
+function AuthForm({ mode, canRecover }: { mode: "setup" | "login"; canRecover?: boolean }) {
   const queryClient = useQueryClient();
+  const [forgot, setForgot] = useState(false);
   const submit = useMutation({
     mutationFn: (fields: object) => api<{ user: User }>(mode, fields),
-    onSuccess: ({ user }) => queryClient.setQueryData<Session>(["session"], { user, needsSetup: false }),
+    onSuccess: ({ user }) =>
+      queryClient.setQueryData<Session>(["session"], (old) => ({ ...old, user, needsSetup: false })),
   });
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     submit.mutate(Object.fromEntries(new FormData(event.currentTarget)));
   };
   const setup = mode === "setup";
+  if (forgot) return <ForgotForm onBack={() => setForgot(false)} />;
 
   return (
     <Center mih="100vh" p="md" bg="var(--mantine-color-default-hover)">
@@ -96,6 +103,57 @@ function AuthForm({ mode }: { mode: "setup" | "login" }) {
           <Button type="submit" loading={submit.isPending}>
             {setup ? "Create account" : "Sign in"}
           </Button>
+          {!setup && canRecover && (
+            <Anchor component="button" type="button" size="sm" onClick={() => setForgot(true)}>
+              Forgot password?
+            </Anchor>
+          )}
+        </Stack>
+      </Paper>
+    </Center>
+  );
+}
+
+/** Asks for a password reset link by email. Says the same whether or not the address has an account. */
+function ForgotForm({ onBack }: { onBack: () => void }) {
+  const ask = useMutation({ mutationFn: (email: string) => api("password/forgot", { email }) });
+  return (
+    <Center mih="100vh" p="md" bg="var(--mantine-color-default-hover)">
+      <Paper
+        component="form"
+        withBorder
+        p="lg"
+        w={360}
+        maw="100%"
+        onSubmit={(event) => {
+          event.preventDefault();
+          ask.mutate(String(new FormData(event.currentTarget).get("email")));
+        }}
+      >
+        <Stack gap="sm">
+          <Title order={1} size="h3">
+            Reset your password
+          </Title>
+          {ask.isSuccess ? (
+            <Text size="sm" role="status">
+              If an account uses that address, an email with a link is on its way. The link works for one hour.
+            </Text>
+          ) : (
+            <>
+              <TextInput name="email" type="email" label="Email" required autoComplete="username" />
+              {ask.isError && (
+                <Alert color="red" role="alert">
+                  {ask.error.message}
+                </Alert>
+              )}
+              <Button type="submit" loading={ask.isPending}>
+                Email me a link
+              </Button>
+            </>
+          )}
+          <Anchor component="button" type="button" size="sm" onClick={onBack}>
+            Back to sign in
+          </Anchor>
         </Stack>
       </Paper>
     </Center>
@@ -127,10 +185,11 @@ function Shell({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const logout = useMutation({
     mutationFn: () => api("logout", {}),
-    // Drop every cached query, so the next user never sees this user's data.
+    // Drop every other cached query, so the next user never sees this user's data. The session query itself stays,
+    // because the screen is watching it: replacing it would leave the screen showing the signed-out user.
     onSuccess: () => {
-      queryClient.clear();
-      queryClient.setQueryData<Session>(["session"], { user: null, needsSetup: false });
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "session" });
+      queryClient.setQueryData<Session>(["session"], (old) => ({ ...old, user: null, needsSetup: false }));
     },
   });
 
@@ -164,6 +223,7 @@ function Shell({ user }: { user: User }) {
           )}
         </nav>
         <Group gap="xs" ml="auto" wrap="nowrap">
+          <NotificationBell />
           <ColorSchemeToggle />
         </Group>
         <Button size="compact-sm" variant="subtle" color="gray.3" onClick={() => setChanging(true)}>
@@ -203,6 +263,8 @@ function Shell({ user }: { user: User }) {
             </Button>
           </Stack>
         </form>
+        <Divider my="md" />
+        <EmailSetting />
         <Divider my="md" />
         <Tokens />
       </Modal>

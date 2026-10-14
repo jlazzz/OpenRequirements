@@ -4,15 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Requirements</title>
-    <script>
-      // Applies the saved light or dark choice before the first paint, so a dark page never flashes white.
-      // Mantine keeps the choice under this key; "auto" or nothing follows the system.
-      try {
-        const saved = localStorage.getItem("mantine-color-scheme-value");
-        const system = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        document.documentElement.setAttribute("data-mantine-color-scheme", saved === "light" || saved === "dark" ? saved : system);
-      } catch {}
-    </script>
+    <script src="/color-scheme.js"></script>
   </head>
   <body>
     <div id="root"></div>

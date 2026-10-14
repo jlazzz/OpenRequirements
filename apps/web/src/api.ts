@@ -1,7 +1,8 @@
 import { type RichNode, type Step, stepsToText } from "@app/shared";
 
 export type User = { id: string; email: string; name: string; isAdmin: boolean };
-export type Session = { user: User | null; needsSetup: boolean };
+/** `mail` says whether the server can send email, so whether "Forgot password" can work. */
+export type Session = { user: User | null; needsSetup: boolean; mail?: boolean };
 export type Project = { id: string; name: string; createdAt: string };
 /** `isTest` says the set holds test cases: they take steps, results and runs. */
 export type ProjectSet = { id: string; name: string; uidPrefix: string; itemType: string; isTest: boolean };
@@ -42,7 +43,7 @@ export type Draft = {
 };
 export type Template = { id: string; name: string; description: string; sets: string[] };
 
-/** Calls the API and returns the JSON body, or throws an Error carrying the server's message. A body makes it a POST unless `method` says otherwise. */
+/** Calls the API and returns the JSON body, or throws an Error carrying the server's message and the HTTP status. A body makes it a POST unless `method` says otherwise. */
 export async function api<T>(path: string, body?: object, method?: "PATCH" | "DELETE" | "PUT"): Promise<T> {
   const res = await fetch(`/api/${path}`, {
     method: method ?? (body ? "POST" : "GET"),
@@ -50,7 +51,11 @@ export async function api<T>(path: string, body?: object, method?: "PATCH" | "DE
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message ?? data.error ?? `Request failed (${res.status})`);
+  if (!res.ok) {
+    throw Object.assign(new Error(data.message ?? data.error ?? `Request failed (${res.status})`), {
+      status: res.status,
+    });
+  }
   return data;
 }
 export type Field = {

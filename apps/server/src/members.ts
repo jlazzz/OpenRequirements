@@ -4,6 +4,7 @@ import type { AppContext } from "./app.ts";
 import { invitations, projectMembers, sessions, users } from "./db/schema.ts";
 import { hashPassword, NO_PASSWORD } from "./domain/password.ts";
 import { ROLES, type Role } from "./domain/roles.ts";
+import { queueMail } from "./mail.ts";
 
 const INVITE_DAYS = 7;
 const uuid = { type: "string", format: "uuid" } as const;
@@ -19,6 +20,7 @@ export function memberRoutes({
   access,
   startSession,
   loginLimit,
+  mail,
 }: AppContext) {
   const pending = and(
     isNull(invitations.acceptedAt),
@@ -84,7 +86,7 @@ export function memberRoutes({
     },
   );
 
-  // There is no email server in Phase 1: the administrator copies the returned link and sends it themselves.
+  // Emailed when email is set up. The link is also returned, so the administrator can copy it and send it themselves.
   app.post(
     "/api/invitations",
     {
@@ -123,10 +125,15 @@ export function memberRoutes({
           .returning({ id: invitations.id });
         if (!row) throw new Error("invitation insert returned no row");
         await audit(tx, req.user?.id ?? null, "invitation.create", "invitation", row.id, { label: email });
+        await queueMail(tx, mail, {
+          to: email,
+          subject: `${req.user?.name} invited you`,
+          text: `${req.user?.name} invited you to the requirements tool at ${mail.publicUrl}. To create your account, open this link within ${INVITE_DAYS} days:\n\n${mail.publicUrl}/invite/${token}`,
+        });
         return row.id;
       });
       // The token is returned once and never stored, like a password.
-      return reply.code(201).send({ id, email, token });
+      return reply.code(201).send({ id, email, token, emailed: mail.enabled });
     },
   );
 

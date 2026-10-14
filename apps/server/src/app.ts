@@ -15,9 +15,12 @@ import { apiTokens, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
 import { importRoutes } from "./import.ts";
 import { linkRoutes } from "./links.ts";
+import type { MailConfig } from "./mail.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
+import { notificationRoutes } from "./notifications.ts";
 import { projectRoutes } from "./projects.ts";
+import { recoveryRoutes } from "./recovery.ts";
 import { reqifRoutes } from "./reqif.ts";
 import { reviewRoutes } from "./reviews.ts";
 import { testPlanRoutes } from "./testplans.ts";
@@ -50,6 +53,8 @@ export type AppContext = {
   startSession: (tx: Db | Tx, reply: FastifyReply, userId: string) => Promise<void>;
   /** Limits repeated attempts on routes that take a password or token. */
   loginLimit: { rateLimit: { max: number; timeWindow: string } };
+  /** Whether email is set up, and the address links in emails start with. */
+  mail: MailConfig;
 };
 
 declare module "fastify" {
@@ -81,10 +86,27 @@ export async function buildApp(
     attachmentsDir?: string;
     /** The largest file that can be uploaded, in megabytes. */
     maxAttachmentMb?: number;
+    /** Served over HTTPS by a reverse proxy: cookies are `Secure`, HSTS is sent, and the client address comes from the proxy. */
+    https?: boolean;
+    /** Email is queued only when this says it is enabled; the mail loop started in main.ts sends it. */
+    mail?: MailConfig;
   } = {},
 ) {
-  const app = Fastify({ logger: opts.logger ?? false });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.https ?? false });
   await app.register(cookie);
+  // Security headers on every response. A route that sets its own, like the attachment download, keeps its own.
+  const headers: Record<string, string> = {
+    "content-security-policy":
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "same-origin",
+    "cross-origin-opener-policy": "same-origin",
+    ...(opts.https ? { "strict-transport-security": "max-age=31536000" } : {}),
+  };
+  app.addHook("onSend", async (_req, reply) => {
+    for (const [name, value] of Object.entries(headers)) if (!reply.hasHeader(name)) reply.header(name, value);
+  });
   await app.register(rateLimit, { global: false });
   app.decorateRequest("user", null);
 
@@ -153,16 +175,20 @@ export async function buildApp(
       httpOnly: true,
       sameSite: "strict",
       expires: expiresAt,
-      // shortcut: no `secure` flag because Phase 1 runs on plain HTTP (docs/DESIGN.md section 7), set it when HTTPS lands
+      // Plain HTTP stays possible for local use; behind HTTPS the cookie is never sent unencrypted.
+      secure: opts.https ?? false,
     });
   }
 
   const loginLimit = { rateLimit: { max: opts.loginAttemptsPerMinute ?? 10, timeWindow: "1 minute" } };
 
+  const mail = opts.mail ?? { enabled: false, publicUrl: "http://localhost:3000" };
+
   app.get("/api/session", { config: { public: true } }, async (req) => {
     const user = await findUser(req);
     const needsSetup = !user && (await db.$count(users)) === 0;
-    return { user, needsSetup };
+    // `mail` tells the sign-in page whether "Forgot password" can work.
+    return { user, needsSetup, mail: mail.enabled };
   });
 
   // First run only: whoever reaches the server first creates the admin account.
@@ -351,6 +377,7 @@ export async function buildApp(
     access,
     startSession,
     loginLimit,
+    mail,
   };
   projectRoutes(context);
   nodeRoutes(context);
@@ -363,6 +390,8 @@ export async function buildApp(
   reviewRoutes(context);
   testPlanRoutes(context);
   testRunRoutes(context);
+  notificationRoutes(context);
+  recoveryRoutes(context);
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
   const maxAttachmentBytes = (opts.maxAttachmentMb || 25) * 1024 * 1024;
   attachmentRoutes(context, attachmentsDir, maxAttachmentBytes);

@@ -41,7 +41,7 @@ const cookieOf = (res: { cookies: { name: string; value: string }[] }) => `sessi
 const auditActions = async () => (await db.select().from(auditEvents)).map((e) => e.action).sort();
 
 test("a fresh install needs setup, and setup signs the admin in", async () => {
-  expect((await get("/api/session")).json()).toEqual({ user: null, needsSetup: true });
+  expect((await get("/api/session")).json()).toEqual({ user: null, needsSetup: true, mail: false });
 
   const res = await post("/api/setup", admin);
   expect(res.statusCode).toBe(200);

@@ -24,7 +24,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 ## Decisions needed from the owner
 
-1. **Edit conflicts (J3):** merge screen with "keep mine / take theirs" per field. Recommended. The alternative is locking an item while someone edits it.
+1. **Edit conflicts (J3):** decided 2026-10-14: merge screen with "keep mine / take theirs" per field.
 2. **Test terms (T2):** decided 2026-10-13: Plan, Cycle, Run, as in Jama.
 3. **Signing with SSO (H):** an SSO user signs by logging in again at the identity provider. The alternative is a separate signing PIN.
 4. **New dependencies:** `docx`, `mammoth`, `fast-xml-parser`, `fflate` (zip), `nodemailer`, `openid-client`, `@fastify/swagger`, `@fastify/helmet`. Each replaces far more than a few lines.
@@ -63,7 +63,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 ## J3. Team safety
 
-**Exists:** a save is refused with HTTP 409 when someone saved first. Mentions show only in the activity stream. Plain HTTP. `@fastify/rate-limit` is installed. There is no background worker yet.
+**Built 2026-10-14** ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md)), with the recommended merge screen. Security headers are written by hand instead of with `@fastify/helmet`. Before: a save is refused with HTTP 409 when someone saved first. Mentions show only in the activity stream. Plain HTTP. `@fastify/rate-limit` is installed. There is no background worker yet.
 
 **Slices (5 sessions):**
 
@@ -98,7 +98,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 1. **Editable item types, fields and relationship types.** An admin screen per project: add an item type, a set, a field, an enum option, a relationship type. Rename anything. Remove is soft (`archivedAt`): old versions keep their values. Add `item_types.role` (`test` or null) and `link_types.role` (`verifies` or null) so the name rules of ADR 0008 and 0009 can go. Jama users expect this more than anything else in this plan.
 2. **Baseline to baseline.** `compareBaseline` already takes two lists; add `GET /api/baselines/:baselineId/compare?with=` and a picker on the baseline page. Report suspect differences. Baseline export as CSV and Word (uses J2).
-3. **Trace filters and project dashboard.** Filter the Trace view by relationship type and Status, trace a baseline, cap rows with "show more". The project home page shows, per set: item count, not covered, suspect, verification status. This settles the third open point in `DESIGN.md` section 11.
+3. **Trace filters and project dashboard.** Filter the Trace view by relationship type and Status, trace a baseline, cap rows with "show more". The project home page shows, per set: item count, not covered, suspect, verification status. This settles the home-screen point in `DESIGN.md` section 11.
 4. **Child items.** `nodes.parentId` may point at an item. Rules in `domain/tree.ts`: a child stays in its parent's set, a folder cannot sit under an item. Reading view numbers children under the parent.
 5. **Drag and drop, bulk edit.** Native HTML drag and drop in the explorer, calling the existing move route. Multi-select in List view with "set field" and "move". Multi-select fields editable in List view. A saved filter per user per set.
 

@@ -69,12 +69,13 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Backend | Fastify on Node 24+, run as TypeScript with no build step ([ADR 0002](docs/adr/0002-backend-fastify-native-typescript.md)) | in use |
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
-| Auth | Local accounts, scrypt hashes, session cookie; personal access tokens (`Authorization: Bearer`) for CI; OIDC/SAML/LDAP later | in use |
+| Auth | Local accounts, scrypt hashes, session cookie (`Secure` behind HTTPS); personal access tokens (`Authorization: Bearer`) for CI; password reset by one-time link; OIDC/SAML/LDAP later | in use |
 | CI results | JUnit XML read by a hand-written scanner in `packages/importers`, no XML library ([ADR 0009](docs/adr/0009-verification-tracking.md)) | in use |
 | ReqIF | Read and written by `packages/reqif`: hand-written XML parser and zip on the platform's `CompressionStream`, no library. The browser parses the file; the server gets JSON ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)) | in use |
 | Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
 | File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images, PDF, text, CSV and zip, type checked by content in `domain/filetype.ts`; only images are ever shown, the rest is a download. Limit `MAX_ATTACHMENT_MB`, default 25. S3-compatible later. | in use |
-| Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml` | in use |
+| Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml`. HTTPS by a Caddy service under the Compose profile `https`, set by `DOMAIN` ([ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md)) | in use |
+| Email | `nodemailer` over `SMTP_URL`, sent from the `outbox` table by a loop in the server process; nothing is sent without it | in use |
 | End-to-end tests | Playwright | proposed |
 
 License: AGPL-3.0-only with a CLA ([ADR 0001](docs/adr/0001-license-agpl-3.0.md)). No `CLA.md` yet; do not merge an outside contribution until it exists.
@@ -91,7 +92,8 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/reqif.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/reqif.ts, src/notifications.ts, src/recovery.ts   Feature route files: one per feature, taking `AppContext`
+    src/mail.ts     Email outbox, the mail loop, and `notify()`, which writes notifications in the caller's transaction
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
@@ -107,7 +109,7 @@ apps/
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
-  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths
+  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths, three-way merge of item edits
   reqif/            ReqIF parser/serializer with its XML and zip readers. Standalone: imports nothing from the repo or npm, runs in Node and the browser
   importers/        CSV reading and writing, mapping spreadsheet rows to items, reading JUnit XML reports, and mapping between ReqIF and sets, items and rich text
 docs/
@@ -126,7 +128,7 @@ e2e/                Playwright tests (empty)
 - `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
-- Every write calls `audit(...)` in the same transaction as the change.
+- Every write calls `audit(...)` in the same transaction as the change. Tell people about it with `notify(tx, mail, [...])` from `mail.ts`, in the same transaction; send email only through `queueMail`.
 - A new workspace needs its own `package.json` named `@app/<name>`.
 - `apps/web` has its own `tsconfig.json` (bundler module resolution). `npm run typecheck` checks both.
 - A generated migration that must convert existing data is edited by hand before it is committed, with a comment saying so.
@@ -167,6 +169,7 @@ Use these terms exactly, in code, API and UI.
 | **Test cycle** | One pass through a test plan. Starting it freezes each test case's current version. Closing is permanent. |
 | **Test run** | One test case executed once in a cycle, step by step. Its state is computed from its step results; finishing it records a verification result. |
 | **Review** | People looking at one baseline's items: reviewers comment and mark items reviewed, approvers approve or reject each item. States: open, closed, approved, rejected. Closing is permanent. |
+| **Notification** | A message to one person about something another person did: a mention, a review invitation, an assigned run, a relationship become suspect. In-app, and by email if they want. |
 | **Signature** | An approver's electronic signature on their decisions in a review: password re-entered, with name, time, meaning (approval or rejection) and a digest of what was signed. Append-only. |
 | **External reference** | A link to something outside the tool (Jira issue, Git commit, CI test result) |
 
@@ -199,13 +202,16 @@ Baseline ─< Review ─< ReviewParticipant  (reviewer or approver; fixed at cre
 Review ─< ReviewMark                  (append-only: reviewed, approved, rejected or cleared, per person and item; the latest counts)
 Review ─< Signature                   (append-only, one per approver: meaning, copied name and email, digest of the signed decisions)
 AuditEvent                          (append-only log of every write; project id and a label feed the activity stream)
+User ─< Notification                (kind, text, path, actor; only readAt changes)
+Outbox                              (emails to send: to, subject, body, attempts, last error, sent at)
+User ─< PasswordReset               (token hash, expiry, used at; made by the person or an administrator)
 ```
 
 ## Key design decisions
 
 - **UIDs:** a per-set prefix plus a monotonic counter (`SRS-001`). See `packages/shared/src/uid.ts`.
 - **Versioning:** append-only revision tables. The "current" state is the latest revision. Baselines reference revision IDs, so they cost nothing to create and can never drift.
-- **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
+- **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision. When someone saved first, a three-way merge per field resolves it; others see who has a draft, never its content ([ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md)).
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
 - **Verification:** results are stored, the status is computed, never stored. Only direct "Verified by" links count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
 - **Evidence and reports:** evidence files hang on a result, or on a run and its steps; only images are ever shown, everything else is a download. Baselines freeze verification status. Reports are computed from stored runs and results, nothing new is stored ([ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md)).

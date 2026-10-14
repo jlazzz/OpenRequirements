@@ -1,15 +1,16 @@
 import { and, desc, eq, isNull, lt, notLike, or } from "drizzle-orm";
-import { roleIn } from "./access.ts";
+import { describe, roleIn } from "./access.ts";
 import type { AppContext } from "./app.ts";
 import { auditEvents, baselineEntries, comments, nodes, projectMembers, reviews, users } from "./db/schema.ts";
 import { findMentions } from "./domain/roles.ts";
+import { notify } from "./mail.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const param = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
 const PAGE = 50;
 
 /** Comments on items, and the project activity stream. */
-export function commentRoutes({ app, db, requireUser, audit, access }: AppContext) {
+export function commentRoutes({ app, db, requireUser, audit, access, mail }: AppContext) {
   app.get(
     "/api/items/:itemId/comments",
     { onRequest: requireUser, schema: { params: param("itemId") } },
@@ -92,6 +93,20 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
           .returning({ id: comments.id });
         if (!row) throw new Error("comment insert returned no row");
         await audit(tx, userId, "comment.create", "item", itemId, { mentions });
+        const { label } = await describe(tx, "item", itemId);
+        const excerpt = body.length > 200 ? `${body.slice(0, 200)}…` : body;
+        await notify(
+          tx,
+          mail,
+          mentions.map((mentioned) => ({
+            userId: mentioned,
+            projectId,
+            kind: "mention" as const,
+            text: `${req.user?.name} mentioned you on ${label}: “${excerpt}”`,
+            path: reviewId ? `/projects/${projectId}/reviews/${reviewId}` : `/projects/${projectId}/items/${itemId}`,
+            actorId: userId,
+          })),
+        );
         return row.id;
       });
       return reply.code(201).send({ id, mentions });

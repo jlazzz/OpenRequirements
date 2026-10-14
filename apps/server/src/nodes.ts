@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { docError, docToText, emptyDoc, formatUid, type RichNode, textToDoc } from "@app/shared";
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
 import { checkAttributes, type FieldDef } from "./domain/attributes.ts";
 import { onlyStatusChanged } from "./domain/review.ts";
 import { descendantIds, placeBefore } from "./domain/tree.ts";
+import { watchSuspect } from "./links.ts";
 
 const idParam = (name: string) =>
   ({ type: "object", required: [name], properties: { [name]: { type: "string", format: "uuid" } } }) as const;
@@ -101,7 +102,7 @@ async function lockSetOf(tx: Tx, nodeId: string) {
   return node ? { node, live } : null;
 }
 
-export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) {
+export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppContext) {
   app.post(
     "/api/sets/:setId/nodes",
     {
@@ -412,6 +413,31 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     },
   );
 
+  // Polled by an open item page: the latest version, and who else has unsaved edits. Draft contents stay private.
+  app.get(
+    "/api/items/:itemId/editing",
+    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    async (req, reply) => {
+      const { itemId } = req.params as { itemId: string };
+      if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
+      const [latest] = await db
+        .select({ revision: itemRevisions.number, author: users.name })
+        .from(itemRevisions)
+        .innerJoin(users, eq(users.id, itemRevisions.authorId))
+        .where(eq(itemRevisions.itemId, itemId))
+        .orderBy(desc(itemRevisions.number))
+        .limit(1);
+      if (!latest) return reply.code(404).send({ error: "Item not found" });
+      const editors = await db
+        .select({ name: users.name, since: itemDrafts.updatedAt })
+        .from(itemDrafts)
+        .innerJoin(users, eq(users.id, itemDrafts.authorId))
+        .where(and(eq(itemDrafts.itemId, itemId), ne(itemDrafts.authorId, req.user?.id as string)))
+        .orderBy(desc(itemDrafts.updatedAt));
+      return { ...latest, editors };
+    },
+  );
+
   // Version history of an item, newest first.
   app.get(
     "/api/items/:itemId/revisions",
@@ -463,7 +489,8 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
-      if (!(await access(req, reply, { nodeId: itemId }, "editor"))) return reply;
+      const projectId = await access(req, reply, { nodeId: itemId }, "editor");
+      if (!projectId) return reply;
       const body = req.body as {
         baseRevision: number;
         name: string;
@@ -497,7 +524,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
           .orderBy(desc(itemRevisions.number))
           .limit(1);
         if (current?.number !== body.baseRevision) {
-          return { error: [409, "Someone else saved a newer version of this item. Reload to see it."] } as const;
+          return { error: [409, "Someone else saved a newer version of this item first."] } as const;
         }
         const fields = await fieldsOf(tx, item.itemTypeId);
         const checked = checkAttributes(fields, body.attributes);
@@ -505,6 +532,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
         const revision = current.number + 1;
         const next = { name: body.name.trim(), description: body.description, attributes: checked.attributes };
+        const suspectNews = await watchSuspect(tx, mail, projectId, [itemId], req.user as { id: string; name: string });
         await tx.insert(itemRevisions).values({
           itemId,
           number: revision,
@@ -518,6 +546,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
         // The draft has become this revision.
         await tx.delete(itemDrafts).where(and(eq(itemDrafts.itemId, itemId), eq(itemDrafts.authorId, userId)));
         await audit(tx, userId, "item.revise", "item", itemId);
+        await suspectNews();
         return { revision };
       });
 
@@ -718,7 +747,8 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
-      if (!(await access(req, reply, { setId }, "editor"))) return reply;
+      const projectId = await access(req, reply, { setId }, "editor");
+      if (!projectId) return reply;
       const body = req.body as {
         action: "delete" | "move" | "edit";
         itemIds: string[];
@@ -799,6 +829,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
           .from(itemRevisions)
           .where(inArray(itemRevisions.itemId, itemIds))
           .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
+        const suspectNews = await watchSuspect(tx, mail, projectId, itemIds, req.user as { id: string; name: string });
         let changed = 0;
         for (const now of current) {
           const uid = items.find((item) => item.id === now.itemId)?.uid ?? "";
@@ -822,6 +853,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
           await audit(tx, userId, "item.revise", "item", now.itemId);
           changed += 1;
         }
+        await suspectNews();
         return { changed };
       });
 

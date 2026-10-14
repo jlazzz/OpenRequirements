@@ -169,7 +169,7 @@ export function createAccess(db: Db) {
 }
 
 /** Works out which project an audited entity belongs to and what it is called now, for the activity stream. */
-async function describe(
+export async function describe(
   tx: Reader,
   entityType: string,
   entityId: string,

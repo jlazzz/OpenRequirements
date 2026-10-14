@@ -189,7 +189,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 
 - [ ] Multi-user: invitations, roles (Admin/Editor/Reviewer/Viewer), project-level permissions
 - [ ] Comments and mentions on items
-- [ ] Concurrent-edit safety (optimistic locking, with conflict warnings)
+- [x] Concurrent-edit safety (optimistic locking, with conflict warnings): merge screen per field, "also editing" ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
 - [ ] Baselines: create, browse, compare any two baselines or a baseline vs. current
 - [x] Suspect links: automatic flagging and a review queue
 - [x] Coverage reports (e.g. requirements with no verifying test, orphan items)
@@ -197,7 +197,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] ReqIF import/export (round-trip tested against sample files from DOORS/Polarion). Built and round-trip tested against its own files on 2026-10-13; vendor samples still needed.
 - [ ] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step
 - [ ] Spec export to PDF and Word with configurable templates
-- [ ] Activity feed and notifications (in-app, email)
+- [x] Activity feed and notifications (in-app, email) ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
 - [ ] Public REST API (OpenAPI documented) and API tokens
 
 **Exit criteria:** A design-partner team of 3+ people runs a real project in it and exports a spec for a design review.

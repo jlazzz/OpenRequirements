@@ -15,7 +15,7 @@ import { SuspectPage } from "./SuspectPage.tsx";
 import { ActivityPage, MembersPage } from "./TeamPages.tsx";
 import { TestCyclePage, TestPlanPage, TestPlansPage, TestRunPage } from "./TestPages.tsx";
 import { TrashPage } from "./TrashPage.tsx";
-import { InvitePage, UsersPage } from "./UsersPage.tsx";
+import { InvitePage, ResetPasswordPage, UsersPage } from "./UsersPage.tsx";
 
 const rootRoute = createRootRoute({ component: Root });
 const projectsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: ProjectsPage });
@@ -26,6 +26,11 @@ const projectRoute = createRoute({
 });
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "users", component: UsersPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "invite/$token", component: InvitePage });
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "reset-password/$token",
+  component: ResetPasswordPage,
+});
 const inProject = { getParentRoute: () => projectRoute };
 const level = (value: unknown) =>
   typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4 ? value : undefined;
@@ -78,7 +83,13 @@ const projectChildren = [
 ];
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([projectsRoute, usersRoute, inviteRoute, projectRoute.addChildren(projectChildren)]),
+  routeTree: rootRoute.addChildren([
+    projectsRoute,
+    usersRoute,
+    inviteRoute,
+    resetRoute,
+    projectRoute.addChildren(projectChildren),
+  ]),
 });
 
 declare module "@tanstack/react-router" {
