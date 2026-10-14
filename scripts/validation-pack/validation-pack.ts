@@ -119,7 +119,8 @@ async function main() {
   const bytes = async (path: string) => new Uint8Array(await (await get(path)).arrayBuffer());
 
   const version =
-    e.VERSION ?? (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as any).version;
+    e.VERSION ??
+    (JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version: string }).version;
   const tag = `v${version}`;
   let projectId = e.REQ_PROJECT;
   if (!projectId) {
