@@ -44,7 +44,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB | built 2026-10-14, ADR 0024 |
 | K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | built, merged 2026-10-14 |
 | K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | | built 2026-10-14 |
-| K | A2 slice 4 | Customer test scripts | Sonnet | none | |  |
+| K | A2 slice 4 | Customer test scripts | Sonnet | none | | built, merged 2026-10-14 |
 | L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | | built 2026-10-14, waiting for the owner's test |
 | L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |  |
 | L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |
@@ -56,8 +56,8 @@ Waves for bundle I and its neighbours (each wave in parallel):
 2. Done 2026-10-14: J5 slice 5, J1 slice 3 (DB), A3 slice 2
 3. Done 2026-10-14: T6 (DB), T7 slice 2, A2 slice 2
 4. Done 2026-10-14: J1 slice 1 (DB), J5 slice 7, A3 slices 1 and 3, GitHub CI upload of results
-5. Running: J1 slice 2, J5 slice 8 (Opus), A2 slice 4, A5 slice 2
-6. Then: A2 slice 1 (DB), A2 slice 3, A1 slice 1; Playwright after J5 slice 8
+5. Done 2026-10-14: J1 slice 2, J5 slice 8, A2 slice 1 (DB), A2 slice 3, A2 slice 4, A1 slice 1
+6. Left: A5 slice 2 (help in the app), A1 slices 3 and 4, Playwright end-to-end tests
 
 A3 slices 1 to 3 depend on nothing in bundle I and can run beside any wave.
 
