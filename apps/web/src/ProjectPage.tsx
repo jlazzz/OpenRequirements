@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { api, canEdit, isSuspect, type ProjectDetail, type TreeNode } from "./api.ts";
+import { useNodeDrag } from "./dragdrop.ts";
 import { RouterAnchor, RouterNavLink } from "./links.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { KindIcon, StatusDot } from "./Status.tsx";
@@ -40,6 +41,7 @@ export function ProjectPage() {
   });
   const suspectCount = useLinks(selected.projectId ?? "").data?.links.filter(isSuspect).length;
   const nodeList = project.data?.nodes;
+  const dnd = useNodeDrag(selected.projectId ?? "", nodeList ?? []);
   const selectedNodeId = selected.nodeId;
   // Opens the folders around the selected item, so it is always visible after following a link.
   useEffect(() => {
@@ -65,6 +67,7 @@ export function ProjectPage() {
     );
   }
   const { project: info, sets, nodes } = project.data;
+  const editor = canEdit(project.data.role);
   const selectedId = selected.nodeId ?? selected.setId;
   const toggle = (id: string) =>
     setToggled((previous) => (previous.includes(id) ? previous.filter((other) => other !== id) : [...previous, id]));
@@ -100,7 +103,13 @@ export function ProjectPage() {
           };
           return (
             <li key={id}>
-              <Group gap={0} wrap="nowrap" pl={depth * 14 + 2}>
+              <Group
+                gap={0}
+                wrap="nowrap"
+                pl={depth * 14 + 2}
+                {...(editor ? dnd.dropProps(node ?? "set", (set?.id ?? node?.setId) as string) : {})}
+                {...(editor && node ? dnd.dragProps(node) : {})}
+              >
                 {hasChildren ? (
                   <ActionIcon
                     variant="subtle"
@@ -195,6 +204,11 @@ export function ProjectPage() {
             Collapse all
           </Button>
         </Group>
+        {dnd.error && (
+          <Alert color="red" role="alert" mx="sm" my={4} p="xs" withCloseButton onClose={dnd.reset}>
+            {dnd.error.message}
+          </Alert>
+        )}
         {branch(null, 0)}
         <RouterNavLink
           to="/projects/$projectId/matrix"

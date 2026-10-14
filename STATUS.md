@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (bundle I, J5 slice 5)
 Last updated: 2026-10-14 (bundle I, J1 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
@@ -10,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J5 slice 5, drag and drop: drag folders and items in the explorer and in List view (⠿ handle) to reorder, move, or drop onto an item to make a child; a set row moves to its top level; ticked rows drag together. Pure rule `dropPlacement` in `packages/shared`, the move route and its checks unchanged. "Pick several" fields are editable in List view and in bulk set-field. Checked in a browser with synthetic drag events on a scratch instance. `API_PORT` sets the web proxy target (2026-10-14)
 - J1 slice 3, Part 11 hardening: account lockout, password expiry and session inactivity timeout (environment variables, off when unset), tamper-evident audit log (SHA-256 hash chain under an advisory lock, `GET /api/audit/verify`, button on the Users page), [ADR 0020](docs/adr/0020-part-11-hardening-audit-chain.md). Migration 0019. Not checked in a browser; the chain does not cover rows from before it or a restored backup (2026-10-14)
 - A5 slice 1, docs site: `docs/user-guide` built by VitePress (dev dependency, offline search, dead links fail the build), published to GitHub Pages by `docs.yml`, copied into the image and served at `/help` without sign-in, [ADR 0019](docs/adr/0019-docs-site-vitepress-help.md). Not checked on a real Pages deployment (2026-10-14)
 - J5 slice 1, editable item types: a project admin adds, renames and removes item types, fields, enum values, sets and relationship types on the "Item types" page. Remove is soft (`archivedAt`); old versions keep their values. Roles `test` and `verifies` replace the name rules, [ADR 0018](docs/adr/0018-editable-types-and-roles.md). Backup format version 8. Not checked in a browser (2026-10-14)
@@ -53,6 +55,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J5 slice 5 (drag and drop, multi-select fields): built, waiting for the owner's test.** Checkpoint: drag a folder and an item in the explorer; drop an item on another item in List view.
 - **J1 slice 3 (Part 11 hardening): built, waiting for the owner's test.** Checkpoint: set `LOGIN_LOCKOUT_ATTEMPTS=3`, fail three sign-ins; click Verify audit log on Users.
 - **J5 slice 1 (editable item types, fields, sets, relationship types): built, waiting for the owner's test.** Checkpoint: add a field to an item type, rename "Verified by" and see verification still work.
 - J5 slice 2 (baseline to baseline compare): built, waiting for the owner's test. Checkpoint: pick another baseline on a baseline page.
@@ -77,9 +80,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
-1. Drag and drop in the explorer
-2. Playwright end-to-end tests
-3. Dogfood: write this project's own requirements spec and import it
+1. Playwright end-to-end tests
+2. Dogfood: write this project's own requirements spec and import it
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
@@ -90,7 +92,7 @@ Known gaps left for later milestones or owner decision:
 - Word: the export was not opened in Microsoft Word or LibreOffice (only read back by the importer and macOS). Import not tried with a real Word file; one from macOS `textutil` has no heading styles, so its headings came in as items. Export has no options (fields, UID position, cover). Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
 
 - Integrations: OpenAPI has no response schemas. No SAML or LDAP, and no rule on which provider accounts may sign in (any verified email gets an account, without projects). Not tried against a real identity provider, Jira, GitHub or GitLab: only fakes. The review sign dialog for a person without a password was not checked in a browser (server tests cover the flow). Webhook deliveries cannot be re-sent by hand; no delivery or reference history is kept beyond the latest attempt. The private-address check can be passed by DNS that changes between check and call. Code references point at files on a branch, not at commits.
-- Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
+- Drag and drop: tested with synthetic events, not a real mouse; no touch support (native HTML drag). Dragging several ticked rows places them last, not at the drop point. No saved filter per user per set (needs a table).
 - Child items: List view's bulk move offers folders only; ReqIF import turns an object with children into a folder, so exported child items come back inside a folder; the CSV Folder column drops parent items.
 - Version diffs compare wording; a formatting-only change is reported without detail.
 - Deleted relationships and comments cannot be restored from the screen.

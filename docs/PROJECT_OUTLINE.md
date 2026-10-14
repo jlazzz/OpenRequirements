@@ -167,7 +167,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 
 - [ ] Local user accounts and login
 - [ ] Projects and documents (create, rename, archive)
-- [ ] Document tree: headings and requirements, drag-to-reorder, nesting
+- [x] Document tree: headings and requirements, drag-to-reorder, nesting
 - [ ] Requirement editor: rich text (tables, images), auto-generated UIDs
 - [x] Custom attribute definitions (text, number, enum, multi-enum, date, boolean). Editable per project by its admin, 2026-10-14
 - [ ] Per-item revision history with a diff view
