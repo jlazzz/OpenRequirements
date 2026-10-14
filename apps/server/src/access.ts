@@ -7,6 +7,8 @@ import {
   auditEvents,
   baselines,
   comments,
+  externalReferences,
+  integrations,
   itemRevisions,
   links,
   nodes,
@@ -17,6 +19,8 @@ import {
   testCycles,
   testPlans,
   testRuns,
+  webhookDeliveries,
+  webhooks,
 } from "./db/schema.ts";
 import { type Role, roleAllows } from "./domain/roles.ts";
 
@@ -36,6 +40,9 @@ export type Where = {
   testPlanId?: string;
   testCycleId?: string;
   testRunId?: string;
+  webhookId?: string;
+  referenceId?: string;
+  integrationId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
@@ -93,6 +100,23 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
       );
     return rows[0]?.id;
   }
+  if (where.webhookId) {
+    return (await db.select({ id: webhooks.projectId }).from(webhooks).where(eq(webhooks.id, where.webhookId)))[0]?.id;
+  }
+  if (where.integrationId) {
+    return (
+      await db.select({ id: integrations.projectId }).from(integrations).where(eq(integrations.id, where.integrationId))
+    )[0]?.id;
+  }
+  if (where.referenceId) {
+    const rows = await db
+      .select({ id: sets.projectId })
+      .from(externalReferences)
+      .innerJoin(nodes, eq(nodes.id, externalReferences.itemId))
+      .innerJoin(sets, eq(sets.id, nodes.setId))
+      .where(eq(externalReferences.id, where.referenceId));
+    return rows[0]?.id;
+  }
   return where.projectId;
 }
 
@@ -122,9 +146,15 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
                       ? { testCycleId: params.testCycleId }
                       : params.testRunId
                         ? { testRunId: params.testRunId }
-                        : params.projectId
-                          ? { projectId: params.projectId }
-                          : null;
+                        : params.webhookId
+                          ? { webhookId: params.webhookId }
+                          : params.referenceId
+                            ? { referenceId: params.referenceId }
+                            : params.integrationId
+                              ? { integrationId: params.integrationId }
+                              : params.projectId
+                                ? { projectId: params.projectId }
+                                : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 
@@ -229,7 +259,20 @@ export async function audit(
 ) {
   const { projectId, label } = { ...(await describe(tx, entityType, entityId)), ...extra };
   const data = label || extra.mentions?.length ? { label, mentions: extra.mentions } : null;
-  await tx
+  const [event] = await tx
     .insert(auditEvents)
-    .values({ actorUserId, projectId: projectId ?? null, action, entityType, entityId, data });
+    .values({ actorUserId, projectId: projectId ?? null, action, entityType, entityId, data })
+    .returning({ id: auditEvents.id, at: auditEvents.at });
+  if (!projectId || !event) return;
+  // Every write passes through here, so this is the one place webhooks are fed. The delivery is sent by the worker in webhooks.ts.
+  const topic = action.split(".")[0] as string;
+  const due = (
+    await tx
+      .select({ id: webhooks.id, events: webhooks.events })
+      .from(webhooks)
+      .where(and(eq(webhooks.projectId, projectId), isNull(webhooks.deletedAt)))
+  ).filter((hook) => hook.events.length === 0 || hook.events.includes(topic));
+  if (due.length === 0) return;
+  const payload = { id: event.id, event: action, at: event.at, projectId, entityType, entityId, label, actorUserId };
+  await tx.insert(webhookDeliveries).values(due.map((hook) => ({ webhookId: hook.id, event: action, payload })));
 }

@@ -86,7 +86,17 @@ async function loadReview(db: Db | Tx, reviewId: string) {
 }
 
 /** Reviews: people look at a baseline's frozen items, comment, mark them reviewed, and approvers sign a decision on each. */
-export function reviewRoutes({ app, db, requireUser, requireSession, audit, access, loginLimit, mail }: AppContext) {
+export function reviewRoutes({
+  app,
+  db,
+  requireUser,
+  requireSession,
+  audit,
+  access,
+  loginLimit,
+  mail,
+  takeReauth,
+}: AppContext) {
   /** Locks an open review for a write, so marks, signatures and closing cannot interleave. */
   async function lockOpen(tx: Tx, reviewId: string) {
     const [row] = await tx.select({ state: reviews.state }).from(reviews).where(eq(reviews.id, reviewId)).for("update");
@@ -371,8 +381,8 @@ export function reviewRoutes({ app, db, requireUser, requireSession, audit, acce
         params: idParam("reviewId"),
         body: {
           type: "object",
-          required: ["password"],
           additionalProperties: false,
+          // Left out by someone who just confirmed themself at the identity provider instead (oidc.ts).
           properties: { password: { type: "string", minLength: 1, maxLength: 200 } },
         },
       },
@@ -391,10 +401,14 @@ export function reviewRoutes({ app, db, requireUser, requireSession, audit, acce
       if (!before.approvers.some((a) => a.userId === userId)) {
         return reply.code(403).send({ error: "Only an approver of this review can sign it" });
       }
-      if (!(await verifyPassword((req.body as { password: string }).password, signer.hash))) {
+      const { password } = (req.body ?? {}) as { password?: string };
+      if (password === undefined ? !(await takeReauth(req)) : !(await verifyPassword(password, signer.hash))) {
         // Failed signing attempts are part of the record.
         await audit(db, userId, "review.sign.failed", "review", reviewId, { projectId, label: before.review.name });
-        return reply.code(400).send({ error: "The password is wrong" });
+        return reply.code(400).send({
+          error:
+            password === undefined ? "Confirm who you are at the identity provider first" : "The password is wrong",
+        });
       }
 
       const result = await db.transaction(async (tx) => {

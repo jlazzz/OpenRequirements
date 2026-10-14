@@ -13,6 +13,7 @@ import {
   baselines,
   baselineVerification,
   comments,
+  externalReferences,
   itemRevisions,
   itemTypes,
   linkRevisions,
@@ -62,7 +63,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, 4, 5, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, 5, 6, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -251,6 +252,21 @@ const backupSchema = {
       }),
       default: [],
     },
+    // Not in files older than version 7.
+    externalReferences: {
+      ...rows({
+        id,
+        itemId: id,
+        url: text(2000),
+        title: text(500),
+        kind: text(20),
+        source: { type: ["string", "null"], maxLength: 500 },
+        createdBy: id,
+        createdAt: when,
+        deletedAt: whenOrNull,
+      }),
+      default: [],
+    },
     comments: {
       type: "array",
       items: {
@@ -363,6 +379,7 @@ const ADDED_LATER = [
   "testCycles",
   "testRuns",
   "stepResults",
+  "externalReferences",
 ];
 backupSchema.required = backupSchema.required.filter((key) => !ADDED_LATER.includes(key));
 
@@ -501,6 +518,14 @@ export function backupRoutes(
           ...s,
           createdAt: iso(s.createdAt),
         })),
+        // The state read from another tool is left out: it is read again after a restore.
+        externalReferences: (
+          await db.select().from(externalReferences).where(inArray(externalReferences.itemId, nodeIds))
+        ).map(({ state: _, checkedAt: __, ...r }) => ({
+          ...r,
+          createdAt: iso(r.createdAt),
+          deletedAt: isoOrNull(r.deletedAt),
+        })),
         comments: (await db.select().from(comments).where(inArray(comments.itemId, nodeIds))).map((c) => ({
           ...c,
           createdAt: iso(c.createdAt),
@@ -551,6 +576,7 @@ export function backupRoutes(
           backup.testRuns.flatMap((r) => (r.assigneeId ? [r.assigneeId] : [])),
           backup.stepResults.map((s) => s.recordedBy),
           backup.comments.flatMap((c) => [c.authorId, ...c.mentions]),
+          backup.externalReferences.map((r) => r.createdBy),
           backup.baselines.map((b) => b.createdBy),
           backup.reviews.flatMap((r) => (r.closedBy ? [r.createdBy, r.closedBy] : [r.createdBy])),
           backup.reviewParticipants.map((p) => p.userId),
@@ -734,6 +760,11 @@ export function backupRoutes(
             await tx
               .insert(comments)
               .values(part.map((c) => ({ ...c, createdAt: date(c.createdAt), deletedAt: dateOrNull(c.deletedAt) })));
+          }
+          for (const part of parts(backup.externalReferences)) {
+            await tx
+              .insert(externalReferences)
+              .values(part.map((r) => ({ ...r, createdAt: date(r.createdAt), deletedAt: dateOrNull(r.deletedAt) })));
           }
           for (const part of parts(backup.auditEvents)) {
             await tx.insert(auditEvents).values(part.map((event) => ({ ...event, projectId, at: date(event.at) })));

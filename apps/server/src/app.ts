@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
@@ -12,7 +12,9 @@ import { baselineRoutes } from "./baselines.ts";
 import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
 import { apiTokens, sessions, users } from "./db/schema.ts";
-import { hashPassword, verifyPassword } from "./domain/password.ts";
+import type { ApiRoute } from "./domain/openapi.ts";
+import { openApiDocument } from "./domain/openapi.ts";
+import { hashPassword, NO_PASSWORD, verifyPassword } from "./domain/password.ts";
 import { exportRoutes } from "./export.ts";
 import { importRoutes } from "./import.ts";
 import { linkRoutes } from "./links.ts";
@@ -20,13 +22,16 @@ import type { MailConfig } from "./mail.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { notificationRoutes } from "./notifications.ts";
+import { type OidcConfig, oidcRoutes } from "./oidc.ts";
 import { projectRoutes } from "./projects.ts";
 import { recoveryRoutes } from "./recovery.ts";
+import { type OutboundConfig, referenceRoutes } from "./references.ts";
 import { reviewRoutes } from "./reviews.ts";
 import { testPlanRoutes } from "./testplans.ts";
 import { testRunRoutes } from "./testruns.ts";
 import { traceRoutes } from "./trace.ts";
 import { verificationRoutes } from "./verification.ts";
+import { webhookRoutes } from "./webhooks.ts";
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
@@ -55,6 +60,12 @@ export type AppContext = {
   loginLimit: { rateLimit: { max: number; timeWindow: string } };
   /** Whether email is set up, and the address links in emails start with. */
   mail: MailConfig;
+  /** Served over HTTPS: cookies are `Secure`. */
+  https: boolean;
+  /** What webhooks and connections may call, and the key for connection tokens. */
+  outbound: OutboundConfig;
+  /** True once, within five minutes of this session confirming its person at the identity provider (oidc.ts). */
+  takeReauth: (req: FastifyRequest) => Promise<boolean>;
 };
 
 declare module "fastify" {
@@ -62,7 +73,7 @@ declare module "fastify" {
     user: SessionUser | null;
   }
   interface FastifyInstance {
-    apiRoutes: { method: string; url: string; public: boolean }[];
+    apiRoutes: ApiRoute[];
   }
   interface FastifyContextConfig {
     /** Marks a route as reachable without signing in. Everything else must use `requireUser`. */
@@ -90,6 +101,9 @@ export async function buildApp(
     https?: boolean;
     /** Email is queued only when this says it is enabled; the mail loop started in main.ts sends it. */
     mail?: MailConfig;
+    /** Sign-in through an identity provider. */
+    oidc?: OidcConfig;
+    outbound?: OutboundConfig;
   } = {},
 ) {
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.https ?? false });
@@ -111,7 +125,7 @@ export async function buildApp(
   app.decorateRequest("user", null);
 
   // Hard rule: every endpoint checks permissions. A route that is neither public nor behind requireUser fails at startup.
-  const apiRoutes: { method: string; url: string; public: boolean }[] = [];
+  const apiRoutes: ApiRoute[] = [];
   app.decorate("apiRoutes", apiRoutes);
   app.addHook("onRoute", (route) => {
     if (!route.url.startsWith("/api/")) return;
@@ -119,7 +133,9 @@ export async function buildApp(
     if (!isPublic && ![route.onRequest].flat().includes(requireUser)) {
       throw new Error(`${route.method} ${route.url} must use requireUser or be marked public`);
     }
-    for (const method of [route.method].flat()) apiRoutes.push({ method, url: route.url, public: isPublic });
+    for (const method of [route.method].flat()) {
+      apiRoutes.push({ method, url: route.url, public: isPublic, schema: route.schema as ApiRoute["schema"] });
+    }
   });
 
   const who = { id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin };
@@ -130,14 +146,32 @@ export async function buildApp(
   async function findUser(req: FastifyRequest): Promise<SessionUser | null> {
     const apiToken = bearer(req);
     if (apiToken !== null) {
-      const [user] = await db
-        .select(who)
+      const now = new Date();
+      const [found] = await db
+        .select({ ...who, tokenId: apiTokens.id })
         .from(apiTokens)
         .innerJoin(users, eq(users.id, apiTokens.userId))
         .where(
-          and(eq(apiTokens.tokenHash, hashToken(apiToken)), isNull(apiTokens.revokedAt), isNull(users.deactivatedAt)),
+          and(
+            eq(apiTokens.tokenHash, hashToken(apiToken)),
+            isNull(apiTokens.revokedAt),
+            or(isNull(apiTokens.expiresAt), gt(apiTokens.expiresAt, now)),
+            isNull(users.deactivatedAt),
+          ),
         );
-      return user ?? null;
+      if (!found) return null;
+      // At most one write a minute per token, however busy the CI job.
+      await db
+        .update(apiTokens)
+        .set({ lastUsedAt: now })
+        .where(
+          and(
+            eq(apiTokens.id, found.tokenId),
+            or(isNull(apiTokens.lastUsedAt), lt(apiTokens.lastUsedAt, new Date(now.getTime() - 60_000))),
+          ),
+        );
+      const { tokenId: _, ...user } = found;
+      return user;
     }
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return null;
@@ -187,8 +221,16 @@ export async function buildApp(
   app.get("/api/session", { config: { public: true } }, async (req) => {
     const user = await findUser(req);
     const needsSetup = !user && (await db.$count(users)) === 0;
-    // `mail` tells the sign-in page whether "Forgot password" can work.
-    return { user, needsSetup, mail: mail.enabled };
+    const [own] = user ? await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, user.id)) : [];
+    // `mail` tells the sign-in page whether "Forgot password" can work; `sso` names the identity provider, if there is one.
+    // `password` is false for someone who signs in only through the identity provider.
+    return {
+      user,
+      needsSetup,
+      mail: mail.enabled,
+      sso: opts.oidc?.name ?? null,
+      ...(own ? { password: own.hash !== NO_PASSWORD } : {}),
+    };
   });
 
   // First run only: whoever reaches the server first creates the admin account.
@@ -297,7 +339,13 @@ export async function buildApp(
   // Personal access tokens, for CI and scripts. A token acts as the user who made it, with that user's roles.
   app.get("/api/tokens", { onRequest: requireUser }, async (req) => ({
     tokens: await db
-      .select({ id: apiTokens.id, name: apiTokens.name, createdAt: apiTokens.createdAt })
+      .select({
+        id: apiTokens.id,
+        name: apiTokens.name,
+        createdAt: apiTokens.createdAt,
+        expiresAt: apiTokens.expiresAt,
+        lastUsedAt: apiTokens.lastUsedAt,
+      })
       .from(apiTokens)
       .where(and(eq(apiTokens.userId, req.user?.id as string), isNull(apiTokens.revokedAt)))
       .orderBy(apiTokens.createdAt),
@@ -312,26 +360,32 @@ export async function buildApp(
           type: "object",
           required: ["name"],
           additionalProperties: false,
-          properties: { name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" } },
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" },
+            // Left out: the token never expires.
+            expiresInDays: { type: "integer", minimum: 1, maximum: 3650 },
+          },
         },
       },
     },
     async (req, reply) => {
       const user = req.user as SessionUser;
-      const name = (req.body as { name: string }).name.trim();
+      const body = req.body as { name: string; expiresInDays?: number };
+      const name = body.name.trim();
+      const expiresAt = body.expiresInDays ? new Date(Date.now() + body.expiresInDays * 86_400_000) : null;
       // The prefix lets secret scanners and people recognise a leaked token.
       const token = `orq_${randomBytes(32).toString("base64url")}`;
       const id = await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(apiTokens)
-          .values({ userId: user.id, name, tokenHash: hashToken(token) })
+          .values({ userId: user.id, name, tokenHash: hashToken(token), expiresAt })
           .returning({ id: apiTokens.id });
         if (!row) throw new Error("token insert returned no row");
         await audit(tx, user.id, "token.create", "token", row.id, { label: name });
         return row.id;
       });
       // The only time the token is ever sent: only its hash is stored.
-      return reply.code(201).send({ id, name, token });
+      return reply.code(201).send({ id, name, token, expiresAt });
     },
   );
 
@@ -360,6 +414,28 @@ export async function buildApp(
     },
   );
 
+  // The API described as OpenAPI 3.1, from the routes' own schemas. The web app shows it at /api-docs.
+  let openApi: object | null = null;
+  app.get("/api/openapi.json", { config: { public: true } }, async () => {
+    openApi ??= openApiDocument(app.apiRoutes, "1");
+    return openApi;
+  });
+
+  async function takeReauth(req: FastifyRequest) {
+    const [row] = await db
+      .update(sessions)
+      .set({ reauthAt: null })
+      .where(
+        and(
+          eq(sessions.tokenHash, hashToken(req.cookies[SESSION_COOKIE] ?? "")),
+          eq(sessions.userId, req.user?.id as string),
+          gt(sessions.reauthAt, new Date(Date.now() - 5 * 60_000)),
+        ),
+      )
+      .returning({ userId: sessions.userId });
+    return Boolean(row);
+  }
+
   const access = createAccess(db);
   // Safety net under the per-route checks: any route whose path names something in a project answers 404 to people outside
   // that project, before the request body is even looked at. Routes still state the role they need.
@@ -378,6 +454,9 @@ export async function buildApp(
     startSession,
     loginLimit,
     mail,
+    https: opts.https ?? false,
+    outbound: opts.outbound ?? { allowPrivate: false },
+    takeReauth,
   };
   projectRoutes(context);
   nodeRoutes(context);
@@ -392,6 +471,9 @@ export async function buildApp(
   testRunRoutes(context);
   notificationRoutes(context);
   recoveryRoutes(context);
+  webhookRoutes(context);
+  referenceRoutes(context);
+  if (opts.oidc) oidcRoutes(context, opts.oidc);
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
   const maxAttachmentBytes = (opts.maxAttachmentMb || 25) * 1024 * 1024;
   attachmentRoutes(context, attachmentsDir, maxAttachmentBytes);

@@ -1,0 +1,9 @@
+{
+  "name": "@app/cli",
+  "private": true,
+  "type": "module",
+  "exports": "./src/scan.ts",
+  "scripts": {
+    "scan": "node src/main.ts"
+  }
+}

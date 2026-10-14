@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!apps/server/drizzle"] },
+  "files": { "includes": ["**", "!apps/server/drizzle", "!docs/openapi.json"] },
   "formatter": { "indentStyle": "space", "lineWidth": 120 },
   "linter": { "enabled": true }
 }

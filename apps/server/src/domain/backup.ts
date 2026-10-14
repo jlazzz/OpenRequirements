@@ -7,13 +7,13 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Version 5 added itemTypes.role,
 // test plans with their cases, cycles, runs and step results, and verificationResults.runId and defectUrl.
 // Version 6 added attachments.name, resultAttachments (which replace verificationResults.attachmentId), baselineVerification
-// and testCycles.baselineId. Older files are still restored.
-export const BACKUP_VERSION = 6;
+// and testCycles.baselineId. Version 7 added externalReferences. Older files are still restored.
+export const BACKUP_VERSION = 7;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | 5 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -137,6 +137,18 @@ export type Backup = {
     recordedBy: string;
     createdAt: string;
   }[];
+  /** Links from items to issues, pull requests and code in other tools. Webhooks and connections hold secrets and are left out. */
+  externalReferences: {
+    id: string;
+    itemId: string;
+    url: string;
+    title: string;
+    kind: string;
+    source: string | null;
+    createdBy: string;
+    createdAt: string;
+    deletedAt: string | null;
+  }[];
   comments: {
     id: string;
     itemId: string;
@@ -239,6 +251,8 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["testRuns", "assigneeId", "users"],
   ["stepResults", "runId", "testRuns"],
   ["stepResults", "recordedBy", "users"],
+  ["externalReferences", "itemId", "nodes"],
+  ["externalReferences", "createdBy", "users"],
   ["comments", "itemId", "nodes"],
   ["comments", "authorId", "users"],
   ["comments", "mentions", "users"],

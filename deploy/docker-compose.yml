@@ -33,6 +33,16 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       # The address people open the app at, for links in emails. Defaults to https://DOMAIN, or http://localhost:3000.
       PUBLIC_URL: ${PUBLIC_URL:-}
+      # Sign-in through an OpenID Connect identity provider. All three must be set; the redirect URI is PUBLIC_URL/api/oidc/callback.
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      # What the sign-in button calls the provider, e.g. "Okta".
+      OIDC_NAME: ${OIDC_NAME:-}
+      # Encrypts the tokens of Jira, GitHub and GitLab connections. Any long random string; keep it, or tokens must be entered again.
+      INTEGRATION_KEY: ${INTEGRATION_KEY:-}
+      # true lets webhooks and connections call addresses on private networks, e.g. a Jira inside the company.
+      ALLOW_PRIVATE_URLS: ${ALLOW_PRIVATE_URLS:-false}
     volumes:
       # Uploaded images and evidence files. Back this up together with the database.
       - attachments:/data/attachments

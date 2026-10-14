@@ -98,6 +98,8 @@ export const sessions = pgTable("sessions", {
     .references(() => users.id),
   createdAt: createdAt(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
+  // When this session last confirmed its person at the identity provider, for signing without a password. Used once.
+  reauthAt: timestamp({ withTimezone: true }),
 });
 
 /** A personal access token, for scripts and CI. It acts as its user. Revoked, never removed, so the audit log keeps its meaning. */
@@ -111,6 +113,10 @@ export const apiTokens = pgTable("api_tokens", {
   tokenHash: text().notNull().unique(),
   createdAt: createdAt(),
   revokedAt: timestamp({ withTimezone: true }),
+  // Null: never expires.
+  expiresAt: timestamp({ withTimezone: true }),
+  // Updated at most once a minute.
+  lastUsedAt: timestamp({ withTimezone: true }),
 });
 
 export const projects = pgTable("projects", {
@@ -670,4 +676,87 @@ export const auditEvents = pgTable("audit_events", {
   entityId: text().notNull(),
   // { label }: what the entity was called at the time, e.g. "SYS-001 Supply voltage". { mentions }: user ids, on comments.
   data: jsonb().$type<{ label?: string; mentions?: string[] }>(),
+});
+
+/** Where a project's audit events are posted as JSON, signed with the secret. Soft-deleted. */
+export const webhooks = pgTable("webhooks", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  url: text().notNull(),
+  // HMAC-SHA256 key for the signature header. Kept readable: it is needed to sign.
+  secret: text().notNull(),
+  // The first word of the actions to send, e.g. "item" or "link". Empty: all of them.
+  events: jsonb().$type<string[]>().notNull().default([]),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  deletedAt: timestamp({ withTimezone: true }),
+});
+
+/** One event to post to one webhook. Like the email outbox, the attempt columns change until it is delivered or given up. */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    webhookId: uuid()
+      .notNull()
+      .references(() => webhooks.id),
+    event: text().notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    createdAt: createdAt(),
+    dueAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    attempts: integer().notNull().default(0),
+    // The HTTP status of the last attempt. Null when it got no answer.
+    statusCode: integer(),
+    lastError: text(),
+    deliveredAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.deliveredAt, t.dueAt), index().on(t.webhookId, t.createdAt)],
+);
+
+/** A link from an item to something outside the tool: an issue, a pull request, a line of code. Soft-deleted. */
+export const externalReferences = pgTable(
+  "external_references",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    url: text().notNull(),
+    title: text().notNull().default(""),
+    // One of ReferenceKind in domain/references.ts, judged from the URL.
+    kind: text().notNull(),
+    // The repository a code reference was found in by the tag scanner, which keeps these rows in step with the code.
+    source: text(),
+    // Read from the other tool by the worker when the project has a connection to it. Null when not known.
+    state: text().$type<"open" | "closed">(),
+    checkedAt: timestamp({ withTimezone: true }),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    deletedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.itemId)],
+);
+
+/** A project's connection to Jira, GitHub or GitLab, used to read the title and state of references. Soft-deleted. */
+export const integrations = pgTable("integrations", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  kind: text().$type<"jira" | "github" | "gitlab">().notNull(),
+  // References whose URL starts with this are read through this connection.
+  baseUrl: text().notNull(),
+  // The token, encrypted with INTEGRATION_KEY (domain/secret.ts). Null for public access.
+  token: text(),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  deletedAt: timestamp({ withTimezone: true }),
 });

@@ -19,7 +19,12 @@ const attachmentsDir = mkdtempSync(join(tmpdir(), "attachments-"));
 const admin = { email: "Admin@Example.com", name: "Admin", password: "a long password" };
 
 beforeAll(async () => {
-  app = await buildApp(db, { loginAttemptsPerMinute: 1000, attachmentsDir, maxAttachmentMb: 5 });
+  app = await buildApp(db, {
+    loginAttemptsPerMinute: 1000,
+    attachmentsDir,
+    maxAttachmentMb: 5,
+    outbound: { allowPrivate: true },
+  });
 });
 beforeEach(async () => {
   await db.execute(
@@ -41,7 +46,7 @@ const cookieOf = (res: { cookies: { name: string; value: string }[] }) => `sessi
 const auditActions = async () => (await db.select().from(auditEvents)).map((e) => e.action).sort();
 
 test("a fresh install needs setup, and setup signs the admin in", async () => {
-  expect((await get("/api/session")).json()).toEqual({ user: null, needsSetup: true, mail: false });
+  expect((await get("/api/session")).json()).toEqual({ user: null, needsSetup: true, mail: false, sso: null });
 
   const res = await post("/api/setup", admin);
   expect(res.statusCode).toBe(200);
@@ -928,6 +933,11 @@ test("someone outside a project is refused on every route that names something i
     testPlanId,
     testCycleId,
     testRunId: (await get(`/api/test-cycles/${testCycleId}`, owner)).json().runs[0].id,
+    webhookId: (await post(`/api/projects/${projectId}/webhooks`, { url: "http://127.0.0.1:9/hook" }, owner)).json().id,
+    referenceId: (await post(`/api/items/${itemId}/references`, { url: "https://example.com/x" }, owner)).json().id,
+    integrationId: (
+      await post(`/api/projects/${projectId}/integrations`, { kind: "github", baseUrl: "http://127.0.0.1:9" }, owner)
+    ).json().id,
   };
 
   const routes = app.apiRoutes.filter((r) => !r.public && r.method !== "HEAD" && r.url.includes(":"));
@@ -1260,7 +1270,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 6, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 7, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1295,6 +1305,10 @@ test("a backup restores as a new project with history, relationships, comments, 
   ]);
   expect((await get(`/api/items/${newRan}/results`, cookie)).json().results).toEqual([
     expect.objectContaining({ outcome: "fail", source: "run", runId: newRun.id, defectUrl }),
+  ]);
+  // The defect link of the failed run is also a reference on the test case, and came along too.
+  expect((await get(`/api/items/${newRan}/references`, cookie)).json().references).toEqual([
+    expect.objectContaining({ url: defectUrl, title: "Defect found in Round 1", kind: "other" }),
   ]);
   // The result comes back on the copied test case, with its evidence pointing at the copied image.
   const newTest = tree.nodes.find((n: { uid: string }) => n.uid === "VER-001").id;
@@ -1423,7 +1437,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 7 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 8 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));

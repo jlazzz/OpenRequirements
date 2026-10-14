@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import type { Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { notifications, outbox, users } from "./db/schema.ts";
+import { startLoop } from "./worker.ts";
 
 /** Sends one email. The SMTP one comes from smtpMailer; tests pass their own. */
 export type Mailer = { send: (message: { to: string; subject: string; text: string }) => Promise<void> };
@@ -113,29 +114,22 @@ export async function queueDigests(db: Db, mail: MailConfig, now = new Date()): 
 export const FOOTER =
   "\n\n--\nTo get these emails once a day or not at all, choose your name at the top right of the app.";
 
-/** The project's first background worker: queues digests and sends what is due, every `everyMs`. Returns a stop function. */
-export function startMailLoop(
+/** Queues digests and sends what is due, every `everyMs`. Returns a stop function. */
+export const startMailLoop = (
   db: Db,
   mailer: Mailer,
   mail: MailConfig,
   log: (error: unknown) => void,
   everyMs = 30_000,
-) {
-  let running = false;
-  const timer = setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
+) =>
+  startLoop(
+    async () => {
       await queueDigests(db, mail);
       await sendDue(db, mailer);
-    } catch (error) {
-      log(error);
-    } finally {
-      running = false;
-    }
-  }, everyMs);
-  return () => clearInterval(timer);
-}
+    },
+    log,
+    everyMs,
+  );
 
 export type Notice = {
   userId: string;

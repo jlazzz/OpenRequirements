@@ -7,6 +7,7 @@ import type { Db } from "./db/client.ts";
 import {
   attributeDefinitions,
   baselines,
+  externalReferences,
   itemRevisions,
   nodes,
   projectMembers,
@@ -20,6 +21,7 @@ import {
   users,
   verificationResults,
 } from "./db/schema.ts";
+import { referenceKind } from "./domain/references.ts";
 import { roleAllows } from "./domain/roles.ts";
 import { runOutcome, runState, runSteps } from "./domain/testrun.ts";
 import { OUTCOMES, type Outcome } from "./domain/verification.ts";
@@ -545,6 +547,16 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
           runId: testRunId,
           defectUrl: body.defectUrl ?? null,
         });
+        // The defect also shows among the test case's references, where its state is read from the other tool.
+        if (body.defectUrl) {
+          await tx.insert(externalReferences).values({
+            itemId: run.itemId,
+            url: body.defectUrl,
+            title: `Defect found in ${cycle.name}`,
+            kind: referenceKind(body.defectUrl),
+            createdBy: userId,
+          });
+        }
         await audit(tx, userId, `run.finish.${outcome}`, "run", testRunId, {
           projectId,
           label: `${run.uid} ${run.name} in ${cycle.name}`,
