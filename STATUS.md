@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (A2 slice 3)
 Last updated: 2026-10-14 (A1 slice 1 built)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
@@ -10,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A2 slice 3, validation pack: `npm run validation-pack` builds a zip for a release through the API (baseline `vX.Y.Z` made if missing; Word, ReqIF and CSV of it, traceability matrix, per-requirement verification with the CI run of each result, manifest with image digest and SBOM hash); `release.yml` job `validation-pack` attaches it when `REQ_URL` and `REQ_TOKEN` exist; [user guide](docs/user-guide/validation-pack.md). Tried against a scratch instance loaded by `npm run dogfood`; the workflow job has never run. No browser versions, known-gaps list, or Postgres version in it; no route or migration (2026-10-14)
 - A2 slice 1, anchored audit chain: `audit_anchors` (migration 0022, hash-linked, HMAC-signed with `ANCHOR_KEY`), scheduled daily and on demand ("Anchor now" on Users), optional `ANCHOR_FILE`, download and verify of a saved copy; `GET /api/audit/verify` reports a rewritten history, a deleted tail or tampered anchors. [ADR 0024](docs/adr/0024-anchored-audit-chain.md). Server tests only; the Users page buttons not checked in a browser (2026-10-14)
 
 - J1 slice 2, review notifications and signed record: a person added to an open review is notified; the review's starter hears when every approver has signed; participants and starter hear when it closes and how; a closed review downloads as Word (`GET /api/reviews/:reviewId/docx`: cover, signature block with an intact/changed flag, each item's version and outcome; 409 while open). Pure rules in `domain/review.ts`, no migration. Download button checked in a browser on the demo project; notification texts covered by a server test, the bell was not opened with a new notification. The Word file was not opened in Word (2026-10-14)

@@ -23,6 +23,7 @@
     "demo": "node scripts/demo/spacecraft.ts",
     "dogfood": "node scripts/dogfood/dogfood.ts",
     "perf": "node scripts/perf/perf.ts",
+    "validation-pack": "node scripts/validation-pack/validation-pack.ts",
     "samples:import": "node scripts/samples/make-import-samples.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

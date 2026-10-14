@@ -30,6 +30,7 @@ npm run docs:dev     # user guide with live reload; docs:build writes docs/.vite
 npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
 npm run perf         # time a 2,000-item project against the performance budgets on a scratch instance (PERF_URL, PERF_EMAIL, PERF_PASSWORD, PERF_ITEMS); exits 1 on a miss
 npm run dogfood      # load this tool's own requirements into an instance (DOGFOOD_URL, DOGFOOD_EMAIL, DOGFOOD_PASSWORD); safe to re-run
+npm run validation-pack # build a release's validation pack zip through the API (REQ_URL, REQ_TOKEN, VERSION, IMAGE_DIGEST, SBOM, REQ_STRICT)
 npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
 

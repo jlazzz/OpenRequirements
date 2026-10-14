@@ -90,3 +90,34 @@ jobs:
           flags=""
           case "$VERSION" in *-*) flags="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" sbom.cdx.json --title "$GITHUB_REF_NAME" --notes-file release-notes.md $flags
+
+  # Separate from the release steps above: builds the validation pack from the requirements instance and attaches it.
+  # Runs only when the secrets REQ_URL and REQ_TOKEN exist. See docs/user-guide/validation-pack.md.
+  validation-pack:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach to the GitHub release
+      packages: read
+    env:
+      REQ_URL: ${{ secrets.REQ_URL }}
+      REQ_TOKEN: ${{ secrets.REQ_TOKEN }}
+    steps:
+      - if: ${{ env.REQ_URL != '' && env.REQ_TOKEN != '' }}
+        uses: actions/checkout@v4
+      - if: ${{ env.REQ_URL != '' && env.REQ_TOKEN != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - if: ${{ env.REQ_URL != '' && env.REQ_TOKEN != '' }}
+        name: Build and attach the pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          gh release download "$GITHUB_REF_NAME" --pattern sbom.cdx.json
+          DIGEST="$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          VERSION="$VERSION" IMAGE="$IMAGE" IMAGE_DIGEST="$DIGEST" SBOM=sbom.cdx.json \
+            node scripts/validation-pack/validation-pack.ts "validation-pack-$GITHUB_REF_NAME.zip"
+          gh release upload "$GITHUB_REF_NAME" "validation-pack-$GITHUB_REF_NAME.zip" --clobber
