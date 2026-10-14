@@ -2840,6 +2840,43 @@ test("evidence files of several kinds are attached to results, to runs and their
   });
 });
 
+test("an actual result is rich text that can carry an uploaded file, and stays plain text when typed plain", async () => {
+  const { cookie: owner, projectId, t1 } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const tester = await person("Tess Tester", "reviewer");
+  const file = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/attachments?name=trace.log`,
+    payload: "12:00 stopped\n",
+    headers: { cookie: owner, "content-type": "application/octet-stream" },
+  });
+  const { src } = file.json();
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, owner)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [t1] }, owner);
+  const cycleId = (await post(`/api/test-plans/${planId}/cycles`, { name: "Round 1" }, owner)).json().id;
+  const runId = (await get(`/api/test-cycles/${cycleId}`, owner)).json().runs[0].id;
+  await post(`/api/test-cycles/${cycleId}/assign`, { runIds: [runId], assigneeId: tester.id }, owner);
+  const step = (actual: unknown, as = tester.cookie) =>
+    post(`/api/test-runs/${runId}/steps`, { steps: [1], outcome: "fail", actual }, as);
+  const doc = (...content: object[]) => ({ type: "doc", content: [{ type: "paragraph", content }] });
+  const fileNode = (source: string) => ({ type: "file", attrs: { src: source, name: "trace.log" } });
+
+  // Files must be uploads of this server; the check is the one rich text already has.
+  expect((await step(doc(fileNode("https://evil.example/x")))).statusCode).toBe(400);
+  expect((await step(doc({ type: "script" }))).statusCode).toBe(400);
+  expect((await step(doc(fileNode(src)), viewer.cookie)).statusCode).toBe(403);
+  const rich = doc({ type: "text", text: "See " }, fileNode(src));
+  expect((await step(rich)).statusCode).toBe(201);
+  const read = async () => (await get(`/api/test-runs/${runId}`, viewer.cookie)).json().run.steps[0].actual;
+  expect(await read()).toEqual(rich);
+
+  // Plain text still reads as plain text, and a document with nothing in it is no result at all.
+  expect((await step(" Still running ")).statusCode).toBe(201);
+  expect(await read()).toBe("Still running");
+  expect((await step(doc())).statusCode).toBe(201);
+  expect(await read()).toBe("");
+});
+
 test("a baseline freezes verification status, and a cycle that names it shows up in its review", async () => {
   const { cookie, projectId, req, bare, t1, t2, record } = await projectWithTests();
   await record(t1, { outcome: "pass" });

@@ -11,6 +11,8 @@ On a test run's page:
 - Drop a file on a step to attach it there.
 - Paste a screenshot (Ctrl+V or ⌘V): it goes to the highlighted step.
 
+The actual result of a step is a rich-text box of its own: a screenshot or file put there is part of the result text, next to the step. **Attach** is still the place for evidence of the test.
+
 Allowed: images, PDF, text and log files, CSV and zip, up to 25 MB each. Your administrator can change the limit with `MAX_ATTACHMENT_MB`. Evidence cannot be removed afterwards, and a finished run takes no more files.
 
 When the run is finished, its files become the evidence of the result it records. They show under **Results** on the test case.

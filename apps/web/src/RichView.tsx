@@ -62,6 +62,12 @@ function render(node: RichNode, key: number): ReactNode {
       );
     case "image":
       return <img key={key} src={String(attrs.src)} alt={String(attrs.alt ?? "")} style={{ maxWidth: "100%" }} />;
+    case "file":
+      return (
+        <a key={key} href={String(attrs.src)} download={String(attrs.name ?? "")}>
+          {String(attrs.name || "file")}
+        </a>
+      );
     case "inlineMath":
     case "blockMath":
       return <Equation key={key} latex={String(attrs.latex ?? "")} block={node.type === "blockMath"} />;

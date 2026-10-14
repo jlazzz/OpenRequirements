@@ -83,3 +83,15 @@ test.each([
 ])("docError rejects %s", (_name, node) => {
   expect(docError(doc(node))).toEqual(expect.any(String));
 });
+
+test("a file is an upload of this server, shown as its name in text", () => {
+  const src = "/api/attachments/0b8e3c1a-6f4d-4a21-9d52-7d1f0c4e8a10";
+  const doc = (attrs: object) => ({
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "file", attrs }] }],
+  });
+  expect(docError(doc({ src, name: "trace.log" }))).toBeNull();
+  expect(docError(doc({ src: "https://example.com/a.zip", name: "a.zip" }))).not.toBeNull();
+  expect(docError(doc({ src }))).not.toBeNull();
+  expect(docToText(doc({ src, name: "trace.log" }) as RichNode)).toBe("trace.log");
+});

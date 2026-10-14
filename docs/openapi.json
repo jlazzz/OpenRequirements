@@ -3928,7 +3928,7 @@
                         },
                         "actual": {
                           "type": "string",
-                          "maxLength": 5000
+                          "maxLength": 100000
                         },
                         "recordedBy": {
                           "type": "string",
@@ -5689,8 +5689,14 @@
                     ]
                   },
                   "actual": {
-                    "type": "string",
-                    "maxLength": 5000
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object"
+                      }
+                    ]
                   }
                 }
               }

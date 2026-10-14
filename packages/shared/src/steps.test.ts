@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { textToDoc } from "./richtext.ts";
-import { stepDoc, stepsError, stepsToText, stepText } from "./steps.ts";
+import { actualToStored, stepDoc, stepsError, stepsToText, stepText, storedActual } from "./steps.ts";
 
 test("steps are a list of actions with expected results, as plain text or rich text", () => {
   expect(stepsError([{ action: "Press start", expected: "The pump runs" }])).toBeNull();
@@ -42,4 +42,15 @@ test("steps read as numbered lines", () => {
       { action: "Wait", expected: "" },
     ]),
   ).toBe("1. Press start\n   Expected: The pump runs\n2. Wait");
+});
+
+test("an actual result is stored as text or as a document, and an empty document as nothing", () => {
+  const doc = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Pump ran" }] }] };
+  expect(actualToStored(" plain ")).toEqual({ stored: "plain" });
+  const stored = actualToStored(doc);
+  expect(stored).toEqual({ stored: JSON.stringify(doc) });
+  expect(storedActual((stored as { stored: string }).stored)).toEqual(doc);
+  expect(storedActual("plain")).toBe("plain");
+  expect(actualToStored({ type: "doc", content: [{ type: "paragraph" }] })).toEqual({ stored: "" });
+  expect(actualToStored({ type: "doc", content: [{ type: "script" }] })).toHaveProperty("error");
 });

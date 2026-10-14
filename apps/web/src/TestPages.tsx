@@ -1,10 +1,11 @@
 import { toCsv } from "@app/importers";
-import { type RichNode, type Step, stepDoc } from "@app/shared";
+import { type RichNode, type Step, type StepText, stepDoc } from "@app/shared";
 import {
   Alert,
   Anchor,
   Autocomplete,
   Badge,
+  Box,
   Button,
   Checkbox,
   FileButton,
@@ -36,10 +37,12 @@ import {
   type RunSummary,
   type TreeNode,
   uploadFile,
+  uploadImage,
 } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
+import { RichTextInput } from "./RichText.tsx";
 import { RichView } from "./RichView.tsx";
 import { EvidenceLinks } from "./Verification.tsx";
 
@@ -89,7 +92,7 @@ type CycleDetail = {
   };
   runs: RunSummary[];
 };
-type RunStep = Step & { outcome: Outcome | null; actual: string; by: string | null; at: string | null };
+type RunStep = Step & { outcome: Outcome | null; actual: StepText; by: string | null; at: string | null };
 type RunDetail = {
   run: Omit<RunSummary, "done" | "total"> & {
     /** The frozen test case: what the cycle saw when it started. */
@@ -1084,7 +1087,7 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
       queryClient.invalidateQueries({ queryKey: ["projects", projectId, "test-cycles"] }),
     ]);
   const record = useMutation({
-    mutationFn: (body: { steps: number[]; outcome: Outcome; actual?: string }) =>
+    mutationFn: (body: { steps: number[]; outcome: Outcome; actual?: StepText }) =>
       api(`test-runs/${run.id}/steps`, body),
     onSuccess: async (_, { steps }) => {
       await refresh();
@@ -1122,7 +1125,8 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       // Typing in a box is typing, not a shortcut.
-      if (event.metaKey || event.ctrlKey || event.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || target.isContentEditable) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       const outcome = OUTCOMES.find((value) => OUTCOME[value].key === event.key.toLowerCase());
       if (outcome) mark(at, outcome);
       else if (event.key === "ArrowDown") setAt(Math.min(at + 1, run.steps.length - 1));
@@ -1229,20 +1233,19 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
               </Table.Td>
               <Table.Td>
                 {canExecute ? (
-                  <Textarea
-                    aria-label={`Actual result of step ${index + 1}`}
-                    autosize
-                    minRows={1}
-                    maxLength={5000}
-                    value={actuals[index] ?? ""}
-                    onFocus={() => setAt(index)}
-                    onChange={(e) => {
-                      const text = e.currentTarget.value;
-                      setActuals((previous) => previous.map((old, other) => (other === index ? text : old)));
-                    }}
-                  />
+                  <Box onFocus={() => setAt(index)}>
+                    <RichTextInput
+                      label={`Actual result of step ${index + 1}`}
+                      initial={stepDoc(step.actual)}
+                      minHeight={40}
+                      uploadImage={(file) => uploadImage(projectId, file)}
+                      onChange={(doc) =>
+                        setActuals((previous) => previous.map((old, other) => (other === index ? doc : old)))
+                      }
+                    />
+                  </Box>
                 ) : (
-                  step.actual
+                  <RichView doc={stepDoc(step.actual)} />
                 )}
                 <Group gap="xs" mt={4}>
                   <EvidenceLinks files={run.attachments.filter((file) => file.step === index + 1)} showStep={false} />

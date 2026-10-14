@@ -202,6 +202,8 @@ export async function toDocx(
       if (node.type === "hardBreak") return [el("w:r", {}, [el("w:br")])];
       if (node.type === "inlineMath") return [textRun(String(node.attrs?.latex ?? ""), [], [CODE_FONT])];
       if (node.type === "image") return [imageRun(node)];
+      // A file is written as its name: the file itself stays in the tool.
+      if (node.type === "file") return [textRun(String(node.attrs?.name ?? ""))];
       return inline(node.content);
     });
   type Place = { list?: { numId: string; level: number }; indent: number };

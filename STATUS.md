@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (bundle I, J5 slice 5)
+Last updated: 2026-10-14 (bundle I, T7 slice 2)
 Last updated: 2026-10-14 (bundle I, J1 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
@@ -11,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- T7 slice 2, files in steps and in results: a `file` node in rich text (any uploaded attachment, a download link; images stay `image`), added with **Image / file**, paste or drop in every rich-text box; the actual result of a step is rich text (stored as the document's JSON in the existing `actual` column, plain text still reads as one paragraph; backup limit 100,000 characters). Word and ReqIF write a file as its name. No migration, no new file type. Checked in a browser on a scratch instance: a file in an actual result survives a reload; the read-only view and the Word export of a file were not looked at (2026-10-14)
 - A3 slice 2, releases: version in root `package.json`, shown at `GET /api/version` and in the account dialog; `release.yml` on a `vX.Y.Z` tag checks notes, lint, types and tests, pushes the image to GHCR, attaches a CycloneDX SBOM, signs with cosign keyless; `CHANGELOG.md`, [docs/RELEASING.md](docs/RELEASING.md), compose `APP_IMAGE`/`APP_VERSION`, upgrade section of the install guide, [ADR 0021](docs/adr/0021-numbered-releases-signed-images.md). The workflow has never run; actions are pinned by major tag, not SHA; upgrade test not built (2026-10-14)
 - J5 slice 5, drag and drop: drag folders and items in the explorer and in List view (⠿ handle) to reorder, move, or drop onto an item to make a child; a set row moves to its top level; ticked rows drag together. Pure rule `dropPlacement` in `packages/shared`, the move route and its checks unchanged. "Pick several" fields are editable in List view and in bulk set-field. Checked in a browser with synthetic drag events on a scratch instance. `API_PORT` sets the web proxy target (2026-10-14)
 - J1 slice 3, Part 11 hardening: account lockout, password expiry and session inactivity timeout (environment variables, off when unset), tamper-evident audit log (SHA-256 hash chain under an advisory lock, `GET /api/audit/verify`, button on the Users page), [ADR 0020](docs/adr/0020-part-11-hardening-audit-chain.md). Migration 0019. Not checked in a browser; the chain does not cover rows from before it or a restored backup (2026-10-14)

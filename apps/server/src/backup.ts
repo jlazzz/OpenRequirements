@@ -285,7 +285,7 @@ const backupSchema = {
         runId: id,
         step: { type: "integer", minimum: 1 },
         outcome: { enum: [...OUTCOMES] },
-        actual: text(5000),
+        actual: text(100_000),
         recordedBy: id,
         createdAt: when,
       }),
