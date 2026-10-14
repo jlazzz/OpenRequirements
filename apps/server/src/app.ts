@@ -8,7 +8,7 @@ import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
-import { auditLogRoutes } from "./auditlog.ts";
+import { type AnchorOptions, auditLogRoutes } from "./auditlog.ts";
 import { backupRoutes } from "./backup.ts";
 import { baselineRoutes } from "./baselines.ts";
 import { commentRoutes } from "./comments.ts";
@@ -119,6 +119,8 @@ export async function buildApp(
     outbound?: OutboundConfig;
     /** Account lockout, password expiry and inactivity timeout (ADR 0020). Left out: all off. */
     security?: Partial<SecurityConfig>;
+    /** Signing key and file for audit chain anchors (ADR 0024). */
+    anchor?: AnchorOptions;
   } = {},
 ) {
   const security: SecurityConfig = { ...NO_LIMITS, ...opts.security };
@@ -550,7 +552,7 @@ export async function buildApp(
   testPlanRoutes(context);
   testRunRoutes(context);
   notificationRoutes(context);
-  auditLogRoutes(context);
+  auditLogRoutes(context, opts.anchor);
   recoveryRoutes(context);
   webhookRoutes(context);
   referenceRoutes(context);

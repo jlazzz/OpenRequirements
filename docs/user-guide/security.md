@@ -59,7 +59,7 @@ Project backup (JSON, instance administrator) and database dumps are yours to pr
 ## What is not protected
 
 - **No encryption at rest** by the tool for the database, the attachments volume or backups. Use disk or volume encryption.
-- **The audit chain is not anchored outside the database.** Someone who can write to the database and rehashes every row from a point, or deletes the newest rows, is not detected. Rows from before the chain, or restored from a backup, are outside it.
+- **The audit chain is anchored, but only as well as you keep the anchors.** A rewritten history or deleted newest rows are detected against saved anchors ([ADR 0024](../adr/0024-anchored-audit-chain.md)). Someone who also holds `ANCHOR_KEY` and the copies can forge them; events since the last anchor are not covered. Rows from before the chain, or restored from a backup, are outside it.
 - **No SAML, LDAP or SCIM.** Any provider account with a verified email can sign in through OpenID Connect and gets an account without projects.
 - **No two-factor authentication** for local accounts, other than what your identity provider enforces.
 - **No password complexity or history rules**, no breach-list check.

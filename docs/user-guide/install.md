@@ -101,7 +101,7 @@ A locked account gets the same "Wrong email or password" answer, even for the ri
 
 ### Check the audit log
 
-Every audited change is chained to the one before it with a SHA-256 hash. As an administrator, open **Users**, then **Verify audit log**. It reports "Intact", or the first event that was changed or is missing. Events written before this feature existed, and events restored from a project backup, are counted but not covered. A person with full database access could still rewrite the whole chain; anchoring it outside the database is planned.
+Every audited change is chained to the one before it with a SHA-256 hash. As an administrator, open **Users**, then **Verify audit log**. It reports "Intact", or the first event that was changed or is missing. Events written before this feature existed, and events restored from a project backup, are counted but not covered. A person with full database access could still rewrite the whole chain, so the chain's latest hash is also anchored: every `ANCHOR_INTERVAL_HOURS` (default 24, 0 is off), and at once with **Anchor now**. Set `ANCHOR_KEY` to sign anchors, and `ANCHOR_FILE` to append each anchor to a file on another volume. **Download anchors** saves them all; keep that file elsewhere. Verify then reports a rewritten history or deleted newest events. See [ADR 0024](../adr/0024-anchored-audit-chain.md).
 
 ## Add people
 

@@ -150,3 +150,89 @@ test("a session ends after the idle time and is kept alive by use", async () => 
   await db.execute(sql`update sessions set last_seen_at = now() - interval '31 minutes'`);
   expect((await call(strict, "GET", "/api/projects", undefined, cookie)).statusCode).toBe(401);
 });
+
+// A2 slice 1: anchors (ADR 0024).
+test("anchors catch a rewritten history and a deleted tail that the chain alone cannot", async () => {
+  const keyed = await buildApp(db, { loginAttemptsPerMinute: 1000, attachmentsDir, anchor: { key: "test-key" } });
+  const owner = cookieOf(await call(keyed, "POST", "/api/setup", admin));
+  const get = async (url: string) => (await call(keyed, "GET", url, undefined, owner)).json();
+  await call(keyed, "POST", "/api/projects", { name: "A", templateId: "standard" }, owner);
+  const made = (await call(keyed, "POST", "/api/audit/anchors", {}, owner)).json();
+  expect(made.created).toBe(true);
+  // Already anchored at its head only if nothing was written since; the anchor's own audit row follows it.
+  expect((await get("/api/audit/verify")).anchors).toMatchObject({ checked: 1, firstBad: null, signed: true });
+  const saved = (await get("/api/audit/anchors")).anchors;
+  const verifyCopy = async (anchors: unknown[]) =>
+    (await call(keyed, "POST", "/api/audit/anchors/verify", { anchors }, owner)).json();
+  expect(await verifyCopy(saved)).toMatchObject({ ok: true, missing: [] });
+
+  // Rewrite the whole chain from row 2 on, rehashing: the chain itself still verifies.
+  const rows = (await db.execute(sql`select * from audit_events where seq is not null order by seq`)).rows as {
+    id: string;
+    at: Date;
+    actor_user_id: string | null;
+    project_id: string | null;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    data: { label?: string; mentions?: string[] } | null;
+    seq: number;
+  }[];
+  const { auditHash } = await import("./domain/auditchain.ts");
+  let prev = "";
+  for (const r of rows) {
+    const action = Number(r.seq) === 2 ? "item.delete" : r.action;
+    const hash = auditHash(prev, {
+      id: r.id,
+      at: new Date(r.at).toISOString(),
+      actorUserId: r.actor_user_id,
+      projectId: r.project_id,
+      action,
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      data: r.data,
+    });
+    await db.execute(
+      sql`update audit_events set action = ${action}, prev_hash = ${prev}, hash = ${hash} where id = ${r.id}`,
+    );
+    prev = hash;
+  }
+  const after = await get("/api/audit/verify");
+  expect(after).toMatchObject({ ok: false, firstBroken: null });
+  expect(after.anchors.firstBad).toMatchObject({ seq: made.anchor.seq, reason: "rewritten" });
+  expect(await verifyCopy(saved)).toMatchObject({ ok: false });
+
+  // Deleting the newest rows: the anchored position no longer exists.
+  await db.execute(sql`delete from audit_events where seq >= ${made.anchor.seq}`);
+  expect((await get("/api/audit/verify")).anchors.firstBad).toMatchObject({ reason: "truncated" });
+
+  // A removed anchor shows in the saved copy.
+  await db.execute(sql`delete from audit_anchors`);
+  expect(await verifyCopy(saved)).toMatchObject({ missing: [made.anchor.seq] });
+  await keyed.close();
+});
+
+test("anchoring is for administrators and does nothing twice for the same head", async () => {
+  const owner = cookieOf(await call(app, "POST", "/api/setup", admin));
+  const invite = (await call(app, "POST", "/api/invitations", { email: "p@example.com" }, owner)).json();
+  const person = cookieOf(
+    await call(app, "POST", "/api/invitations/accept", {
+      token: invite.token,
+      name: "Pat",
+      password: "another long password",
+    }),
+  );
+  for (const [method, url] of [
+    ["GET", "/api/audit/anchors"],
+    ["POST", "/api/audit/anchors"],
+    ["POST", "/api/audit/anchors/verify"],
+  ] as const) {
+    expect((await call(app, method, url, { anchors: [] })).statusCode).toBe(401);
+    expect((await call(app, method, url, { anchors: [] }, person)).statusCode).toBe(403);
+  }
+  const first = (await call(app, "POST", "/api/audit/anchors", {}, owner)).json();
+  expect(first.created).toBe(true);
+  // The anchor's own audit event is newer than the anchor, so one more can be made, then the loop settles by head.
+  const events = await call(app, "GET", "/api/audit/anchors", undefined, owner);
+  expect(events.json().anchors).toHaveLength(1);
+});
