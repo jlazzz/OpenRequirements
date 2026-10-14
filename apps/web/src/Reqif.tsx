@@ -1,15 +1,32 @@
 import {
+  type AppliedStructure,
+  deriveReqifStructure,
   guessReqifMapping,
   guessReqifTargets,
   type ImportResult,
   mapReqif,
   type ReqifMapping,
   type ReqifTargetSet,
+  reqifMappingFor,
   summarizeReqif,
 } from "@app/importers";
 import { parseReqif, type Reqif, unzip } from "@app/reqif";
-import { Alert, Button, FileInput, Group, Menu, NativeSelect, Paper, Stack, Table, Text, Title } from "@mantine/core";
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  FileInput,
+  Group,
+  List,
+  Menu,
+  NativeSelect,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from "@mantine/core";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, canEdit, type SetItems, uploadImage } from "./api.ts";
 import { useProject } from "./ProjectPage.tsx";
@@ -54,6 +71,8 @@ const MAX_NODES = 5000;
 // Stands in for an image while the mapping is previewed; nothing is uploaded until the import runs.
 export const PLACEHOLDER = "/api/attachments/00000000-0000-4000-8000-000000000000";
 
+type StructureAnswer = AppliedStructure & { added: string[]; notes: string[] };
+
 /** A chosen file: its content, the files beside it in a .reqifz archive, and the folder the .reqif file sat in. */
 type Loaded = { reqif: Reqif; files: Map<string, Uint8Array>; folder: string; notes: string[] };
 
@@ -90,6 +109,7 @@ function locate({ files, folder }: Loaded, data: string): string | null {
 export function ReqifImportPage() {
   const project = useProject().data;
   const projectId = project?.project.id ?? "";
+  const isAdmin = project?.role === "admin";
   const queryClient = useQueryClient();
   // The same queries List view uses.
   const lists = useQueries({
@@ -103,6 +123,8 @@ export function ReqifImportPage() {
   const [mapping, setMapping] = useState<ReqifMapping>({ specifications: {}, relations: {} });
   const [problem, setProblem] = useState<string | null>(null);
   const [round, setRound] = useState(0);
+  // "Create what the file needs" (sets, fields, relationship types) is on until the user turns it off.
+  const [create, setCreate] = useState(true);
 
   const ready = lists.every((list) => list.data) && linkTypes !== undefined;
   const fetched = lists.map((list) => list.dataUpdatedAt).join();
@@ -118,10 +140,38 @@ export function ReqifImportPage() {
     [project?.sets, fetched],
   );
   const summary = useMemo(() => (loaded ? summarizeReqif(loaded.reqif) : null), [loaded]);
+  const derived = useMemo(
+    () =>
+      summary
+        ? deriveReqifStructure(summary, {
+            setNames: (project?.sets ?? []).map((s) => s.name),
+            prefixes: (project?.sets ?? []).map((s) => s.uidPrefix),
+          })
+        : null,
+    [summary, project?.sets],
+  );
+  const asked = create && isAdmin && derived !== null && summary !== null && summary.specifications.length > 0;
+  // What the server would add: it reads the project as it is now, so existing names are used, never replaced.
+  const structure = useQuery({
+    queryKey: ["structure-preview", projectId, derived?.proposal],
+    queryFn: () => api<StructureAnswer>(`projects/${projectId}/structure`, { ...derived?.proposal, dryRun: true }),
+    enabled: asked,
+    gcTime: 0,
+  });
+  const created = useMemo(
+    () =>
+      asked && summary && derived && structure.data ? reqifMappingFor(summary, derived.fieldOf, structure.data) : null,
+    [asked, summary, derived, structure.data],
+  );
+  const effective = created ?? { mapping, targets };
   const preview = useMemo(
     () =>
-      loaded ? mapReqif(loaded.reqif, mapping, targets, (data) => (locate(loaded, data) ? PLACEHOLDER : null)) : null,
-    [loaded, mapping, targets],
+      loaded
+        ? mapReqif(loaded.reqif, effective.mapping, effective.targets, (data) =>
+            locate(loaded, data) ? PLACEHOLDER : null,
+          )
+        : null,
+    [loaded, effective.mapping, effective.targets],
   );
 
   const load = async (file: File | null) => {
@@ -139,10 +189,16 @@ export function ReqifImportPage() {
   };
   const run = useMutation({
     mutationFn: async () => {
-      if (!loaded) throw new Error("No file");
+      if (!loaded || !summary) throw new Error("No file");
+      let use = { mapping, targets };
+      if (asked && derived) {
+        // Structure first: adds only. If the import below fails, what was added stays and is found again next time.
+        const applied = await api<StructureAnswer>(`projects/${projectId}/structure`, derived.proposal);
+        use = reqifMappingFor(summary, derived.fieldOf, applied);
+      }
       // First pass finds the images that the chosen mapping uses, so nothing else is uploaded.
       const used = new Set<string>();
-      mapReqif(loaded.reqif, mapping, targets, (data) => {
+      mapReqif(loaded.reqif, use.mapping, use.targets, (data) => {
         const path = locate(loaded, data);
         if (path) used.add(path);
         return path && PLACEHOLDER;
@@ -157,7 +213,12 @@ export function ReqifImportPage() {
           () => undefined,
         );
       }
-      const final = mapReqif(loaded.reqif, mapping, targets, (data) => stored.get(locate(loaded, data) ?? "") ?? null);
+      const final = mapReqif(
+        loaded.reqif,
+        use.mapping,
+        use.targets,
+        (data) => stored.get(locate(loaded, data) ?? "") ?? null,
+      );
       const result = await api<ImportResult>(`projects/${projectId}/import`, final.body);
       return { ...result.created, changed: result.changed, unchanged: result.unchanged, warnings: final.warnings };
     },
@@ -221,84 +282,136 @@ export function ReqifImportPage() {
           {note}
         </Alert>
       ))}
-      {summary?.specifications.map((spec) => {
-        const choice = mapping.specifications[spec.id] ?? { setId: "", targets: {} };
-        const change = (next: typeof choice) =>
-          setMapping((m) => ({ ...m, specifications: { ...m.specifications, [spec.id]: next } }));
-        return (
-          <Paper key={spec.id} withBorder p="sm">
-            <Group justify="space-between" align="flex-end" mb="xs">
-              <div>
-                <Text fw={600}>{spec.name}</Text>
-                <Text c="dimmed" size="sm">
-                  Specification with {plural(spec.objects, "object")}
-                </Text>
-              </div>
-              <NativeSelect
-                label="Import into"
-                data={[
-                  { value: "", label: "Skip this specification" },
-                  ...targets.map((t) => ({ value: t.id, label: t.name })),
-                ]}
-                value={choice.setId}
-                onChange={(e) => {
-                  const setId = e.currentTarget.value;
-                  change({ setId, targets: guessReqifTargets(spec.attributes, fieldsOf(setId)) });
-                }}
-              />
-            </Group>
-            {choice.setId && (
-              <Table.ScrollContainer minWidth={400}>
-                <Table withTableBorder aria-label={`Attributes of ${spec.name}`}>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Attribute in the file</Table.Th>
-                      <Table.Th>First value</Table.Th>
-                      <Table.Th>Import as</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {spec.attributes.map((attribute) => (
-                      <Table.Tr key={attribute.id}>
-                        <Table.Td>
-                          {attribute.name}{" "}
-                          <Text span c="dimmed" size="xs">
-                            {attribute.kind}
-                          </Text>
-                        </Table.Td>
-                        <Table.Td c="dimmed" maw={260} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {attribute.sample}
-                        </Table.Td>
-                        <Table.Td>
-                          <NativeSelect
-                            size="xs"
-                            aria-label={`Import ${attribute.name} as`}
-                            data={[
-                              { value: "", label: "Skip" },
-                              { value: "name", label: "Name" },
-                              { value: "description", label: "Description" },
-                              ...fieldsOf(choice.setId).map((f) => ({ value: f.id, label: f.name })),
-                            ]}
-                            value={choice.targets[attribute.id] ?? ""}
-                            onChange={(e) =>
-                              change({
-                                ...choice,
-                                targets: { ...choice.targets, [attribute.id]: e.currentTarget.value },
-                              })
-                            }
-                          />
-                        </Table.Td>
-                      </Table.Tr>
+      {loaded && summary && summary.specifications.length > 0 && (
+        <Paper withBorder p="sm">
+          <Checkbox
+            label="Create the sets, fields and relationship types this file needs"
+            description={
+              isAdmin
+                ? "Adds what is missing and uses what has the same name. Nothing here is renamed or removed."
+                : "Needs the admin role. Without it, choose below where each specification goes."
+            }
+            checked={create && isAdmin}
+            disabled={!isAdmin}
+            onChange={(e) => setCreate(e.currentTarget.checked)}
+          />
+          {asked && structure.isError && (
+            <Alert color="red" role="alert" mt="sm">
+              {structure.error.message}
+            </Alert>
+          )}
+          {asked && structure.data && (
+            <Stack gap="xs" mt="sm" role="status" aria-label="What will be added">
+              {structure.data.added.length === 0 ? (
+                <Text size="sm">Everything the file needs is here already.</Text>
+              ) : (
+                <>
+                  <Text size="sm" fw={600}>
+                    Will add {plural(structure.data.added.length, "thing")}:
+                  </Text>
+                  <List size="sm" spacing={2}>
+                    {structure.data.added.slice(0, 40).map((line) => (
+                      <List.Item key={line}>{line}</List.Item>
                     ))}
-                  </Table.Tbody>
-                </Table>
-              </Table.ScrollContainer>
-            )}
-          </Paper>
-        );
-      })}
+                  </List>
+                  {structure.data.added.length > 40 && (
+                    <Text size="sm">…and {structure.data.added.length - 40} more.</Text>
+                  )}
+                </>
+              )}
+              {structure.data.notes.map((note) => (
+                <Text key={note} size="sm" c="orange">
+                  {note}
+                </Text>
+              ))}
+              {structure.data.sets.map((set) => (
+                <Text key={set.name} size="sm" c="dimmed">
+                  {set.name}: {plural(set.fields.length, "field")} from the file's attributes
+                </Text>
+              ))}
+            </Stack>
+          )}
+        </Paper>
+      )}
+      {!asked &&
+        summary?.specifications.map((spec) => {
+          const choice = mapping.specifications[spec.id] ?? { setId: "", targets: {} };
+          const change = (next: typeof choice) =>
+            setMapping((m) => ({ ...m, specifications: { ...m.specifications, [spec.id]: next } }));
+          return (
+            <Paper key={spec.id} withBorder p="sm">
+              <Group justify="space-between" align="flex-end" mb="xs">
+                <div>
+                  <Text fw={600}>{spec.name}</Text>
+                  <Text c="dimmed" size="sm">
+                    Specification with {plural(spec.objects, "object")}
+                  </Text>
+                </div>
+                <NativeSelect
+                  label="Import into"
+                  data={[
+                    { value: "", label: "Skip this specification" },
+                    ...targets.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                  value={choice.setId}
+                  onChange={(e) => {
+                    const setId = e.currentTarget.value;
+                    change({ setId, targets: guessReqifTargets(spec.attributes, fieldsOf(setId)) });
+                  }}
+                />
+              </Group>
+              {choice.setId && (
+                <Table.ScrollContainer minWidth={400}>
+                  <Table withTableBorder aria-label={`Attributes of ${spec.name}`}>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Attribute in the file</Table.Th>
+                        <Table.Th>First value</Table.Th>
+                        <Table.Th>Import as</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {spec.attributes.map((attribute) => (
+                        <Table.Tr key={attribute.id}>
+                          <Table.Td>
+                            {attribute.name}{" "}
+                            <Text span c="dimmed" size="xs">
+                              {attribute.kind}
+                            </Text>
+                          </Table.Td>
+                          <Table.Td c="dimmed" maw={260} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {attribute.sample}
+                          </Table.Td>
+                          <Table.Td>
+                            <NativeSelect
+                              size="xs"
+                              aria-label={`Import ${attribute.name} as`}
+                              data={[
+                                { value: "", label: "Skip" },
+                                { value: "name", label: "Name" },
+                                { value: "description", label: "Description" },
+                                ...fieldsOf(choice.setId).map((f) => ({ value: f.id, label: f.name })),
+                              ]}
+                              value={choice.targets[attribute.id] ?? ""}
+                              onChange={(e) =>
+                                change({
+                                  ...choice,
+                                  targets: { ...choice.targets, [attribute.id]: e.currentTarget.value },
+                                })
+                              }
+                            />
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              )}
+            </Paper>
+          );
+        })}
 
-      {summary && summary.relationTypes.length > 0 && (
+      {!asked && summary && summary.relationTypes.length > 0 && (
         <Paper withBorder p="sm">
           <Text fw={600} mb="xs">
             Relationships

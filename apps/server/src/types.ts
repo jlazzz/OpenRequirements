@@ -1,4 +1,5 @@
-import { and, eq, isNull, max, ne, sql } from "drizzle-orm";
+import { type Proposal, planStructure } from "@app/importers";
+import { and, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import { attributeDefinitions, itemTypes, linkTypes, nodes, sets } from "./db/schema.ts";
 
@@ -84,6 +85,196 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
           .where(and(eq(linkTypes.projectId, projectId), isNull(linkTypes.archivedAt)))
           .orderBy(linkTypes.position),
       };
+    },
+  );
+
+  // Structure from an import file: adds the sets, item types, fields and relationship types a file implies, and
+  // only adds. What exists is used as it is (see `planStructure`). `dryRun` says what would be added.
+  app.post(
+    "/api/projects/:projectId/structure",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("projectId"),
+        body: {
+          type: "object",
+          required: ["sets"],
+          additionalProperties: false,
+          properties: {
+            sets: {
+              type: "array",
+              maxItems: 100,
+              items: {
+                type: "object",
+                required: ["name", "uidPrefix", "fields"],
+                additionalProperties: false,
+                properties: {
+                  name,
+                  uidPrefix: { type: "string", pattern: "^[A-Z][A-Z0-9]{0,9}$" },
+                  fields: {
+                    type: "array",
+                    maxItems: 200,
+                    items: {
+                      type: "object",
+                      required: ["name", "type"],
+                      additionalProperties: false,
+                      properties: {
+                        name,
+                        type: { enum: FIELD_TYPES.filter((t) => t !== "steps") },
+                        options,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            linkTypes: { type: "array", maxItems: 100, items: name },
+            dryRun: { type: "boolean" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const projectId = await access(req, reply, req.params as { projectId: string }, "admin");
+      if (!projectId) return reply;
+      const body = req.body as Proposal & { dryRun?: boolean };
+      const proposal: Proposal = { sets: body.sets, linkTypes: body.linkTypes ?? [] };
+      for (const set of proposal.sets) {
+        for (const field of set.fields) {
+          if (hasOptions(field.type) !== Boolean(field.options)) {
+            return reply.code(400).send({
+              error: `${set.name} / ${field.name}: allowed values are for enum fields only, and needed there`,
+            });
+          }
+        }
+      }
+      const userId = req.user?.id as string;
+      const result = await db.transaction(async (tx) => {
+        // The project row is locked, so two imports cannot create the same set twice.
+        await tx.execute(sql`select 1 from projects where id = ${projectId} for update`);
+        const types = await tx
+          .select({ id: itemTypes.id, name: itemTypes.name })
+          .from(itemTypes)
+          .where(and(eq(itemTypes.projectId, projectId), isNull(itemTypes.archivedAt)));
+        const typeIds = types.map((t) => t.id);
+        const fields = await tx
+          .select()
+          .from(attributeDefinitions)
+          .where(and(inArray(attributeDefinitions.itemTypeId, typeIds), isNull(attributeDefinitions.archivedAt)));
+        const liveSetRows = await tx.select().from(sets).where(eq(sets.projectId, projectId));
+        const liveLinks = await tx
+          .select({ id: linkTypes.id, name: linkTypes.name })
+          .from(linkTypes)
+          .where(and(eq(linkTypes.projectId, projectId), isNull(linkTypes.archivedAt)));
+        const plan = planStructure(proposal, {
+          itemTypes: types.map((t) => ({
+            ...t,
+            fields: fields
+              .filter((f) => f.itemTypeId === t.id)
+              .map((f) => ({ id: f.id, name: f.name, type: f.type, options: f.options })),
+          })),
+          sets: liveSetRows
+            .filter((s) => !s.archivedAt)
+            .map((s) => ({ id: s.id, name: s.name, uidPrefix: s.uidPrefix, itemTypeId: s.itemTypeId })),
+          linkTypes: liveLinks,
+          // Removed sets count: their prefix stays taken.
+          prefixes: liveSetRows.map((s) => s.uidPrefix),
+        });
+        const added: string[] = [];
+        for (const set of plan.sets) {
+          if (!set.itemType.id) added.push(`Item type "${set.itemType.name}"`);
+          if (!set.id) added.push(`Set "${set.name}" (${set.uidPrefix})`);
+          for (const f of set.fields) {
+            if (!f.id) added.push(`Field "${f.name}" on ${set.itemType.name}`);
+            else if (f.addOptions.length > 0) {
+              added.push(
+                `Values ${f.addOptions.map((o) => `"${o}"`).join(", ")} on "${f.name}" of ${set.itemType.name}`,
+              );
+            }
+          }
+        }
+        for (const t of plan.linkTypes) if (!t.id) added.push(`Relationship type "${t.name}"`);
+        if (body.dryRun) return { added, notes: plan.notes, sets: plan.sets, linkTypes: plan.linkTypes };
+
+        const label = (action: string, kind: string, id: string, text: string) =>
+          audit(tx, userId, action, kind, id, { projectId, label: text });
+        for (const set of plan.sets) {
+          let typeId = set.itemType.id;
+          if (!typeId) {
+            const [row] = await tx
+              .insert(itemTypes)
+              .values({ projectId, name: set.itemType.name })
+              .returning({ id: itemTypes.id });
+            if (!row) throw new Error("item type insert returned no row");
+            typeId = row.id;
+            set.itemType.id = typeId;
+            await label("item_type.create", "item_type", typeId, set.itemType.name);
+          }
+          const [last] = await tx
+            .select({ position: max(attributeDefinitions.position) })
+            .from(attributeDefinitions)
+            .where(eq(attributeDefinitions.itemTypeId, typeId));
+          let position = (last?.position ?? -1) + 1;
+          for (const f of set.fields) {
+            if (f.id) {
+              if (f.addOptions.length === 0) continue;
+              const next = [...(f.options ?? []), ...f.addOptions];
+              const [row] = await tx.select().from(attributeDefinitions).where(eq(attributeDefinitions.id, f.id));
+              await tx
+                .update(attributeDefinitions)
+                .set({
+                  options: next,
+                  archivedOptions: (row?.archivedOptions ?? []).filter((o) => !next.includes(o)),
+                })
+                .where(eq(attributeDefinitions.id, f.id));
+              await label("field.update", "field", f.id, f.name);
+              continue;
+            }
+            const [row] = await tx
+              .insert(attributeDefinitions)
+              .values({ itemTypeId: typeId, name: f.name, type: f.type, options: f.options, position: position++ })
+              .returning({ id: attributeDefinitions.id });
+            if (!row) throw new Error("field insert returned no row");
+            f.id = row.id;
+            await label("field.create", "field", row.id, f.name);
+          }
+          if (!set.id) {
+            const [lastSet] = await tx
+              .select({ position: max(sets.position) })
+              .from(sets)
+              .where(eq(sets.projectId, projectId));
+            const [row] = await tx
+              .insert(sets)
+              .values({
+                projectId,
+                itemTypeId: typeId,
+                name: set.name,
+                uidPrefix: set.uidPrefix,
+                position: (lastSet?.position ?? -1) + 1,
+              })
+              .returning({ id: sets.id });
+            if (!row) throw new Error("set insert returned no row");
+            set.id = row.id;
+            await label("set.create", "set", row.id, set.name);
+          }
+        }
+        for (const t of plan.linkTypes) {
+          if (t.id) continue;
+          const [last] = await tx
+            .select({ position: max(linkTypes.position) })
+            .from(linkTypes)
+            .where(eq(linkTypes.projectId, projectId));
+          const [row] = await tx
+            .insert(linkTypes)
+            .values({ projectId, name: t.name, position: (last?.position ?? -1) + 1 })
+            .returning({ id: linkTypes.id });
+          if (!row) throw new Error("link type insert returned no row");
+          t.id = row.id;
+          await label("link_type.create", "link_type", row.id, t.name);
+        }
+        return { added, notes: plan.notes, sets: plan.sets, linkTypes: plan.linkTypes };
+      });
+      return reply.code(body.dryRun ? 200 : 201).send(result);
     },
   );
 

@@ -15,6 +15,17 @@ ReqIF is the exchange format of DOORS, Polarion and other requirements tools. A 
 
 Editors see **Import ReqIF** in the project menu.
 
+### Let the file set up the project (project admins)
+
+Choose the file. **Create the sets, fields and relationship types this file needs** is on. The box under it lists what will be added: a set and item type for each specification, a field for each attribute (a ReqIF enumeration becomes a pick list with the file's values), and a relationship type for each relation type. Check it, then press **Import**.
+
+- Only additions. A set, field or relationship type that already has the same name is used as it is; nothing is renamed or removed. A pick list that lacks one of the file's values gains it.
+- If a field of that name exists with another type, a note says so and the values are read as that type.
+- Names come from the file. Rename a set or field afterwards on the **Item types** page.
+- Turn the box off to choose targets by hand, as below. Editors who are not admins always do.
+
+### Choosing targets by hand
+
 1. Choose the file.
 2. For each specification in the file, choose the set it goes into, or skip it.
 3. For each attribute, choose what it becomes: the name, the description, one of the set's fields, or skip. Attributes with the usual names are matched for you.

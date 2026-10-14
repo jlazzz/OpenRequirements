@@ -461,7 +461,15 @@ export type ReqifSummary = {
     id: string;
     name: string;
     objects: number;
-    attributes: { id: string; name: string; kind: ReqifKind; sample: string }[];
+    attributes: {
+      id: string;
+      name: string;
+      kind: ReqifKind;
+      sample: string;
+      /** For an enumeration: the values its datatype allows, and whether several may be chosen. */
+      values?: string[];
+      multi?: boolean;
+    }[];
   }[];
   relationTypes: { id: string; name: string; count: number }[];
 };
@@ -485,7 +493,15 @@ export function summarizeReqif(reqif: Reqif): ReqifSummary {
         .map((attribute) => {
           const holder = used.find((object) => valueText(attribute, object.values[attribute.id]) !== "");
           const sample = valueText(attribute, holder?.values[attribute.id]).slice(0, 80);
-          return { id: attribute.id, name: attribute.name, kind: attribute.kind, sample };
+          return {
+            id: attribute.id,
+            name: attribute.name,
+            kind: attribute.kind,
+            sample,
+            ...(attribute.kind === "enumeration"
+              ? { values: (attribute.values ?? []).map((v) => v.name), multi: attribute.multi ?? false }
+              : {}),
+          };
         });
       return { id: spec.id, name: spec.name || `Specification ${index + 1}`, objects: used.length, attributes };
     }),
