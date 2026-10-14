@@ -57,6 +57,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.
 - **J5 slice 5 (drag and drop, multi-select fields): built, waiting for the owner's test.** Checkpoint: drag a folder and an item in the explorer; drop an item on another item in List view.
 - **J1 slice 3 (Part 11 hardening): built, waiting for the owner's test.** Checkpoint: set `LOGIN_LOCKOUT_ATTEMPTS=3`, fail three sign-ins; click Verify audit log on Users.
 - **J5 slice 1 (editable item types, fields, sets, relationship types): built, waiting for the owner's test.** Checkpoint: add a field to an item type, rename "Verified by" and see verification still work.
