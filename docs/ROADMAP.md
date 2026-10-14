@@ -31,18 +31,18 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | I | J5 slice 7 | Folders and the side bar | Sonnet | J5 slice 5 (same explorer code) | |  |
 | I | J5 slice 8 | Section home pages | Opus | J5 slices 2 and 7 | |  |
 | I | T7 slice 1 | Rich text in steps | Opus | none | | built, merged 2026-10-14 |
-| I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | running |
+| I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | built, merged 2026-10-14 |
 | I | J1 slice 1 | Review participants and scope | Sonnet | none | DB |  |
 | I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | |  |
 | I | J1 slice 3 | Part 11 hardening | Opus | none | DB | built, merged 2026-10-14 |
-| I | T6 | CI runs | Sonnet | none | DB | running |
+| I | T6 | CI runs | Sonnet | none | DB | built, merged 2026-10-14 |
 | J | A3 slice 1 | Security policy | Sonnet | none | |  |
 | J | A3 slice 2 | Releases | Opus | none | | built, merged 2026-10-14 (workflow not yet run) |
 | J | A3 slice 3 | Measured budgets | Sonnet | none | |  |
 | J | A5 slice 1 | Docs site | Sonnet | owner decision 4 | | built, merged 2026-10-14 |
 | J | A5 slice 2 | Help in the app | Sonnet | A5 slice 1, J5 slice 8 | |  |
 | K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB |  |
-| K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | running |
+| K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | built, merged 2026-10-14 |
 | K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | |  |
 | K | A2 slice 4 | Customer test scripts | Sonnet | none | |  |
 | L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | |  |
@@ -54,8 +54,8 @@ Waves for bundle I and its neighbours (each wave in parallel):
 
 1. Done 2026-10-14: J5 slices 1 to 4 and 6, T7 slice 1, A5 slice 1 (docs site)
 2. Done 2026-10-14: J5 slice 5, J1 slice 3 (DB), A3 slice 2
-3. Running: T6 (DB), T7 slice 2, A2 slice 2
-4. Next: J1 slice 1 (DB), J5 slice 7, A3 slices 1 and 3
+3. Done 2026-10-14: T6 (DB), T7 slice 2, A2 slice 2
+4. Running: J1 slice 1 (DB), J5 slice 7, A3 slices 1 and 3, GitHub CI upload of results
 5. Then: J1 slice 2, J5 slice 8, A2 slice 4, A5 slice 2
 6. Then: A2 slice 1 (DB), A2 slice 3, A1 slice 1; Playwright after J5 slice 8
 
