@@ -76,7 +76,11 @@ export const statusFieldOf = (fields: FieldDef[]) => fields.find((f) => f.name =
 
 /** What search matches for an item: its UID, name, description text and field values. */
 export function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
-  return [uid, name, docToText(description), ...Object.values(attributes).flat().map(String)].join("\n");
+  // A test step is an object: its action and expected result are both searched.
+  const words = (value: unknown) => (typeof value === "object" && value !== null ? Object.values(value) : [value]);
+  return [uid, name, docToText(description), ...Object.values(attributes).flat().flatMap(words).map(String)].join(
+    "\n",
+  );
 }
 
 const nullableId = { type: ["string", "null"], format: "uuid" } as const;

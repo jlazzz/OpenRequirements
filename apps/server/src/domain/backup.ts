@@ -4,19 +4,21 @@ import type { Mark, ReviewState } from "./review.ts";
 
 export const BACKUP_FORMAT = "open-requirements-backup";
 // Version 2 added linkRevisions and baselineLinks.suspect. Version 3 added verificationResults. Version 4 added reviews,
-// their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Older files are still restored.
-export const BACKUP_VERSION = 4;
+// their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Version 5 added itemTypes.role,
+// test plans with their cases, cycles, runs and step results, and verificationResults.runId and defectUrl.
+// Older files are still restored.
+export const BACKUP_VERSION = 5;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
   users: { id: string; email: string; name: string }[];
   members: { userId: string; role: "viewer" | "reviewer" | "editor" | "admin" }[];
-  itemTypes: { id: string; name: string }[];
+  itemTypes: { id: string; name: string; role: "test" | null }[];
   attributeDefinitions: {
     id: string;
     itemTypeId: string;
@@ -80,7 +82,46 @@ export type Backup = {
     runAt: string;
     note: string;
     attachmentId: string | null;
-    source: "manual" | "junit";
+    source: "manual" | "junit" | "run";
+    recordedBy: string;
+    runId: string | null;
+    defectUrl: string | null;
+    createdAt: string;
+  }[];
+  testPlans: { id: string; name: string; createdBy: string; createdAt: string; deletedAt: string | null }[];
+  testPlanCases: {
+    id: string;
+    planId: string;
+    itemId: string;
+    groupName: string;
+    position: number;
+    removedAt: string | null;
+  }[];
+  testCycles: {
+    id: string;
+    planId: string;
+    name: string;
+    environment: string;
+    createdBy: string;
+    createdAt: string;
+    closedBy: string | null;
+    closedAt: string | null;
+  }[];
+  testRuns: {
+    id: string;
+    cycleId: string;
+    itemId: string;
+    revisionId: string;
+    groupName: string;
+    position: number;
+    assigneeId: string | null;
+  }[];
+  stepResults: {
+    id: string;
+    runId: string;
+    step: number;
+    outcome: "pass" | "fail" | "blocked";
+    actual: string;
     recordedBy: string;
     createdAt: string;
   }[];
@@ -161,6 +202,19 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["verificationResults", "itemId", "nodes"],
   ["verificationResults", "attachmentId", "attachments"],
   ["verificationResults", "recordedBy", "users"],
+  ["verificationResults", "runId", "testRuns"],
+  ["testPlans", "createdBy", "users"],
+  ["testPlanCases", "planId", "testPlans"],
+  ["testPlanCases", "itemId", "nodes"],
+  ["testCycles", "planId", "testPlans"],
+  ["testCycles", "createdBy", "users"],
+  ["testCycles", "closedBy", "users"],
+  ["testRuns", "cycleId", "testCycles"],
+  ["testRuns", "itemId", "nodes"],
+  ["testRuns", "revisionId", "itemRevisions"],
+  ["testRuns", "assigneeId", "users"],
+  ["stepResults", "runId", "testRuns"],
+  ["stepResults", "recordedBy", "users"],
   ["comments", "itemId", "nodes"],
   ["comments", "authorId", "users"],
   ["comments", "mentions", "users"],
@@ -241,6 +295,11 @@ export function backupError(backup: Backup): string | null {
 
   if (!backup.verificationResults.every((result) => isItem(result.itemId))) {
     return "The backup has a verification result on something that is not an item";
+  }
+
+  const revisions = new Map(backup.itemRevisions.map((revision) => [revision.id, revision.itemId]));
+  if (!backup.testRuns.every((run) => revisions.get(run.revisionId) === run.itemId)) {
+    return "The backup has a test run frozen at a version of another item";
   }
 
   const typeOfSet = new Map(backup.sets.map((set) => [set.id, set.itemTypeId]));

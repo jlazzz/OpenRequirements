@@ -9,6 +9,9 @@ import {
   linkTypes,
   nodes,
   sets,
+  testCycles,
+  testPlans,
+  testRuns,
   users,
   verificationResults,
 } from "./db/schema.ts";
@@ -20,8 +23,6 @@ const param = (name: string) => ({ type: "object", required: [name], properties:
 const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const MAX_NOTE = 2000;
 
-/** Item types have no "is a test" flag. As in the Trace view, a type whose name contains "test" holds test cases. */
-const isTestType = (name: string) => /test/i.test(name);
 /** The relationship type that says a test verifies a requirement. Matched by name, because types come from the template. */
 const isVerifiedBy = (name: string) => /^verified by$/i.test(name.trim());
 
@@ -34,7 +35,7 @@ async function currentItems(db: Db, projectId: string) {
     .selectDistinctOn([itemRevisions.itemId], {
       id: nodes.id,
       uid: nodes.uid,
-      itemType: itemTypes.name,
+      role: itemTypes.role,
       revision: itemRevisions.number,
       revisedAt: itemRevisions.createdAt,
       latest: sql<number>`(select max(r.number) from item_revisions r where r.item_id = ${nodes.id})`,
@@ -45,7 +46,7 @@ async function currentItems(db: Db, projectId: string) {
     .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
     .where(and(eq(sets.projectId, projectId), isNull(nodes.deletedAt), eq(itemRevisions.statusOnly, false)))
     .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
-  return rows.map(({ itemType, ...item }) => ({ ...item, isTest: isTestType(itemType) }));
+  return rows.map(({ role, ...item }) => ({ ...item, isTest: role === "test" }));
 }
 
 /** Verification results on test cases, the status of each requirement worked out from them, and import of results from CI. */
@@ -76,6 +77,9 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
           note: verificationResults.note,
           attachmentId: verificationResults.attachmentId,
           source: verificationResults.source,
+          // Set on the result of a test run.
+          runId: verificationResults.runId,
+          defectUrl: verificationResults.defectUrl,
           recordedBy: users.name,
           recordedAt: verificationResults.createdAt,
         })
@@ -227,11 +231,21 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
 
   // Import from CI: a JUnit XML report as the request body. Each reported test whose name or class name contains
   // the UID of a test case records one result on that test case, against its current version.
+  // With `?testCycleId=`, a reported test that has an unfinished run in that cycle finishes the run instead,
+  // against the version the cycle froze.
   app.post(
     "/api/projects/:projectId/verification-results/junit",
-    { onRequest: requireUser, bodyLimit: MAX_REPORT_BYTES, schema: { params: param("projectId") } },
+    {
+      onRequest: requireUser,
+      bodyLimit: MAX_REPORT_BYTES,
+      schema: {
+        params: param("projectId"),
+        querystring: { type: "object", properties: { testCycleId: uuid } },
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
+      const { testCycleId } = req.query as { testCycleId?: string };
       if (!(await access(req, reply, { projectId }, "editor"))) return reply;
       const userId = req.user?.id as string;
       const reported = typeof req.body === "string" ? parseJunit(req.body) : null;
@@ -245,20 +259,41 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
       );
       const { results, unmatched } = matchJunit(reported, [...testCases.keys()]);
       const now = new Date();
-      await db.transaction(async (tx) => {
+      const filled = await db.transaction(async (tx) => {
+        // The unfinished runs of the cycle, by test case. The cycle is locked, as for every write to its runs.
+        const runs = new Map<string, { id: string; revision: number }>();
+        if (testCycleId) {
+          const [cycle] = await tx
+            .select({ closedAt: testCycles.closedAt, projectId: testPlans.projectId })
+            .from(testCycles)
+            .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+            .where(eq(testCycles.id, testCycleId))
+            .for("update", { of: testCycles });
+          if (cycle?.projectId !== projectId) return { error: [400, "The test cycle is not in this project"] } as const;
+          if (cycle.closedAt) return { error: [409, "This test cycle is closed"] } as const;
+          const open = await tx
+            .select({ id: testRuns.id, itemId: testRuns.itemId, revision: itemRevisions.number })
+            .from(testRuns)
+            .innerJoin(itemRevisions, eq(itemRevisions.id, testRuns.revisionId))
+            .leftJoin(verificationResults, eq(verificationResults.runId, testRuns.id))
+            .where(and(eq(testRuns.cycleId, testCycleId), isNull(verificationResults.id)));
+          for (const { itemId, ...run } of open) runs.set(itemId, run);
+        }
         for (const result of results) {
           const item = testCases.get(result.uid);
           if (!item) continue;
+          const run = runs.get(item.id);
           const [row] = await tx
             .insert(verificationResults)
             .values({
               itemId: item.id,
-              revision: item.latest,
+              revision: run?.revision ?? item.latest,
               outcome: result.outcome,
               runAt: now,
               note: result.note.slice(0, MAX_NOTE),
               source: "junit",
               recordedBy: userId,
+              runId: run?.id ?? null,
             })
             .returning({ id: verificationResults.id });
           if (!row) throw new Error("result insert returned no row");
@@ -269,9 +304,16 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
           projectId,
           label: `${results.length} ${results.length === 1 ? "result" : "results"}`,
         });
+        return { runs: new Set(runs.keys()) };
       });
+      if (filled.error) return reply.code(filled.error[0]).send({ error: filled.error[1] });
       return reply.code(201).send({
-        recorded: results.map(({ uid, outcome }) => ({ uid, outcome })),
+        // `run: true` says the result finished a run of the cycle.
+        recorded: results.map(({ uid, outcome }) => ({
+          uid,
+          outcome,
+          ...(filled.runs.has(testCases.get(uid)?.id ?? "") ? { run: true } : {}),
+        })),
         // Reported tests that named no test case of this project. Capped, so a report from another project stays readable.
         unmatched: unmatched.slice(0, 200),
         unmatchedCount: unmatched.length,

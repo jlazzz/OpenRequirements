@@ -1,3 +1,5 @@
+import { stepsError } from "@app/shared";
+
 export type FieldDef = { id: string; name: string; type: string; options: string[] | null };
 
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
@@ -18,6 +20,8 @@ function valueError({ type, options }: FieldDef, value: unknown): string | null 
       return Array.isArray(value) && new Set(value).size === value.length && value.every((v) => options?.includes(v))
         ? null
         : "must be a list of distinct allowed values";
+    case "steps":
+      return stepsError(value);
     default:
       return "has an unknown field type";
   }

@@ -1,10 +1,11 @@
-export type FieldType = "text" | "number" | "enum" | "multi_enum" | "date" | "boolean";
+export type FieldType = "text" | "number" | "enum" | "multi_enum" | "date" | "boolean" | "steps";
 
 export type Template = {
   id: string;
   name: string;
   description: string;
-  itemTypes: { name: string; fields: { name: string; type: FieldType; options?: string[] }[] }[];
+  /** `role: "test"` marks the type whose items are test cases: they take results, steps and runs. */
+  itemTypes: { name: string; role?: "test"; fields: { name: string; type: FieldType; options?: string[] }[] }[];
   sets: { name: string; uidPrefix: string; itemType: string }[];
   /** Relationship types offered when linking two items. The first is the default. */
   linkTypes: string[];
@@ -29,7 +30,11 @@ export const templates: Template[] = [
     itemTypes: [
       { name: "User Need", fields: [status, priority, { name: "Source", type: "text" }] },
       { name: "Requirement", fields: [status, priority, method, { name: "Rationale", type: "text" }] },
-      { name: "Test Case", fields: [status, method, { name: "Expected result", type: "text" }] },
+      {
+        name: "Test Case",
+        role: "test",
+        fields: [status, method, { name: "Expected result", type: "text" }, { name: "Steps", type: "steps" }],
+      },
     ],
     sets: [
       { name: "User Needs", uidPrefix: "UN", itemType: "User Need" },

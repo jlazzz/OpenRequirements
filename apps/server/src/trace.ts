@@ -27,7 +27,7 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
         querystring: {
           type: "object",
           additionalProperties: false,
-          // `target` is the set that counts as "tested". Left out, it is the first set whose item type is named like a test.
+          // `target` is the set that counts as "tested". Left out, it is the first set of test cases.
           properties: { up: { ...levels, default: 1 }, down: { ...levels, default: 2 }, target: uuid },
         },
       },
@@ -39,14 +39,14 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
       if (!projectId) return reply;
 
       const projectSets = await db
-        .select({ id: sets.id, itemType: itemTypes.name })
+        .select({ id: sets.id, role: itemTypes.role })
         .from(sets)
         .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
         .where(eq(sets.projectId, projectId))
         .orderBy(sets.position);
       const target = query.target
         ? projectSets.find((s) => s.id === query.target)
-        : projectSets.find((s) => /test/i.test(s.itemType));
+        : projectSets.find((s) => s.role === "test");
       if (query.target && !target) return reply.code(400).send({ error: "The target set is not in this project" });
 
       const items = await liveItems(projectId);

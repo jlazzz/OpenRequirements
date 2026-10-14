@@ -1,0 +1,471 @@
+import { and, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import type { FastifyRequest } from "fastify";
+import { roleIn } from "./access.ts";
+import type { AppContext, Tx } from "./app.ts";
+import type { Db } from "./db/client.ts";
+import {
+  attributeDefinitions,
+  itemRevisions,
+  nodes,
+  projectMembers,
+  projects,
+  sets,
+  stepResults,
+  testCycles,
+  testPlans,
+  testRuns,
+  users,
+  verificationResults,
+} from "./db/schema.ts";
+import { roleAllows } from "./domain/roles.ts";
+import { runOutcome, runState, runSteps } from "./domain/testrun.ts";
+import { OUTCOMES, type Outcome } from "./domain/verification.ts";
+
+const uuid = { type: "string", format: "uuid" } as const;
+const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
+
+/**
+ * The test runs matching `filter` (a condition on test_runs, test_cycles or test_plans), in cycle order.
+ * Each comes with the frozen version of its test case, its steps with the latest result of each, and its state.
+ */
+export async function loadRuns(db: Db | Tx, filter: SQL | undefined) {
+  const assignee = alias(users, "assignee");
+  const rows = await db
+    .select({
+      id: testRuns.id,
+      cycleId: testRuns.cycleId,
+      cycle: testCycles.name,
+      projectId: testPlans.projectId,
+      itemId: testRuns.itemId,
+      uid: nodes.uid,
+      name: itemRevisions.name,
+      revision: itemRevisions.number,
+      attributes: itemRevisions.attributes,
+      itemTypeId: sets.itemTypeId,
+      group: testRuns.groupName,
+      assigneeId: testRuns.assigneeId,
+      assignee: assignee.name,
+      result: verificationResults.outcome,
+    })
+    .from(testRuns)
+    .innerJoin(testCycles, eq(testCycles.id, testRuns.cycleId))
+    .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+    .innerJoin(nodes, eq(nodes.id, testRuns.itemId))
+    .innerJoin(sets, eq(sets.id, nodes.setId))
+    .innerJoin(itemRevisions, eq(itemRevisions.id, testRuns.revisionId))
+    .leftJoin(assignee, eq(assignee.id, testRuns.assigneeId))
+    .leftJoin(verificationResults, eq(verificationResults.runId, testRuns.id))
+    .where(filter)
+    .orderBy(testRuns.cycleId, testRuns.position);
+  if (rows.length === 0) return [];
+
+  const matching = db
+    .select({ id: testRuns.id })
+    .from(testRuns)
+    .innerJoin(testCycles, eq(testCycles.id, testRuns.cycleId))
+    .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+    .where(filter);
+  const latest = await db
+    .selectDistinctOn([stepResults.runId, stepResults.step], {
+      runId: stepResults.runId,
+      step: stepResults.step,
+      outcome: stepResults.outcome,
+      actual: stepResults.actual,
+      by: users.name,
+      at: stepResults.createdAt,
+    })
+    .from(stepResults)
+    .innerJoin(users, eq(users.id, stepResults.recordedBy))
+    .where(inArray(stepResults.runId, matching))
+    .orderBy(stepResults.runId, stepResults.step, desc(stepResults.createdAt));
+  const recorded = new Map(latest.map((row) => [`${row.runId}:${row.step}`, row]));
+  // The steps of a test case are the value of its type's field of type "steps": the first one, should there be several.
+  const stepFields = await db
+    .select({ id: attributeDefinitions.id, itemTypeId: attributeDefinitions.itemTypeId })
+    .from(attributeDefinitions)
+    .where(
+      and(eq(attributeDefinitions.type, "steps"), inArray(attributeDefinitions.itemTypeId, [
+        ...new Set(rows.map((row) => row.itemTypeId)),
+      ])),
+    )
+    .orderBy(desc(attributeDefinitions.position));
+  const stepField = new Map(stepFields.map((field) => [field.itemTypeId, field.id]));
+
+  return rows.map(({ attributes, itemTypeId, result, ...run }) => {
+    const steps = runSteps(attributes[stepField.get(itemTypeId) ?? ""]).map((step, index) => {
+      const done = recorded.get(`${run.id}:${index + 1}`);
+      return {
+        ...step,
+        outcome: done?.outcome ?? null,
+        actual: done?.actual ?? "",
+        by: done?.by ?? null,
+        at: done?.at ?? null,
+      };
+    });
+    return {
+      ...run,
+      steps,
+      state: runState(
+        steps.map((step) => step.outcome ?? undefined),
+        result ?? undefined,
+      ),
+      // A run is finished once it has written its verification result.
+      finished: result !== null,
+    };
+  });
+}
+
+type Run = Awaited<ReturnType<typeof loadRuns>>[number];
+
+/** A run as a row of a list: without the text of its steps. */
+export const runSummary = ({ steps, ...run }: Run) => ({
+  ...run,
+  done: steps.filter((step) => step.outcome).length,
+  total: steps.length,
+});
+
+/** Test cycles and runs: assigning runs, executing them step by step, finishing them and closing a cycle. */
+export function testRunRoutes({ app, db, requireUser, audit, access }: AppContext) {
+  /**
+   * Locks the cycle of a run (or the cycle itself), so step results, finishing, assigning and closing run one at a time.
+   * Returns the cycle, or undefined when there is none.
+   */
+  async function lockCycle(tx: Tx, where: { testCycleId: string } | { testRunId: string }) {
+    const [cycle] = await tx
+      .select({ id: testCycles.id, name: testCycles.name, closedAt: testCycles.closedAt })
+      .from(testCycles)
+      .where(
+        "testCycleId" in where
+          ? eq(testCycles.id, where.testCycleId)
+          : inArray(
+              testCycles.id,
+              tx.select({ id: testRuns.cycleId }).from(testRuns).where(eq(testRuns.id, where.testRunId)),
+            ),
+      )
+      .for("update");
+    return cycle;
+  }
+  const closed = { error: [409, "This test cycle is closed"] } as const;
+  const noRun = { error: [404, "Test run not found"] } as const;
+
+  /** A Reviewer executes the runs assigned to them; an Editor executes any run (ADR 0012). */
+  async function mayExecute(req: FastifyRequest, projectId: string, assigneeId: string | null) {
+    const role = req.user ? await roleIn(db, req.user, projectId) : null;
+    return role !== null && (roleAllows(role, "editor") || assigneeId === req.user?.id);
+  }
+  const notYours = { error: [403, "This run is assigned to someone else. An editor can execute any run."] } as const;
+
+  // The signed-in user's open work in every project: runs assigned to them that are not finished, in cycles still open.
+  app.get("/api/test-runs/mine", { onRequest: requireUser }, async (req) => {
+    const user = req.user as { id: string; isAdmin: boolean };
+    // shortcut: also loads this user's finished runs of open cycles before dropping them, filter in SQL when cycles reach thousands of runs per person
+    const runs = await loadRuns(
+      db,
+      and(eq(testRuns.assigneeId, user.id), isNull(testCycles.closedAt), isNull(testPlans.deletedAt)),
+    );
+    const mine = db
+      .select({ id: projectMembers.projectId })
+      .from(projectMembers)
+      .where(eq(projectMembers.userId, user.id));
+    // Someone taken out of a project no longer sees its runs.
+    const open = await db
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)));
+    const project = new Map(open.map((p) => [p.id, p.name]));
+    return {
+      runs: runs
+        .filter((run) => !run.finished && project.has(run.projectId))
+        .map((run) => ({ ...runSummary(run), project: project.get(run.projectId) })),
+    };
+  });
+
+  // One cycle with its runs. The runs carry their state and progress, not the text of their steps.
+  app.get(
+    "/api/test-cycles/:testCycleId",
+    { onRequest: requireUser, schema: { params: idParam("testCycleId") } },
+    async (req, reply) => {
+      const { testCycleId } = req.params as { testCycleId: string };
+      if (!(await access(req, reply, { testCycleId }, "viewer"))) return reply;
+      const closer = alias(users, "closer");
+      const [cycle] = await db
+        .select({
+          id: testCycles.id,
+          name: testCycles.name,
+          environment: testCycles.environment,
+          planId: testCycles.planId,
+          plan: testPlans.name,
+          createdAt: testCycles.createdAt,
+          author: users.name,
+          closedAt: testCycles.closedAt,
+          closedBy: closer.name,
+        })
+        .from(testCycles)
+        .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+        .innerJoin(users, eq(users.id, testCycles.createdBy))
+        .leftJoin(closer, eq(closer.id, testCycles.closedBy))
+        .where(eq(testCycles.id, testCycleId));
+      if (!cycle) return reply.code(404).send({ error: "Test cycle not found" });
+      return { cycle, runs: (await loadRuns(db, eq(testRuns.cycleId, testCycleId))).map(runSummary) };
+    },
+  );
+
+  // Assigns runs to one person, or to nobody. One request covers one run or many.
+  app.post(
+    "/api/test-cycles/:testCycleId/assign",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("testCycleId"),
+        body: {
+          type: "object",
+          required: ["runIds", "assigneeId"],
+          additionalProperties: false,
+          properties: {
+            runIds: { type: "array", minItems: 1, maxItems: 5000, items: uuid },
+            assigneeId: { type: ["string", "null"], format: "uuid" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { testCycleId } = req.params as { testCycleId: string };
+      const projectId = await access(req, reply, { testCycleId }, "editor");
+      if (!projectId) return reply;
+      const body = req.body as { runIds: string[]; assigneeId: string | null };
+      const runIds = [...new Set(body.runIds)];
+      // Executing a run needs the Reviewer role or higher. Instance administrators are admins of every project.
+      const [person] = body.assigneeId
+        ? await db
+            .select({ name: users.name, isAdmin: users.isAdmin, role: projectMembers.role })
+            .from(users)
+            .leftJoin(projectMembers, and(eq(projectMembers.userId, users.id), eq(projectMembers.projectId, projectId)))
+            .where(and(eq(users.id, body.assigneeId), isNull(users.deactivatedAt)))
+        : [];
+      if (body.assigneeId && !(person?.isAdmin || (person?.role && roleAllows(person.role, "reviewer")))) {
+        return reply.code(400).send({
+          error: "A run can be assigned to an active member of this project with the Reviewer role or higher",
+        });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const cycle = await lockCycle(tx, { testCycleId });
+        if (!cycle || cycle.closedAt) return closed;
+        const inCycle = and(eq(testRuns.cycleId, testCycleId), inArray(testRuns.id, runIds));
+        if ((await tx.$count(testRuns, inCycle)) !== runIds.length) {
+          return { error: [400, "A run is not part of this test cycle"] } as const;
+        }
+        await tx.update(testRuns).set({ assigneeId: body.assigneeId }).where(inCycle);
+        await audit(tx, req.user?.id ?? null, body.assigneeId ? "run.assign" : "run.unassign", "cycle", testCycleId, {
+          projectId,
+          label: `${cycle.name}: ${runIds.length} ${runIds.length === 1 ? "run" : "runs"}${person ? ` to ${person.name}` : ""}`,
+        });
+        return { assigned: runIds.length };
+      });
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
+    },
+  );
+
+  // Closes a cycle for good. Runs that were not finished stay as they are and record nothing.
+  app.post(
+    "/api/test-cycles/:testCycleId/close",
+    { onRequest: requireUser, schema: { params: idParam("testCycleId") } },
+    async (req, reply) => {
+      const { testCycleId } = req.params as { testCycleId: string };
+      const projectId = await access(req, reply, { testCycleId }, "editor");
+      if (!projectId) return reply;
+      const userId = req.user?.id as string;
+      const result = await db.transaction(async (tx) => {
+        const cycle = await lockCycle(tx, { testCycleId });
+        if (!cycle || cycle.closedAt) return closed;
+        await tx
+          .update(testCycles)
+          .set({ closedBy: userId, closedAt: new Date() })
+          .where(eq(testCycles.id, testCycleId));
+        await audit(tx, userId, "cycle.close", "cycle", testCycleId, { projectId, label: cycle.name });
+        return { ok: true };
+      });
+      if ("error" in result) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
+    },
+  );
+
+  // The execution screen's data: the frozen test case, each step with its latest result, and where to go next.
+  app.get(
+    "/api/test-runs/:testRunId",
+    { onRequest: requireUser, schema: { params: idParam("testRunId") } },
+    async (req, reply) => {
+      const { testRunId } = req.params as { testRunId: string };
+      const projectId = await access(req, reply, { testRunId }, "viewer");
+      if (!projectId) return reply;
+      const [frozen] = await db
+        .select({
+          description: itemRevisions.description,
+          cycleId: testCycles.id,
+          environment: testCycles.environment,
+          closedAt: testCycles.closedAt,
+          planId: testCycles.planId,
+          plan: testPlans.name,
+        })
+        .from(testRuns)
+        .innerJoin(itemRevisions, eq(itemRevisions.id, testRuns.revisionId))
+        .innerJoin(testCycles, eq(testCycles.id, testRuns.cycleId))
+        .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+        .where(eq(testRuns.id, testRunId));
+      if (!frozen) return reply.code(404).send({ error: "Test run not found" });
+      // shortcut: loads every run of the cycle to find the next one, query only the neighbours when cycles reach thousands of runs
+      const siblings = await loadRuns(db, eq(testRuns.cycleId, frozen.cycleId));
+      const run = siblings.find((r) => r.id === testRunId);
+      if (!run) return reply.code(404).send({ error: "Test run not found" });
+      // "Next run": the same person's next unfinished run in the cycle, starting over from the top after the last one.
+      const queue = siblings.filter((r) => r.assigneeId === run.assigneeId && (!r.finished || r.id === run.id));
+      const at = queue.findIndex((r) => r.id === run.id);
+      const next = queue[at + 1] ?? (at > 0 ? queue[0] : undefined);
+      const [result] = await db
+        .select({
+          outcome: verificationResults.outcome,
+          note: verificationResults.note,
+          defectUrl: verificationResults.defectUrl,
+          at: verificationResults.createdAt,
+          by: users.name,
+        })
+        .from(verificationResults)
+        .innerJoin(users, eq(users.id, verificationResults.recordedBy))
+        .where(eq(verificationResults.runId, testRunId));
+      const { description, ...cycle } = frozen;
+      return {
+        run: { ...run, description, result: result ?? null },
+        cycle: { ...cycle, id: cycle.cycleId, name: run.cycle },
+        nextRunId: next?.id ?? null,
+        // What the screen offers; every action is checked again.
+        canExecute: !run.finished && !frozen.closedAt && (await mayExecute(req, projectId, run.assigneeId)),
+      };
+    },
+  );
+
+  // Records the outcome of one step, or of several at once ("Pass all remaining"). Appended, never changed:
+  // a step is corrected by recording it again, and the latest result counts.
+  app.post(
+    "/api/test-runs/:testRunId/steps",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("testRunId"),
+        body: {
+          type: "object",
+          required: ["steps", "outcome"],
+          additionalProperties: false,
+          properties: {
+            steps: { type: "array", minItems: 1, maxItems: 200, items: { type: "integer", minimum: 1 } },
+            outcome: { enum: [...OUTCOMES] },
+            // What actually happened.
+            actual: { type: "string", maxLength: 5000 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { testRunId } = req.params as { testRunId: string };
+      const projectId = await access(req, reply, { testRunId }, "reviewer");
+      if (!projectId) return reply;
+      const userId = req.user?.id as string;
+      const body = req.body as { steps: number[]; outcome: Outcome; actual?: string };
+      const steps = [...new Set(body.steps)];
+
+      const result = await db.transaction(async (tx) => {
+        const cycle = await lockCycle(tx, { testRunId });
+        const [run] = await loadRuns(tx, eq(testRuns.id, testRunId));
+        if (!cycle || !run) return noRun;
+        if (!(await mayExecute(req, projectId, run.assigneeId))) return notYours;
+        if (cycle.closedAt) return closed;
+        if (run.finished) return { error: [409, "This run is finished"] } as const;
+        if (steps.some((step) => step > run.steps.length)) {
+          return { error: [400, `This run has ${run.steps.length} steps`] } as const;
+        }
+        await tx.insert(stepResults).values(
+          steps.map((step) => ({
+            runId: testRunId,
+            step,
+            outcome: body.outcome,
+            actual: body.actual?.trim() ?? "",
+            recordedBy: userId,
+            // The moment of the write, not of the transaction's start: the latest result of a step must be the last one written.
+            createdAt: sql`clock_timestamp()`,
+          })),
+        );
+        await audit(tx, userId, `run.step.${body.outcome}`, "run", testRunId, {
+          projectId,
+          label: `${run.uid} ${run.name}: ${steps.length === 1 ? `step ${steps[0]}` : `${steps.length} steps`}`,
+        });
+        const [after] = await loadRuns(tx, eq(testRuns.id, testRunId));
+        return { state: after?.state };
+      });
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return reply.code(201).send(result);
+    },
+  );
+
+  // Finishes a run: its outcome becomes an ordinary verification result on the test case, at the version the cycle froze.
+  // So a test case that was edited after the cycle started gets a result that is already out of date (ADR 0009).
+  app.post(
+    "/api/test-runs/:testRunId/finish",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("testRunId"),
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            note: { type: "string", maxLength: 2000 },
+            // Where the defect of a failed run is tracked. Defects are not managed here (ADR 0011).
+            defectUrl: { type: "string", maxLength: 2000, pattern: "^https?://\\S+$" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { testRunId } = req.params as { testRunId: string };
+      const projectId = await access(req, reply, { testRunId }, "reviewer");
+      if (!projectId) return reply;
+      const userId = req.user?.id as string;
+      const body = (req.body ?? {}) as { note?: string; defectUrl?: string };
+
+      const result = await db.transaction(async (tx) => {
+        const cycle = await lockCycle(tx, { testRunId });
+        const [run] = await loadRuns(tx, eq(testRuns.id, testRunId));
+        if (!cycle || !run) return noRun;
+        if (!(await mayExecute(req, projectId, run.assigneeId))) return notYours;
+        if (cycle.closedAt) return closed;
+        if (run.finished) return { error: [409, "This run is already finished"] } as const;
+        const outcome = runOutcome(run.state);
+        if (!outcome) {
+          const open = run.steps.filter((step) => !step.outcome).length;
+          return {
+            error: [400, `Record every step first: ${open} of ${run.steps.length} have no result`],
+          } as const;
+        }
+        await tx.insert(verificationResults).values({
+          itemId: run.itemId,
+          revision: run.revision,
+          outcome,
+          runAt: new Date(),
+          note: body.note?.trim() ?? "",
+          source: "run",
+          recordedBy: userId,
+          runId: testRunId,
+          defectUrl: body.defectUrl ?? null,
+        });
+        await audit(tx, userId, `run.finish.${outcome}`, "run", testRunId, {
+          projectId,
+          label: `${run.uid} ${run.name} in ${cycle.name}`,
+        });
+        return { outcome };
+      });
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return reply.code(201).send(result);
+    },
+  );
+}

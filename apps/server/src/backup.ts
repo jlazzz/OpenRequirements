@@ -24,6 +24,11 @@ import {
   reviews,
   sets,
   signatures,
+  stepResults,
+  testCycles,
+  testPlanCases,
+  testPlans,
+  testRuns,
   users,
   verificationResults,
 } from "./db/schema.ts";
@@ -56,12 +61,16 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
     members: rows({ userId: id, role: { enum: [...ROLES] } }),
-    itemTypes: rows({ id, name: text(200) }),
+    itemTypes: {
+      type: "array",
+      // `role` is not in files older than version 5: their test case types are found by name, as the tool did then.
+      items: { ...row({ id, name: text(200), role: { enum: ["test", null] } }), required: ["id", "name"] },
+    },
     attributeDefinitions: rows({
       id,
       itemTypeId: id,
@@ -138,15 +147,76 @@ const backupSchema = {
     },
     // Not in version 1 or 2 files.
     verificationResults: {
+      type: "array",
+      items: {
+        ...row({
+          id,
+          itemId: id,
+          revision: { type: "integer", minimum: 1 },
+          outcome: { enum: [...OUTCOMES] },
+          runAt: when,
+          note: text(2000),
+          attachmentId: idOrNull,
+          source: { enum: ["manual", "junit", "run"] },
+          recordedBy: id,
+          // The next two are not in files older than version 5.
+          runId: { ...idOrNull, default: null },
+          defectUrl: { ...textOrNull(2000), default: null },
+          createdAt: when,
+        }),
+        required: [
+          "id",
+          "itemId",
+          "revision",
+          "outcome",
+          "runAt",
+          "note",
+          "attachmentId",
+          "source",
+          "recordedBy",
+          "createdAt",
+        ],
+      },
+      default: [],
+    },
+    // The next five are not in files older than version 5.
+    testPlans: { ...rows({ id, name: text(200), createdBy: id, createdAt: when, deletedAt: whenOrNull }), default: [] },
+    testPlanCases: {
+      ...rows({ id, planId: id, itemId: id, groupName: text(100), position: count, removedAt: whenOrNull }),
+      default: [],
+    },
+    testCycles: {
       ...rows({
         id,
+        planId: id,
+        name: text(200),
+        environment: text(200),
+        createdBy: id,
+        createdAt: when,
+        closedBy: idOrNull,
+        closedAt: whenOrNull,
+      }),
+      default: [],
+    },
+    testRuns: {
+      ...rows({
+        id,
+        cycleId: id,
         itemId: id,
-        revision: { type: "integer", minimum: 1 },
+        revisionId: id,
+        groupName: text(100),
+        position: count,
+        assigneeId: idOrNull,
+      }),
+      default: [],
+    },
+    stepResults: {
+      ...rows({
+        id,
+        runId: id,
+        step: { type: "integer", minimum: 1 },
         outcome: { enum: [...OUTCOMES] },
-        runAt: when,
-        note: text(2000),
-        attachmentId: idOrNull,
-        source: { enum: ["manual", "junit"] },
+        actual: text(5000),
         recordedBy: id,
         createdAt: when,
       }),
@@ -244,6 +314,11 @@ const ADDED_LATER = [
   "reviewParticipants",
   "reviewMarks",
   "signatures",
+  "testPlans",
+  "testPlanCases",
+  "testCycles",
+  "testRuns",
+  "stepResults",
 ];
 backupSchema.required = backupSchema.required.filter((key) => !ADDED_LATER.includes(key));
 
@@ -283,6 +358,9 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
       const allBaselines = await db.select().from(baselines).where(inProject(baselines));
       const baselineIds = db.select({ id: baselines.id }).from(baselines).where(inProject(baselines));
       const reviewIds = db.select({ id: reviews.id }).from(reviews).where(inProject(reviews));
+      const planIds = db.select({ id: testPlans.id }).from(testPlans).where(inProject(testPlans));
+      const cycleIds = db.select({ id: testCycles.id }).from(testCycles).where(inArray(testCycles.planId, planIds));
+      const runIds = db.select({ id: testRuns.id }).from(testRuns).where(inArray(testRuns.cycleId, cycleIds));
       const files: Backup["attachments"] = [];
       for (const file of await db.select().from(attachments).where(inProject(attachments))) {
         // A row whose file has gone missing is left out, so one lost image cannot block every backup.
@@ -307,7 +385,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           userId: m.userId,
           role: m.role,
         })),
-        itemTypes: types.map(({ id, name }) => ({ id, name })),
+        itemTypes: types.map(({ id, name, role }) => ({ id, name, role })),
         attributeDefinitions: types.length
           ? await db
               .select()
@@ -352,6 +430,24 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           runAt: iso(r.runAt),
           createdAt: iso(r.createdAt),
         })),
+        testPlans: (await db.select().from(testPlans).where(inProject(testPlans))).map(({ projectId: _, ...plan }) => ({
+          ...plan,
+          createdAt: iso(plan.createdAt),
+          deletedAt: isoOrNull(plan.deletedAt),
+        })),
+        testPlanCases: (await db.select().from(testPlanCases).where(inArray(testPlanCases.planId, planIds))).map(
+          (c) => ({ ...c, removedAt: isoOrNull(c.removedAt) }),
+        ),
+        testCycles: (await db.select().from(testCycles).where(inArray(testCycles.planId, planIds))).map((c) => ({
+          ...c,
+          createdAt: iso(c.createdAt),
+          closedAt: isoOrNull(c.closedAt),
+        })),
+        testRuns: await db.select().from(testRuns).where(inArray(testRuns.cycleId, cycleIds)),
+        stepResults: (await db.select().from(stepResults).where(inArray(stepResults.runId, runIds))).map((s) => ({
+          ...s,
+          createdAt: iso(s.createdAt),
+        })),
         comments: (await db.select().from(comments).where(inArray(comments.itemId, nodeIds))).map((c) => ({
           ...c,
           createdAt: iso(c.createdAt),
@@ -393,6 +489,10 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.links.map((l) => l.createdBy),
           backup.linkRevisions.map((r) => r.confirmedBy),
           backup.verificationResults.map((r) => r.recordedBy),
+          backup.testPlans.map((p) => p.createdBy),
+          backup.testCycles.flatMap((c) => (c.closedBy ? [c.createdBy, c.closedBy] : [c.createdBy])),
+          backup.testRuns.flatMap((r) => (r.assigneeId ? [r.assigneeId] : [])),
+          backup.stepResults.map((s) => s.recordedBy),
           backup.comments.flatMap((c) => [c.authorId, ...c.mentions]),
           backup.baselines.map((b) => b.createdBy),
           backup.reviews.flatMap((r) => (r.closedBy ? [r.createdBy, r.closedBy] : [r.createdBy])),
@@ -484,8 +584,11 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           await tx
             .insert(projectMembers)
             .values([...members].map(([user, role]) => ({ projectId, userId: user, role })));
+          // Files older than version 5 have no role: there, a type whose name contains "test" held the test cases.
+          const role = (type: { name: string; role?: "test" | null }) =>
+            type.role === undefined ? (/test/i.test(type.name) ? ("test" as const) : null) : type.role;
           for (const part of parts(backup.itemTypes)) {
-            await tx.insert(itemTypes).values(part.map((t) => ({ ...t, projectId })));
+            await tx.insert(itemTypes).values(part.map((t) => ({ ...t, projectId, role: role(t) })));
           }
           for (const part of parts(backup.attributeDefinitions)) await tx.insert(attributeDefinitions).values(part);
           for (const part of parts(backup.sets)) await tx.insert(sets).values(part.map((s) => ({ ...s, projectId })));
@@ -572,7 +675,29 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
             });
             await writeFile(join(dir, file.id), image.bytes);
           }
-          // After the attachments, because a result may point at its evidence.
+          for (const part of parts(backup.testPlans)) {
+            await tx.insert(testPlans).values(
+              part.map((plan) => ({
+                ...plan,
+                projectId,
+                createdAt: date(plan.createdAt),
+                deletedAt: dateOrNull(plan.deletedAt),
+              })),
+            );
+          }
+          for (const part of parts(backup.testPlanCases)) {
+            await tx.insert(testPlanCases).values(part.map((c) => ({ ...c, removedAt: dateOrNull(c.removedAt) })));
+          }
+          for (const part of parts(backup.testCycles)) {
+            await tx
+              .insert(testCycles)
+              .values(part.map((c) => ({ ...c, createdAt: date(c.createdAt), closedAt: dateOrNull(c.closedAt) })));
+          }
+          for (const part of parts(backup.testRuns)) await tx.insert(testRuns).values(part);
+          for (const part of parts(backup.stepResults)) {
+            await tx.insert(stepResults).values(part.map((s) => ({ ...s, createdAt: date(s.createdAt) })));
+          }
+          // After the attachments and the test runs, because a result may point at its evidence and at its run.
           for (const part of parts(backup.verificationResults)) {
             await tx
               .insert(verificationResults)

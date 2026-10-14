@@ -14,6 +14,9 @@ import {
   projects,
   reviews,
   sets,
+  testCycles,
+  testPlans,
+  testRuns,
 } from "./db/schema.ts";
 import { type Role, roleAllows } from "./domain/roles.ts";
 
@@ -30,6 +33,9 @@ export type Where = {
   commentId?: string;
   baselineId?: string;
   reviewId?: string;
+  testPlanId?: string;
+  testCycleId?: string;
+  testRunId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
@@ -65,6 +71,28 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
   if (where.reviewId) {
     return (await db.select({ id: reviews.projectId }).from(reviews).where(eq(reviews.id, where.reviewId)))[0]?.id;
   }
+  if (where.testPlanId) {
+    return (await db.select({ id: testPlans.projectId }).from(testPlans).where(eq(testPlans.id, where.testPlanId)))[0]
+      ?.id;
+  }
+  if (where.testCycleId || where.testRunId) {
+    const rows = await db
+      .select({ id: testPlans.projectId })
+      .from(testCycles)
+      .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+      .where(
+        where.testCycleId
+          ? eq(testCycles.id, where.testCycleId)
+          : eq(
+              testCycles.id,
+              db
+                .select({ id: testRuns.cycleId })
+                .from(testRuns)
+                .where(eq(testRuns.id, where.testRunId as string)),
+            ),
+      );
+    return rows[0]?.id;
+  }
   return where.projectId;
 }
 
@@ -88,9 +116,15 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
                 ? { baselineId: params.baselineId }
                 : params.reviewId
                   ? { reviewId: params.reviewId }
-                  : params.projectId
-                    ? { projectId: params.projectId }
-                    : null;
+                  : params.testPlanId
+                    ? { testPlanId: params.testPlanId }
+                    : params.testCycleId
+                      ? { testCycleId: params.testCycleId }
+                      : params.testRunId
+                        ? { testRunId: params.testRunId }
+                        : params.projectId
+                          ? { projectId: params.projectId }
+                          : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 

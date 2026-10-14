@@ -20,6 +20,8 @@ import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
 import { reqifRoutes } from "./reqif.ts";
 import { reviewRoutes } from "./reviews.ts";
+import { testPlanRoutes } from "./testplans.ts";
+import { testRunRoutes } from "./testruns.ts";
 import { traceRoutes } from "./trace.ts";
 import { verificationRoutes } from "./verification.ts";
 
@@ -352,6 +354,8 @@ export async function buildApp(
   commentRoutes(context);
   baselineRoutes(context);
   reviewRoutes(context);
+  testPlanRoutes(context);
+  testRunRoutes(context);
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
   attachmentRoutes(context, attachmentsDir);
   backupRoutes(context, attachmentsDir);

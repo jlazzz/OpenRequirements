@@ -66,6 +66,8 @@ export const itemTypes = pgTable("item_types", {
     .notNull()
     .references(() => projects.id),
   name: text().notNull(),
+  // "test" marks the type whose items are test cases: they take results, steps and runs. Null for every other type.
+  role: text().$type<"test">(),
 });
 
 export const attributeDefinitions = pgTable("attribute_definitions", {
@@ -256,14 +258,116 @@ export const verificationResults = pgTable(
     note: text().notNull().default(""),
     // Evidence: an uploaded image of the same project.
     attachmentId: uuid().references(() => attachments.id),
-    source: text().$type<"manual" | "junit">().notNull(),
+    source: text().$type<"manual" | "junit" | "run">().notNull(),
+    recordedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    // Set when the result came from a test run: a run is finished once, by writing this row.
+    runId: uuid().references((): AnyPgColumn => testRuns.id),
+    // Where the defect of a failed run is tracked, in an external tool.
+    defectUrl: text(),
+    createdAt: createdAt(),
+  },
+  // The latest result of an item is looked up on every status request.
+  (t) => [index().on(t.itemId, t.createdAt), unique().on(t.runId)],
+);
+
+/** A named selection of test cases for a goal, e.g. "Release 1.2 verification". Soft-deleted. */
+export const testPlans = pgTable("test_plans", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  name: text().notNull(),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  deletedAt: timestamp({ withTimezone: true }),
+});
+
+/** A test case in a plan. Taken out by setting `removedAt`; a test case is live in a plan at most once. */
+export const testPlanCases = pgTable(
+  "test_plan_cases",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    planId: uuid()
+      .notNull()
+      .references(() => testPlans.id),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    // Cases with the same group name are shown and run together. Empty means no group.
+    groupName: text().notNull().default(""),
+    position: integer().notNull(),
+    removedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.planId)],
+);
+
+/** One pass through a plan. Only `closedBy` and `closedAt` ever change, once: closing is permanent. */
+export const testCycles = pgTable(
+  "test_cycles",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    planId: uuid()
+      .notNull()
+      .references(() => testPlans.id),
+    name: text().notNull(),
+    // Free text, e.g. "Bench 2, firmware 1.4.0".
+    environment: text().notNull().default(""),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    closedBy: uuid().references(() => users.id),
+    closedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.planId)],
+);
+
+/** One execution of one test case in a cycle. Only `assigneeId` ever changes. Its state is worked out from its step results. */
+export const testRuns = pgTable(
+  "test_runs",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    cycleId: uuid()
+      .notNull()
+      .references(() => testCycles.id),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    // The version of the test case that was current when the cycle started. The run shows and records against this one.
+    revisionId: uuid()
+      .notNull()
+      .references(() => itemRevisions.id),
+    // Copied from the plan when the cycle started, so the cycle keeps its grouping when the plan changes.
+    groupName: text().notNull().default(""),
+    position: integer().notNull(),
+    assigneeId: uuid().references(() => users.id),
+  },
+  (t) => [index().on(t.cycleId), index().on(t.assigneeId)],
+);
+
+/** Append-only. What a tester recorded on one step of a run; the latest row per step is the one that counts. */
+export const stepResults = pgTable(
+  "step_results",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    runId: uuid()
+      .notNull()
+      .references(() => testRuns.id),
+    // Counted from 1, in the frozen version of the test case.
+    step: integer().notNull(),
+    outcome: text().$type<"pass" | "fail" | "blocked">().notNull(),
+    // What actually happened, as plain text.
+    actual: text().notNull().default(""),
     recordedBy: uuid()
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
   },
-  // The latest result of an item is looked up on every status request.
-  (t) => [index().on(t.itemId, t.createdAt)],
+  (t) => [index().on(t.runId)],
 );
 
 /** Who may open a project, and with which role. Instance administrators have access to every project without a row here. */

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { roleIn } from "./access.ts";
 import type { AppContext } from "./app.ts";
 import { attributeDefinitions, itemTypes, linkTypes, projectMembers, projects, sets } from "./db/schema.ts";
@@ -63,7 +63,10 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
 
         const typeIds = new Map<string, string>();
         for (const type of template.itemTypes) {
-          const [row] = await tx.insert(itemTypes).values({ projectId: created.id, name: type.name }).returning();
+          const [row] = await tx
+            .insert(itemTypes)
+            .values({ projectId: created.id, name: type.name, role: type.role ?? null })
+            .returning();
           if (!row) throw new Error("item type insert returned no row");
           typeIds.set(type.name, row.id);
           await tx
@@ -107,7 +110,14 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
       // Not a member reads the same as not existing.
       if (!project || !role) return reply.code(404).send({ error: "Project not found" });
       const projectSets = await db
-        .select({ id: sets.id, name: sets.name, uidPrefix: sets.uidPrefix, itemType: itemTypes.name })
+        .select({
+          id: sets.id,
+          name: sets.name,
+          uidPrefix: sets.uidPrefix,
+          itemType: itemTypes.name,
+          // Whether the set holds test cases.
+          isTest: sql<boolean>`${itemTypes.role} is not distinct from 'test'`,
+        })
         .from(sets)
         .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
         .where(eq(sets.projectId, projectId))

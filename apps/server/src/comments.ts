@@ -163,6 +163,8 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
             // Single marks in a review, and the items an approval updated: the review's own events say it in one line.
             notLike(auditEvents.action, "review.mark%"),
             notLike(auditEvents.action, "review.item.%"),
+            // Single steps of a test run: the run's "finished" event says it in one line.
+            notLike(auditEvents.action, "run.step.%"),
             before ? lt(auditEvents.at, new Date(before)) : undefined,
           ),
         )

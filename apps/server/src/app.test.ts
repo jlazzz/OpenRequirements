@@ -23,7 +23,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, api_tokens, verification_results, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, reviews, review_participants, review_marks, signatures, audit_events cascade`,
+    sql`truncate users, sessions, api_tokens, verification_results, step_results, test_runs, test_cycles, test_plan_cases, test_plans, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, reviews, review_participants, review_marks, signatures, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -906,6 +906,10 @@ test("someone outside a project is refused on every route that names something i
   const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B" }, owner)).json().id;
   const outsider = await person("Olga Outsider");
   const ownerId = (await get("/api/session", owner)).json().user.id;
+  const testCase = (await add((await detail()).sets[2].id, { kind: "item", name: "T" })).json().node.id;
+  const testPlanId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, owner)).json().id;
+  await post(`/api/test-plans/${testPlanId}/cases`, { itemIds: [testCase] }, owner);
+  const testCycleId = (await post(`/api/test-plans/${testPlanId}/cycles`, { name: "Cycle" }, owner)).json().id;
   const ids: Record<string, string> = {
     projectId,
     setId: sys.id,
@@ -921,6 +925,9 @@ test("someone outside a project is refused on every route that names something i
     ).json().id,
     userId: outsider.id,
     tokenId: (await post("/api/tokens", { name: "CI" }, owner)).json().id,
+    testPlanId,
+    testCycleId,
+    testRunId: (await get(`/api/test-cycles/${testCycleId}`, owner)).json().runs[0].id,
   };
 
   const routes = app.apiRoutes.filter((r) => !r.public && r.method !== "HEAD" && r.url.includes(":"));
@@ -1147,12 +1154,23 @@ test("a backup restores as a new project with history, relationships, comments, 
     cookie,
   );
 
+  // A test plan with one cycle: a run assigned to the reviewer, executed and finished as failed.
+  const ran = (await add(ver, { kind: "item", name: "Run me" })).json().node.id;
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Release 1.0" }, cookie)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [ran], group: "Smoke" }, cookie);
+  const cycleId = (await post(`/api/test-plans/${planId}/cycles`, { name: "Round 1" }, cookie)).json().id;
+  const runId = (await get(`/api/test-cycles/${cycleId}`, cookie)).json().runs[0].id;
+  await post(`/api/test-cycles/${cycleId}/assign`, { runIds: [runId], assigneeId: reviewer.id }, cookie);
+  await post(`/api/test-runs/${runId}/steps`, { steps: [1], outcome: "fail", actual: "No light" }, reviewer.cookie);
+  const defectUrl = "https://tracker.example/BUG-7";
+  expect((await post(`/api/test-runs/${runId}/finish`, { defectUrl }, reviewer.cookie)).statusCode).toBe(201);
+
   expect((await get(`/api/projects/${projectId}/backup`, reviewer.cookie)).statusCode).toBe(403);
   const file = await get(`/api/projects/${projectId}/backup`, cookie);
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 4, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 5, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1168,7 +1186,24 @@ test("a backup restores as a new project with history, relationships, comments, 
   const tree = (await get(`/api/projects/${copy.id}`, cookie)).json();
   expect(tree.sets.map((s: { uidPrefix: string }) => s.uidPrefix)).toEqual(["UN", "SYS", "VER"]);
   const names = tree.nodes.map((n: { name: string }) => n.name).sort();
-  expect(names).toEqual(["Measure supply", "Need 2", "Power", "Supply voltage"]);
+  expect(names).toEqual(["Measure supply", "Need 2", "Power", "Run me", "Supply voltage"]);
+  expect(tree.sets.map((s: { isTest: boolean }) => s.isTest)).toEqual([false, false, true]);
+  // The test plan came along with its cycle, the run's step result, and the result the run recorded.
+  const [plan] = (await get(`/api/projects/${copy.id}/test-plans`, cookie)).json().plans;
+  expect(plan).toMatchObject({ name: "Release 1.0", cases: 1, cycles: 1 });
+  expect(plan.id).not.toBe(planId);
+  const newPlan = (await get(`/api/test-plans/${plan.id}`, cookie)).json();
+  const newRan = tree.nodes.find((n: { uid: string }) => n.uid === "VER-002").id;
+  expect(newPlan.cases).toEqual([{ itemId: newRan, group: "Smoke" }]);
+  expect(newPlan.cycles).toEqual([expect.objectContaining({ name: "Round 1", runs: expect.objectContaining({ failed: 1 }) })]);
+  const [newRun] = (await get(`/api/test-cycles/${newPlan.cycles[0].id}`, cookie)).json().runs;
+  expect(newRun).toMatchObject({ uid: "VER-002", assignee: "Rob Reviewer", state: "failed", finished: true });
+  expect((await get(`/api/test-runs/${newRun.id}`, cookie)).json().run.steps).toEqual([
+    expect.objectContaining({ outcome: "fail", actual: "No light", by: "Rob Reviewer" }),
+  ]);
+  expect((await get(`/api/items/${newRan}/results`, cookie)).json().results).toEqual([
+    expect.objectContaining({ outcome: "fail", source: "run", runId: newRun.id, defectUrl }),
+  ]);
   // The result comes back on the copied test case, with its evidence pointing at the copied image.
   const newTest = tree.nodes.find((n: { uid: string }) => n.uid === "VER-001").id;
   const [result] = (await get(`/api/items/${newTest}/results`, cookie)).json().results;
@@ -1230,6 +1265,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   const v1 = {
     ...old,
     version: 1,
+    itemTypes: backup.itemTypes.map(({ id, name }: { id: string; name: string }) => ({ id, name })),
     baselineLinks: backup.baselineLinks.map((l: { baselineId: string; linkId: string }) => ({
       baselineId: l.baselineId,
       linkId: l.linkId,
@@ -1245,7 +1281,10 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect((await post(`/api/sets/${newSys}/nodes`, { kind: "item", name: "Next" }, cookie)).json().node.uid).toBe(
     "SYS-003",
   );
-  expect((await detail()).nodes).toHaveLength(4);
+  expect((await detail()).nodes).toHaveLength(5);
+  // A file from before item types had a role still knows its test cases: by the type's name, as the tool did then.
+  const fromV1Sets = (await get(`/api/projects/${fromV1.id}`, cookie)).json().sets;
+  expect(fromV1Sets.map((s: { isTest: boolean }) => s.isTest)).toEqual([false, false, true]);
 
   // The unknown person got an account that cannot sign in, is mentioned in the copy, and can take it over by invitation.
   const members = (await get(`/api/projects/${copy.id}/members`, cookie)).json().members;
@@ -1279,7 +1318,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 5 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 6 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
@@ -1604,6 +1643,253 @@ test("a JUnit report from CI records results on the test cases it names by UID",
   );
   const feed = (await get(`/api/projects/${projectId}/activity`, cookie)).json().events as { action: string }[];
   expect(feed.filter((e) => e.action.startsWith("junit")).map((e) => e.action)).toEqual(["junit.import"]);
+});
+
+test("a test case holds steps, which are checked, searched and kept per version", async () => {
+  const { cookie, projectId, req, t1 } = await projectWithTests();
+  const fields = (await get(`/api/items/${t1}`, cookie)).json().fields as { id: string; name: string; type: string }[];
+  expect(fields.at(-1)).toMatchObject({ name: "Steps", type: "steps" });
+  const stepsField = fields.at(-1)?.id as string;
+  // Only test cases have the field.
+  expect((await get(`/api/items/${req}`, cookie)).json().fields.some((f: { type: string }) => f.type === "steps")).toBe(
+    false,
+  );
+  const save = (steps: unknown, baseRevision: number) =>
+    post(
+      `/api/items/${t1}/revisions`,
+      { baseRevision, name: "Occlusion test", description: textToDoc(""), attributes: { [stepsField]: steps } },
+      cookie,
+    );
+  const noAction = await save([{ action: " ", expected: "x" }], 1);
+  expect(noAction.statusCode).toBe(400);
+  expect(noAction.json().error).toBe("Steps has no action in step 1");
+  expect((await save("Clamp the line", 1)).statusCode).toBe(400);
+  expect((await save([{ action: "Clamp", expected: "Alarm", html: "<b>" }], 1)).statusCode).toBe(400);
+
+  const steps = [
+    { action: "Clamp the line", expected: "Pressure rises" },
+    { action: "Wait 10 seconds", expected: "The pump stops" },
+  ];
+  expect((await save(steps, 1)).statusCode).toBe(201);
+  expect((await get(`/api/items/${t1}`, cookie)).json().item.attributes[stepsField]).toEqual(steps);
+  expect((await get(`/api/projects/${projectId}/search?q=clamp pump stops`, cookie)).json().ids).toEqual([t1]);
+  // An empty list is no value at all, like every other empty field.
+  expect((await save([], 2)).statusCode).toBe(201);
+  const history = (await get(`/api/items/${t1}/revisions`, cookie)).json().revisions;
+  expect(history.map((r: { attributes: Record<string, unknown> }) => r.attributes[stepsField])).toEqual([
+    undefined,
+    steps,
+    undefined,
+  ]);
+});
+
+test("a test plan is run as a cycle: runs are assigned, executed step by step and record verification results", async () => {
+  const { cookie: owner, projectId, req, t1, t2, status } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const tester = await person("Tess Tester", "reviewer");
+  const stepsField = (await get(`/api/items/${t1}`, owner)).json().fields.at(-1).id;
+  const steps = [
+    { action: "Clamp the line", expected: "Pressure rises" },
+    { action: "Wait 10 seconds", expected: "The pump stops" },
+  ];
+  const edit = (baseRevision: number, description = "Bench") =>
+    post(
+      `/api/items/${t1}/revisions`,
+      { baseRevision, name: "Occlusion test", description: textToDoc(description), attributes: { [stepsField]: steps } },
+      owner,
+    );
+  expect((await edit(1)).statusCode).toBe(201);
+
+  // Plans: an editor makes and fills them, everyone in the project reads them.
+  const plans = `/api/projects/${projectId}/test-plans`;
+  expect((await post(plans, { name: "Release 1.2" }, tester.cookie)).statusCode).toBe(403);
+  expect((await post(plans, { name: "  " }, owner)).statusCode).toBe(400);
+  const planId = (await post(plans, { name: " Release 1.2 " }, owner)).json().id;
+  const plan = `/api/test-plans/${planId}`;
+  expect((await send("PATCH", plan, owner, { name: "Release 1.2 verification" })).statusCode).toBe(200);
+  expect((await post(`${plan}/cases`, { itemIds: [t1] }, tester.cookie)).statusCode).toBe(403);
+  // A requirement is not a test case.
+  expect((await post(`${plan}/cases`, { itemIds: [t1, req] }, owner)).statusCode).toBe(400);
+  expect((await post(`${plan}/cases`, { itemIds: [t1, t2], group: "Smoke" }, owner)).json()).toEqual({
+    added: 2,
+    skipped: 0,
+  });
+  expect((await post(`${plan}/cases`, { itemIds: [t1] }, owner)).json()).toEqual({ added: 0, skipped: 1 });
+  expect((await send("PATCH", `${plan}/cases`, owner, { itemIds: [t2], group: "Alarms" })).json()).toEqual({
+    grouped: 1,
+  });
+  expect((await get(plan, viewer.cookie)).json()).toMatchObject({
+    plan: { name: "Release 1.2 verification", author: "Admin" },
+    cases: [
+      { itemId: t1, group: "Smoke" },
+      { itemId: t2, group: "Alarms" },
+    ],
+    cycles: [],
+  });
+  expect((await get(plans, viewer.cookie)).json().plans).toEqual([
+    expect.objectContaining({ id: planId, cases: 2, cycles: 0, openCycles: 0 }),
+  ]);
+
+  // Cycles: starting one makes a run per test case, frozen at its current version.
+  const start = (body: object, as = owner) => post(`${plan}/cycles`, body, as);
+  expect((await start({ name: "Round 1" }, tester.cookie)).statusCode).toBe(403);
+  expect((await start({ name: "Retest", scope: "failed" })).statusCode).toBe(400);
+  expect((await start({ name: "Nothing", scope: "group", group: "No such group" })).statusCode).toBe(400);
+  const first = await start({ name: "Round 1", environment: "Bench 2" });
+  expect(first.statusCode).toBe(201);
+  expect(first.json().runs).toBe(2);
+  const cycle = `/api/test-cycles/${first.json().id}`;
+  const shown = (await get(cycle, viewer.cookie)).json();
+  expect(shown.cycle).toMatchObject({ name: "Round 1", environment: "Bench 2", plan: "Release 1.2 verification" });
+  expect(shown.runs).toEqual([
+    expect.objectContaining({ uid: "VER-001", revision: 2, group: "Smoke", state: "not_started", done: 0, total: 2 }),
+    // A test case without steps is run as one step.
+    expect.objectContaining({ uid: "VER-002", revision: 1, group: "Alarms", state: "not_started", done: 0, total: 1 }),
+  ]);
+  const [run1, run2] = shown.runs.map((r: { id: string }) => r.id) as [string, string];
+
+  // Assigning: an editor assigns, to people who can execute.
+  const assign = (body: object, as = owner) => post(`${cycle}/assign`, body, as);
+  expect((await assign({ runIds: [run1], assigneeId: tester.id }, tester.cookie)).statusCode).toBe(403);
+  expect((await assign({ runIds: [run1], assigneeId: viewer.id })).statusCode).toBe(400);
+  expect((await assign({ runIds: [run1, planId], assigneeId: tester.id })).statusCode).toBe(400);
+  expect((await assign({ runIds: [run1], assigneeId: tester.id })).json()).toEqual({ assigned: 1 });
+  expect((await get("/api/test-runs/mine", tester.cookie)).json().runs).toEqual([
+    expect.objectContaining({ id: run1, project: "P", cycle: "Round 1", uid: "VER-001", state: "not_started" }),
+  ]);
+  expect((await get("/api/test-runs/mine", owner)).json().runs).toEqual([]);
+
+  // Executing: a reviewer executes their own runs, an editor any run, a viewer none.
+  const step = (runId: string, body: object, as: string) => post(`/api/test-runs/${runId}/steps`, body, as);
+  const finish = (runId: string, body: object, as: string) => post(`/api/test-runs/${runId}/finish`, body, as);
+  expect((await step(run1, { steps: [1], outcome: "pass" }, viewer.cookie)).statusCode).toBe(403);
+  expect((await step(run2, { steps: [1], outcome: "pass" }, tester.cookie)).statusCode).toBe(403);
+  expect((await finish(run2, {}, tester.cookie)).statusCode).toBe(403);
+  expect((await step(run1, { steps: [3], outcome: "pass" }, tester.cookie)).statusCode).toBe(400);
+  expect((await step(run1, { steps: [1], outcome: "pass" }, tester.cookie)).json()).toEqual({ state: "in_progress" });
+  const early = await finish(run1, {}, tester.cookie);
+  expect(early.statusCode).toBe(400);
+  expect(early.json().error).toContain("1 of 2");
+
+  // The test case is edited while the cycle runs: the run keeps the version it froze.
+  expect((await edit(2, "Bench, with the new clamp")).statusCode).toBe(201);
+  // A step is corrected by recording it again: the latest result counts.
+  expect((await step(run1, { steps: [2], outcome: "pass" }, tester.cookie)).json()).toEqual({ state: "passed" });
+  expect(
+    (await step(run1, { steps: [2], outcome: "fail", actual: " Still running " }, tester.cookie)).json(),
+  ).toEqual({ state: "failed" });
+  expect((await finish(run1, { defectUrl: "javascript:alert(1)" }, tester.cookie)).statusCode).toBe(400);
+  const defectUrl = "https://tracker.example/BUG-1";
+  expect((await finish(run1, { note: "See defect", defectUrl }, tester.cookie)).json()).toEqual({ outcome: "fail" });
+  expect((await finish(run1, {}, tester.cookie)).statusCode).toBe(409);
+  expect((await step(run1, { steps: [1], outcome: "pass" }, tester.cookie)).statusCode).toBe(409);
+
+  const executed = (await get(`/api/test-runs/${run1}`, tester.cookie)).json();
+  expect(executed).toMatchObject({
+    run: {
+      uid: "VER-001",
+      name: "Occlusion test",
+      revision: 2,
+      state: "failed",
+      finished: true,
+      assignee: "Tess Tester",
+      result: { outcome: "fail", note: "See defect", defectUrl, by: "Tess Tester" },
+    },
+    cycle: { name: "Round 1", environment: "Bench 2", closedAt: null },
+    nextRunId: null,
+    canExecute: false,
+  });
+  expect(executed.run.steps).toEqual([
+    expect.objectContaining({ ...steps[0], outcome: "pass", actual: "", by: "Tess Tester" }),
+    expect.objectContaining({ ...steps[1], outcome: "fail", actual: "Still running" }),
+  ]);
+  // The run recorded an ordinary result, at the frozen version: out of date, because the test case has moved on.
+  expect((await get(`/api/items/${t1}/results`, owner)).json().results).toEqual([
+    expect.objectContaining({ outcome: "fail", revision: 2, source: "run", runId: run1, defectUrl, outOfDate: true }),
+  ]);
+  expect((await status()).requirements[req]).toMatchObject({ status: "not_run", outOfDate: true });
+  expect((await get("/api/test-runs/mine", tester.cookie)).json().runs).toEqual([]);
+
+  // An editor executes the unassigned run. "Next run" offers the same person's other open run.
+  expect((await get(`/api/test-runs/${run2}`, owner)).json()).toMatchObject({ nextRunId: null, canExecute: true });
+  expect((await step(run2, { steps: [1], outcome: "pass" }, owner)).json()).toEqual({ state: "passed" });
+  expect((await finish(run2, {}, owner)).json()).toEqual({ outcome: "pass" });
+  expect((await get(plan, owner)).json().cycles).toEqual([
+    expect.objectContaining({
+      name: "Round 1",
+      runs: { not_started: 0, in_progress: 0, passed: 1, failed: 1, blocked: 0 },
+    }),
+  ]);
+
+  // A retest cycle takes only what failed or was blocked, at the version current now.
+  const retest = await start({ name: "Retest", scope: "failed" });
+  expect(retest.json().runs).toBe(1);
+  const retestCycle = `/api/test-cycles/${retest.json().id}`;
+  const [again] = (await get(retestCycle, owner)).json().runs;
+  expect(again).toMatchObject({ uid: "VER-001", revision: 3, state: "not_started" });
+  // A JUnit report from CI fills the open runs of the cycle it names.
+  const junit = (cycleId: string) =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/verification-results/junit?testCycleId=${cycleId}`,
+      payload: `<testsuite><testcase name="test_ver_001"/><testcase name="test_ver_002"/></testsuite>`,
+      headers: { cookie: owner, "content-type": "application/xml" },
+    });
+  expect((await junit(planId)).statusCode).toBe(400);
+  expect((await junit(retest.json().id)).json().recorded).toEqual([
+    { uid: "VER-001", outcome: "pass", run: true },
+    { uid: "VER-002", outcome: "pass" },
+  ]);
+  expect((await get(retestCycle, owner)).json().runs).toEqual([
+    expect.objectContaining({ id: again.id, state: "passed", finished: true }),
+  ]);
+  expect((await status()).requirements[req]).toMatchObject({ status: "passing", outOfDate: false });
+
+  // One group only. Closing is permanent and stops every write to the cycle.
+  const alarms = await start({ name: "Alarms only", scope: "group", group: "Alarms" });
+  expect(alarms.json().runs).toBe(1);
+  const alarmsCycle = `/api/test-cycles/${alarms.json().id}`;
+  const [open] = (await get(alarmsCycle, owner)).json().runs;
+  expect(open).toMatchObject({ uid: "VER-002", group: "Alarms" });
+  expect((await post(`${alarmsCycle}/close`, {}, tester.cookie)).statusCode).toBe(403);
+  expect((await post(`${alarmsCycle}/close`, {}, owner)).statusCode).toBe(200);
+  expect((await post(`${alarmsCycle}/close`, {}, owner)).statusCode).toBe(409);
+  expect((await step(open.id, { steps: [1], outcome: "pass" }, owner)).statusCode).toBe(409);
+  expect((await post(`${alarmsCycle}/assign`, { runIds: [open.id], assigneeId: null }, owner)).statusCode).toBe(409);
+  expect((await junit(alarms.json().id)).statusCode).toBe(409);
+  expect((await get(alarmsCycle, viewer.cookie)).json().cycle).toMatchObject({ closedBy: "Admin" });
+
+  // A test case taken out of the plan is not in the next cycle; a deleted plan leaves the list but keeps its cycles.
+  expect((await post(`${plan}/cases/remove`, { itemIds: [t2] }, owner)).json()).toEqual({ removed: 1 });
+  expect((await start({ name: "Round 2" })).json().runs).toBe(1);
+  expect((await send("DELETE", plan, tester.cookie)).statusCode).toBe(403);
+  expect((await send("DELETE", plan, owner)).statusCode).toBe(200);
+  expect((await get(plans, owner)).json().plans).toEqual([]);
+  expect((await get(plan, owner)).statusCode).toBe(404);
+  expect((await start({ name: "Round 3" })).statusCode).toBe(404);
+  expect((await get(cycle, owner)).statusCode).toBe(200);
+
+  expect(await auditActions()).toEqual(
+    expect.arrayContaining([
+      "plan.create",
+      "plan.rename",
+      "plan.cases.add",
+      "plan.cases.group",
+      "plan.cases.remove",
+      "plan.delete",
+      "cycle.create",
+      "cycle.close",
+      "run.assign",
+      "run.step.pass",
+      "run.step.fail",
+      "run.finish.fail",
+      "run.finish.pass",
+    ]),
+  );
+  // Single steps stay out of the activity stream: the finished run says it in one line.
+  const activity = (await get(`/api/projects/${projectId}/activity`, owner)).json().events as { action: string }[];
+  expect(activity.some((e) => e.action === "run.finish.fail")).toBe(true);
+  expect(activity.some((e) => e.action.startsWith("run.step."))).toBe(false);
 });
 
 test("a review of a baseline is commented, marked, signed and closed; approval sets Status with no side effects", async () => {
