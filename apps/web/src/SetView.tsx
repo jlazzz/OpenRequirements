@@ -8,6 +8,7 @@ import {
   Group,
   Menu,
   Modal,
+  MultiSelect,
   NativeSelect,
   NumberInput,
   SegmentedControl,
@@ -38,6 +39,7 @@ import {
   type SetItems,
   type TreeNode,
 } from "./api.ts";
+import { useNodeDrag } from "./dragdrop.ts";
 import { ImportForm } from "./ImportForm.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
@@ -405,7 +407,7 @@ function ListTable({
   const shownIds = rows.map((r) => r.item.id);
   const toggle = (ids: string[], on: boolean) =>
     setSelected((previous) => (on ? [...new Set([...previous, ...ids])] : previous.filter((id) => !ids.includes(id))));
-  const bulkFields = list.fields.filter((f) => f.type !== "steps" && f.type !== "multi_enum");
+  const bulkFields = list.fields.filter((f) => f.type !== "steps");
   const field = bulkFields.find((f) => f.id === bulkField) ?? bulkFields[0];
   const folders = data.nodes.filter((n) => n.setId === set.id && n.kind === "folder");
   const pathOf = (folder: TreeNode): string => {
@@ -441,6 +443,17 @@ function ListTable({
       });
     }
   };
+  // Dragging reorders and moves in the order of the set, so it is offered only while the list is in that order.
+  // A ticked row dragged with others ticked moves them all, last in the destination.
+  const inOrder = !sort && rows.length === all.length;
+  const dnd = useNodeDrag(projectId, data.nodes, (draggedId, placement) =>
+    selected.includes(draggedId) && selected.length > 1
+      ? api(`sets/${set.id}/bulk`, { action: "move", itemIds: selected, parentId: placement.parentId }).then(() =>
+          setSelected([]),
+        )
+      : api(`nodes/${draggedId}/move`, placement),
+  );
+  const treeNode = (id: string) => data.nodes.find((n) => n.id === id) as TreeNode;
   const itemCount = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
   const things = itemCount(bulkItems.length);
 
@@ -604,6 +617,11 @@ function ListTable({
         </Group>
       )}
 
+      {dnd.error && (
+        <Alert color="red" role="alert" withCloseButton onClose={dnd.reset}>
+          {dnd.error.message}
+        </Alert>
+      )}
       {rows.length === 0 ? (
         <Text c="dimmed">No items match.</Text>
       ) : (
@@ -627,6 +645,7 @@ function ListTable({
                     />
                   </Table.Th>
                 )}
+                {canEdit(data.role) && inOrder && <Table.Th w={28} aria-label="Drag to reorder" />}
                 {header("id", "ID", 130)}
                 {header("name", "Name")}
                 {shown.map((column) => header(column.id, column.label))}
@@ -634,7 +653,19 @@ function ListTable({
             </Table.Thead>
             <Table.Tbody>
               {rows.map((row) => (
-                <Table.Tr key={row.item.id}>
+                <Table.Tr
+                  key={row.item.id}
+                  {...(canEdit(data.role) && inOrder ? dnd.dropProps(treeNode(row.item.id), set.id) : {})}
+                >
+                  {canEdit(data.role) && inOrder && (
+                    <Table.Td
+                      title="Drag to move or reorder. Drop on the middle of a row to make a child item."
+                      style={{ cursor: "grab", userSelect: "none" }}
+                      {...dnd.dragProps(treeNode(row.item.id), (el) => el.closest("tr"))}
+                    >
+                      <span aria-hidden>⠿</span>
+                    </Table.Td>
+                  )}
                   {canEdit(data.role) && (
                     <Table.Td>
                       <Checkbox
@@ -673,10 +704,7 @@ function ListTable({
                   </Table.Td>
                   {shown.map((column) => (
                     <Table.Td key={column.id} c={column.field || cell(row, column.id) !== 0 ? undefined : "dimmed"}>
-                      {editing &&
-                      column.field &&
-                      column.field.type !== "multi_enum" &&
-                      column.field.type !== "steps" ? (
+                      {editing && column.field && column.field.type !== "steps" ? (
                         <CellInput
                           field={column.field}
                           label={`${column.label} of ${row.item.uid}`}
@@ -821,6 +849,17 @@ function CellInput({
           data={["", ...(field.options ?? [])]}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.currentTarget.value || null)}
+        />
+      );
+    case "multi_enum":
+      return (
+        <MultiSelect
+          size="xs"
+          aria-label={label}
+          data={field.options ?? []}
+          value={(value as string[]) ?? []}
+          onChange={(next) => onChange(next.length > 0 ? next : null)}
+          clearable
         />
       );
     case "number":
