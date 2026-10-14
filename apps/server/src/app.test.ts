@@ -3024,3 +3024,11 @@ test("the Jama sample spreadsheet imports with the guessed mapping, its HTML des
     '"marks":[{"type":"bold"}]',
   );
 });
+
+test("the version is public and is the root package.json version", async () => {
+  const root = JSON.parse(readFileSync(join(import.meta.dirname, "../../../package.json"), "utf8"));
+  const res = await app.inject({ method: "GET", url: "/api/version" });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ version: root.version });
+  expect(root.version).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+});

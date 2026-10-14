@@ -195,6 +195,7 @@ function ColorSchemeToggle() {
 
 function Shell({ user }: { user: User }) {
   const hasPassword = useSession().data?.password !== false;
+  const version = useQuery({ queryKey: ["version"], queryFn: () => api<{ version: string }>("version") });
   const queryClient = useQueryClient();
   const logout = useMutation({
     mutationFn: () => api("logout", {}),
@@ -287,6 +288,10 @@ function Shell({ user }: { user: User }) {
         <EmailSetting />
         <Divider my="md" />
         <Tokens />
+        <Divider my="md" />
+        <Text size="xs" c="dimmed">
+          Version {version.data?.version ?? "unknown"}
+        </Text>
       </Modal>
     </>
   );

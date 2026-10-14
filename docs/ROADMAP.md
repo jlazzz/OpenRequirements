@@ -37,7 +37,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | I | J1 slice 3 | Part 11 hardening | Opus | none | DB |
 | I | T6 | CI runs | Sonnet | none | DB |
 | J | A3 slice 1 | Security policy | Sonnet | none | |
-| J | A3 slice 2 | Releases | Opus | none | |
+| J | A3 slice 2 | Releases | Opus | none | built (workflow not yet run) |
 | J | A3 slice 3 | Measured budgets | Sonnet | none | |
 | J | A5 slice 1 | Docs site | Sonnet | owner decision 4 | |
 | J | A5 slice 2 | Help in the app | Sonnet | A5 slice 1, J5 slice 8 | |
