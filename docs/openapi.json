@@ -124,6 +124,18 @@
         }
       }
     },
+    "/api/audit/verify": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/baselines/{baselineId}": {
       "get": {
         "tags": [

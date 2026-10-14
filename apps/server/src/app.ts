@@ -8,11 +8,20 @@ import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { audit, createAccess, whereFromParams } from "./access.ts";
 import { attachmentRoutes } from "./attachments.ts";
+import { auditLogRoutes } from "./auditlog.ts";
 import { backupRoutes } from "./backup.ts";
 import { baselineRoutes } from "./baselines.ts";
 import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
 import { apiTokens, sessions, users } from "./db/schema.ts";
+import {
+  isLocked,
+  lockAfterFailure,
+  NO_LIMITS,
+  passwordExpired,
+  type SecurityConfig,
+  sessionIdle,
+} from "./domain/accountsecurity.ts";
 import type { ApiRoute } from "./domain/openapi.ts";
 import { openApiDocument } from "./domain/openapi.ts";
 import { hashPassword, NO_PASSWORD, verifyPassword } from "./domain/password.ts";
@@ -108,8 +117,11 @@ export async function buildApp(
     /** Sign-in through an identity provider. */
     oidc?: OidcConfig;
     outbound?: OutboundConfig;
+    /** Account lockout, password expiry and inactivity timeout (ADR 0020). Left out: all off. */
+    security?: Partial<SecurityConfig>;
   } = {},
 ) {
+  const security: SecurityConfig = { ...NO_LIMITS, ...opts.security };
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.https ?? false });
   await app.register(cookie);
   // Security headers on every response. A route that sets its own, like the attachment download, keeps its own.
@@ -197,14 +209,28 @@ export async function buildApp(
     }
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return null;
-    const [user] = await db
-      .select(who)
+    const now = new Date();
+    const [found] = await db
+      .select({ ...who, lastSeenAt: sessions.lastSeenAt, changedAt: users.passwordChangedAt, hash: users.passwordHash })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
-      .where(
-        and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date()), isNull(users.deactivatedAt)),
-      );
-    return user ?? null;
+      .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, now), isNull(users.deactivatedAt)));
+    if (!found) return null;
+    const { lastSeenAt, changedAt, hash, ...user } = found;
+    if (sessionIdle(lastSeenAt, now, security)) {
+      await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+      return null;
+    }
+    // Accounts that sign in elsewhere have no password to expire.
+    if (hash !== NO_PASSWORD && passwordExpired(changedAt, now, security)) return null;
+    // At most one write a minute per session, however busy the screen.
+    if (security.idleMinutes > 0 && now.getTime() - lastSeenAt.getTime() > 60_000) {
+      await db
+        .update(sessions)
+        .set({ lastSeenAt: now })
+        .where(eq(sessions.tokenHash, hashToken(token)));
+    }
+    return user;
   }
 
   async function requireUser(req: FastifyRequest, reply: FastifyReply) {
@@ -308,7 +334,34 @@ export async function buildApp(
       // Hash even when the user is unknown, so response time does not reveal which emails exist.
       const ok = await verifyPassword(body.password, row?.passwordHash ?? (await dummyHash));
       // A deactivated account gets the same answer as a wrong password.
-      if (!row || !ok || row.deactivatedAt) return reply.code(401).send({ error: "Wrong email or password" });
+      const now = new Date();
+      const wrong = () => reply.code(401).send({ error: "Wrong email or password" });
+      // A locked account answers like a wrong password, even for the right one, so the lock reveals nothing.
+      if (!row || row.deactivatedAt || isLocked(row.lockedUntil, now)) return wrong();
+      if (!ok) {
+        if (security.lockoutAttempts > 0) {
+          await db.transaction(async (tx) => {
+            const [after] = await tx
+              .update(users)
+              .set({ failedLogins: sql`${users.failedLogins} + 1` })
+              .where(eq(users.id, row.id))
+              .returning({ failed: users.failedLogins });
+            const until = lockAfterFailure(after?.failed ?? 0, now, security);
+            if (until) await tx.update(users).set({ failedLogins: 0, lockedUntil: until }).where(eq(users.id, row.id));
+            await audit(tx, row.id, until ? "user.locked" : "user.login_failed", "user", row.id, { label: row.email });
+          });
+        }
+        return wrong();
+      }
+      if (row.passwordHash !== NO_PASSWORD && passwordExpired(row.passwordChangedAt, now, security)) {
+        return reply.code(403).send({
+          error: "Your password has expired. Use “Forgot password” to set a new one.",
+          code: "password_expired",
+        });
+      }
+      if (row.failedLogins > 0 || row.lockedUntil) {
+        await db.update(users).set({ failedLogins: 0, lockedUntil: null }).where(eq(users.id, row.id));
+      }
       await startSession(db, reply, row.id);
       return { user: { id: row.id, email: row.email, name: row.name, isAdmin: row.isAdmin } };
     },
@@ -346,7 +399,7 @@ export async function buildApp(
       }
       const passwordHash = await hashPassword(body.password);
       await db.transaction(async (tx) => {
-        await tx.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+        await tx.update(users).set({ passwordHash, passwordChangedAt: new Date() }).where(eq(users.id, user.id));
         await tx
           .delete(sessions)
           .where(
@@ -493,6 +546,7 @@ export async function buildApp(
   testPlanRoutes(context);
   testRunRoutes(context);
   notificationRoutes(context);
+  auditLogRoutes(context);
   recoveryRoutes(context);
   webhookRoutes(context);
   referenceRoutes(context);

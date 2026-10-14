@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (bundle I, J5 slice 1)
+Last updated: 2026-10-14 (bundle I, J1 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J1 slice 3, Part 11 hardening: account lockout, password expiry and session inactivity timeout (environment variables, off when unset), tamper-evident audit log (SHA-256 hash chain under an advisory lock, `GET /api/audit/verify`, button on the Users page), [ADR 0020](docs/adr/0020-part-11-hardening-audit-chain.md). Migration 0019. Not checked in a browser; the chain does not cover rows from before it or a restored backup (2026-10-14)
 - A5 slice 1, docs site: `docs/user-guide` built by VitePress (dev dependency, offline search, dead links fail the build), published to GitHub Pages by `docs.yml`, copied into the image and served at `/help` without sign-in, [ADR 0019](docs/adr/0019-docs-site-vitepress-help.md). Not checked on a real Pages deployment (2026-10-14)
 - J5 slice 1, editable item types: a project admin adds, renames and removes item types, fields, enum values, sets and relationship types on the "Item types" page. Remove is soft (`archivedAt`); old versions keep their values. Roles `test` and `verifies` replace the name rules, [ADR 0018](docs/adr/0018-editable-types-and-roles.md). Backup format version 8. Not checked in a browser (2026-10-14)
 - J5 slice 2, baseline to baseline: `GET /api/baselines/:baselineId/compare?with=` reports item, relationship (added, removed, became or stopped being suspect) and frozen verification differences; a "Compare with another baseline" picker on the baseline page (server test) (2026-10-14)
@@ -52,6 +53,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J1 slice 3 (Part 11 hardening): built, waiting for the owner's test.** Checkpoint: set `LOGIN_LOCKOUT_ATTEMPTS=3`, fail three sign-ins; click Verify audit log on Users.
 - **J5 slice 1 (editable item types, fields, sets, relationship types): built, waiting for the owner's test.** Checkpoint: add a field to an item type, rename "Verified by" and see verification still work.
 - J5 slice 2 (baseline to baseline compare): built, waiting for the owner's test. Checkpoint: pick another baseline on a baseline page.
 - **J5 slice 6 (matrix and baseline exports): built, waiting for the owner's test.** Not checked in a browser.
@@ -100,7 +102,7 @@ Known gaps left for later milestones or owner decision:
 - Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
 - Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
 - Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. Tokens do not expire and show no "last used" date.
-- Reviews: participants cannot be changed after creation, a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: no password expiry, lockout or inactivity timeout, and the audit log is not tamper-evident. Opening a review does not set Status to "In review".
+- Reviews: participants cannot be changed after creation, a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: the audit hash chain is not anchored outside the database (roadmap A2 slice 1), so a full rewrite or deleting the newest rows goes unseen; no password history or complexity rules. Opening a review does not set Status to "In review".
 - Comparing two baselines lists differences only; it has no field-level diff.
 - Import updates items but never moves them, and an empty cell cannot clear a field. At most 5,000 folders and items per file. A folder name with "/" cannot be given in the Folder column.
 - List export is CSV only (Excel opens it). No .xlsx export.

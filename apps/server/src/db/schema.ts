@@ -1,6 +1,7 @@
 import type { RichNode } from "@app/shared";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   index,
   integer,
@@ -31,6 +32,11 @@ export const users = pgTable("users", {
   emailNotifications: text().$type<"each" | "digest" | "off">().notNull().default("each"),
   // When the last daily digest was queued for this person.
   digestSentAt: timestamp({ withTimezone: true }),
+  // When the password was last set, for password expiry. Rows from before this column count as changed at migration.
+  passwordChangedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  // Failed sign-ins since the last good one, and until when the account is locked (account lockout).
+  failedLogins: integer().notNull().default(0),
+  lockedUntil: timestamp({ withTimezone: true }),
 });
 
 /** A one-time link to set a new password, from "Forgot password" or from an administrator. Only its hash is stored. */
@@ -100,6 +106,8 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp({ withTimezone: true }).notNull(),
   // When this session last confirmed its person at the identity provider, for signing without a password. Used once.
   reauthAt: timestamp({ withTimezone: true }),
+  // Last request made with this session, for the inactivity timeout.
+  lastSeenAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
 /** A personal access token, for scripts and CI. It acts as its user. Revoked, never removed, so the audit log keeps its meaning. */
@@ -688,6 +696,11 @@ export const auditEvents = pgTable("audit_events", {
   entityId: text().notNull(),
   // { label }: what the entity was called at the time, e.g. "SYS-001 Supply voltage". { mentions }: user ids, on comments.
   data: jsonb().$type<{ label?: string; mentions?: string[] }>(),
+  // The tamper-evident chain (ADR 0020). Null on rows from before the chain and on rows restored from a backup.
+  // `seq` counts 1, 2, 3 ... in the order rows were written; `hash` covers this row's content and `prevHash`.
+  seq: bigint({ mode: "number" }).unique(),
+  prevHash: text(),
+  hash: text(),
 });
 
 /** Where a project's audit events are posted as JSON, signed with the secret. Soft-deleted. */

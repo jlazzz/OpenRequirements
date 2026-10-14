@@ -23,6 +23,53 @@ type Accounts = {
   invitations: { id: string; email: string; expiresAt: string }[];
 };
 
+type AuditCheck = {
+  ok: boolean;
+  checked: number;
+  lastSeq: number;
+  unchained: number;
+  firstBroken: { seq: number; id: string; reason: "sequence" | "link" | "content" } | null;
+};
+
+const BROKEN = {
+  content: "its content does not match its hash: the row was changed",
+  link: "it does not follow from the row before it: an earlier row was changed",
+  sequence: "a row is missing before it",
+} as const;
+
+/** Checks the audit log's hash chain on demand and names the first row that does not fit. */
+function AuditVerify() {
+  const check = useMutation({ mutationFn: () => api<AuditCheck>("audit/verify") });
+  const result = check.data;
+  return (
+    <section>
+      <Title order={2} size="h4" mb="xs">
+        Audit log integrity
+      </Title>
+      <Text size="sm" c="dimmed" mb="xs">
+        Every change is chained to the one before it. Checking reads the whole log, so it can take a moment.
+      </Text>
+      <Button variant="default" loading={check.isPending} onClick={() => check.mutate()}>
+        Verify audit log
+      </Button>
+      {check.isError && (
+        <Alert color="red" role="alert" mt="xs">
+          {check.error.message}
+        </Alert>
+      )}
+      {result && (
+        <Alert color={result.ok ? "green" : "red"} role="status" mt="xs">
+          {result.ok
+            ? `Intact: ${result.checked} events checked.`
+            : `Broken at event ${result.firstBroken?.seq}: ${result.firstBroken ? BROKEN[result.firstBroken.reason] : ""}.`}
+          {result.unchained > 0 &&
+            ` ${result.unchained} older events were written before the chain and are not covered.`}
+        </Alert>
+      )}
+    </section>
+  );
+}
+
 /** Instance administrators: everyone with an account, and invitations for new people. */
 export function UsersPage() {
   const queryClient = useQueryClient();
@@ -199,6 +246,7 @@ export function UsersPage() {
             </Table.Tbody>
           </Table>
         </section>
+        <AuditVerify />
       </Stack>
     </Container>
   );

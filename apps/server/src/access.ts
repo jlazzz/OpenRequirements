@@ -1,4 +1,5 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Db } from "./db/client.ts";
@@ -25,7 +26,10 @@ import {
   webhookDeliveries,
   webhooks,
 } from "./db/schema.ts";
+import { auditHash, GENESIS } from "./domain/auditchain.ts";
 import { type Role, roleAllows } from "./domain/roles.ts";
+
+const AUDIT_LOCK = 7_104_001;
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Reader = Pick<Db, "select">;
@@ -298,10 +302,45 @@ export async function audit(
 ) {
   const { projectId, label } = { ...(await describe(tx, entityType, entityId)), ...extra };
   const data = label || extra.mentions?.length ? { label, mentions: extra.mentions } : null;
-  const [event] = await tx
-    .insert(auditEvents)
-    .values({ actorUserId, projectId: projectId ?? null, action, entityType, entityId, data })
-    .returning({ id: auditEvents.id, at: auditEvents.at });
+  // The chain (ADR 0020) needs one writer at a time: the lock is held to the end of the caller's transaction, so
+  // rows are numbered in commit order. A savepoint (or a transaction, when `tx` is the plain database) scopes it.
+  const event = await tx.transaction(async (t) => {
+    await t.execute(sql`select pg_advisory_xact_lock(${AUDIT_LOCK})`);
+    const [last] = await t
+      .select({ seq: auditEvents.seq, hash: auditEvents.hash })
+      .from(auditEvents)
+      .where(isNotNull(auditEvents.seq))
+      .orderBy(desc(auditEvents.seq))
+      .limit(1);
+    const id = randomUUID();
+    // Milliseconds, so the stored value reads back exactly as it was hashed.
+    const at = new Date();
+    const prevHash = last?.hash ?? GENESIS;
+    const hash = auditHash(prevHash, {
+      id,
+      at: at.toISOString(),
+      actorUserId,
+      projectId: projectId ?? null,
+      action,
+      entityType,
+      entityId,
+      data,
+    });
+    await t.insert(auditEvents).values({
+      id,
+      at,
+      actorUserId,
+      projectId: projectId ?? null,
+      action,
+      entityType,
+      entityId,
+      data,
+      seq: (last?.seq ?? 0) + 1,
+      prevHash,
+      hash,
+    });
+    return { id, at };
+  });
   if (!projectId || !event) return;
   // Every write passes through here, so this is the one place webhooks are fed. The delivery is sent by the worker in webhooks.ts.
   const topic = action.split(".")[0] as string;
