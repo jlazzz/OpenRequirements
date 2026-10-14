@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (wave 4 merged)
+Last updated: 2026-10-14 (A1 slice 1 built)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A1 slice 1, structure from the file: `POST /api/projects/:projectId/structure` (admin) adds the sets, item types, fields (enum values from a ReqIF datatype) and relationship types a file implies, only adding, with `dryRun`; the ReqIF import page lists what will be added and then imports in one go. Pure `deriveReqifStructure`, `deriveSheetStructure`, `planStructure` in `packages/importers`, tested against every file in `samples/import`; DOORS sample imported into an empty structure through the route in a server test, and checked in a browser on a scratch instance. No migration, [ADR 0024](docs/adr/0024-structure-from-the-import-file.md). Not yet: a "new set" mode on the spreadsheet screens (derivation and route exist), editing names on the review step (2026-10-14)
 - CI upload to the tool: `ci.yml` writes `junit.xml` and runs `scripts/ci/upload-results.ts` (JUnit with the `// @req` UID put in front of each test name, labelled with commit, branch and run URL; then the `@req` scanner) when the secrets `REQ_URL` and `REQ_TOKEN` exist, not on fork PRs. Tried against a scratch server with a real token; the workflow itself has never run on GitHub, and a local instance is unreachable from GitHub runners. Only tests with a `@req` tag match (2026-10-14)
 - A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
@@ -63,6 +64,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **A1 slice 1 (structure from the file): built, waiting for the owner's test.** Checkpoint: on a new project, import `samples/import/doors-classic-launcher-icd.reqif` as admin; see the sets and fields appear, then import it again.
 - **J5 slice 7 (folders, side bar): built, waiting for the owner's test.** Checkpoint: open a folder that has sub-folders; open Test plans in the side bar.
 - **J1 slice 1 (review participants, In review status, My reviews): built, waiting for the owner's test.** Checkpoint: open a review, add and remove a person, see items go In review.
 - **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { deriveReqifStructure, mapReqif, reqifMappingFor, summarizeReqif } from "@app/importers";
+import { parseReqif } from "@app/reqif";
 import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -237,4 +240,117 @@ test("a backup keeps removed values and roles; an older file gets the verifying 
   expect(links.filter((t: { role: string | null }) => t.role).map((t: { name: string }) => t.name)).toEqual([
     "Verified by",
   ]);
+});
+
+test("structure from a file: a dry run says what is added, apply adds it once, and a second run adds nothing", async () => {
+  const { owner, projectId, types } = await setup();
+  const before = await types();
+  const body = {
+    sets: [
+      {
+        name: "Launcher ICD",
+        uidPrefix: "LI",
+        fields: [
+          { name: "Priority", type: "enum", options: ["High", "Low"] },
+          { name: "Owner", type: "text" },
+        ],
+      },
+    ],
+    linkTypes: ["Satisfies"],
+  };
+  const dry = await call("POST", `/api/projects/${projectId}/structure`, owner, { ...body, dryRun: true });
+  expect(dry.statusCode).toBe(200);
+  expect(dry.json().added).toHaveLength(5);
+  expect(await types()).toEqual(before);
+
+  const applied = await call("POST", `/api/projects/${projectId}/structure`, owner, body);
+  expect(applied.statusCode).toBe(201);
+  const [set] = applied.json().sets;
+  expect(set.id).toBeTruthy();
+  expect(set.fields.map((f: { id: string | null }) => f.id).every(Boolean)).toBe(true);
+  const after = await types();
+  expect(after.sets.map((s: { name: string }) => s.name)).toContain("Launcher ICD");
+  expect(after.linkTypes.map((t: { name: string }) => t.name)).toContain("Satisfies");
+
+  // The same file again, with one more value: only the value is added; a taken prefix is numbered for a new set.
+  const again = await call("POST", `/api/projects/${projectId}/structure`, owner, {
+    sets: [
+      {
+        name: "launcher icd",
+        uidPrefix: "LI",
+        fields: [{ name: "priority", type: "enum", options: ["High", "Low", "Mid"] }],
+      },
+      { name: "Second", uidPrefix: "LI", fields: [] },
+    ],
+    linkTypes: ["satisfies"],
+  });
+  expect(again.statusCode).toBe(201);
+  expect(again.json().added).toEqual([
+    'Values "Mid" on "Priority" of Launcher ICD',
+    'Item type "Second"',
+    'Set "Second" (LI2)',
+  ]);
+  const final = await types();
+  expect(final.sets.filter((s: { name: string }) => s.name === "Launcher ICD")).toHaveLength(1);
+  const type = final.itemTypes.find((t: { name: string }) => t.name === "Launcher ICD");
+  expect(type.fields.find((f: { name: string }) => f.name === "Priority").options).toEqual(["High", "Low", "Mid"]);
+
+  const events = await db.select({ action: auditEvents.action }).from(auditEvents);
+  const actions = events.map((e) => e.action);
+  expect(actions).toEqual(
+    expect.arrayContaining(["item_type.create", "field.create", "set.create", "link_type.create", "field.update"]),
+  );
+});
+
+test("structure from a file needs the admin role, and a non-member sees nothing", async () => {
+  const { owner, projectId } = await setup();
+  const person = async (email: string, role?: string) => {
+    await db.execute(
+      sql`insert into users (email, name, password_hash) select ${email}, ${email}, password_hash from users where is_admin limit 1`,
+    );
+    if (role) {
+      await db.execute(
+        sql`insert into project_members (project_id, user_id, role) select ${projectId}, u.id, ${role} from users u where u.email = ${email}`,
+      );
+    }
+    return cookieOf(
+      await app.inject({ method: "POST", url: "/api/login", payload: { email, password: admin.password } }),
+    );
+  };
+  const body = { sets: [{ name: "X", uidPrefix: "XX", fields: [] }] };
+  const url = `/api/projects/${projectId}/structure`;
+  expect((await app.inject({ method: "POST", url, payload: body })).statusCode).toBe(401);
+  expect((await call("POST", url, await person("ed@example.com", "editor"), body)).statusCode).toBe(403);
+  expect((await call("POST", url, await person("out@example.com"), body)).statusCode).toBe(404);
+  // A field with values but not an enum is refused before anything is written.
+  expect(
+    (
+      await call("POST", url, owner, {
+        sets: [{ name: "Y", uidPrefix: "YY", fields: [{ name: "F", type: "text", options: ["a"] }] }],
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+
+test("a DOORS file imports into an empty structure: derive, apply, map, import", async () => {
+  const { owner, projectId } = await setup();
+  const file = readFileSync(
+    new URL("../../../samples/import/doors-classic-launcher-icd.reqif", import.meta.url),
+    "utf8",
+  );
+  const reqif = parseReqif(file);
+  const summary = summarizeReqif(reqif);
+  const { proposal, fieldOf } = deriveReqifStructure(summary);
+  const applied = (await call("POST", `/api/projects/${projectId}/structure`, owner, proposal)).json();
+  const { mapping, targets } = reqifMappingFor(summary, fieldOf, applied);
+  const mapped = mapReqif(reqif, mapping, targets, () => null);
+  expect(mapped.warnings).toEqual([]);
+  const imported = await call("POST", `/api/projects/${projectId}/import`, owner, mapped.body);
+  expect(imported.statusCode).toBe(201);
+  expect(imported.json().created.items).toBe(mapped.items);
+  // Importing again is a no-op: structure and items are found again.
+  const again = await call("POST", `/api/projects/${projectId}/structure`, owner, proposal);
+  expect(again.json().added).toEqual([]);
+  const second = await call("POST", `/api/projects/${projectId}/import`, owner, mapped.body);
+  expect(second.json().created).toEqual({ items: 0, folders: 0, links: 0 });
 });
