@@ -209,8 +209,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 
 - [ ] Immutable, exportable audit trail (who changed what, when, why)
 - [ ] Mandatory change reasons (configurable per project)
-- [ ] Review and approval workflows (draft → in review → approved), with configurable approvers
-- [ ] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records)
+- [x] Review and approval workflows (draft → in review → approved), with configurable approvers
+- [ ] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records). Those three are built; password expiry, lockout and timeout are not ([ADR 0010](adr/0010-reviews-approvals-and-signatures.md))
 - [x] Verification tracking: lightweight test case items, verification results, and status per requirement
 - [x] Import test results from CI (JUnit XML) and link them to requirements automatically
 - [ ] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step

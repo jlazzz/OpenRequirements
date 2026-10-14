@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Reviews and approvals built: review from a baseline, reviewers and approvers, marks and comments per item, electronic signature with password, permanent closing, Status = Approved with no suspect or out-of-date side effects, backup format version 4, [ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md), [user guide](docs/user-guide/reviews.md) (2026-10-13)
 - Verification tracking built: pure status rule, append-only results on test cases, status in List view, matrix, Trace view and item page, JUnit import from CI, personal access tokens, backup format version 3, [ADR 0009](docs/adr/0009-verification-tracking.md), [user guide](docs/user-guide/verification.md) (2026-10-13)
 - Trace view and impact analysis built: pure graph walk with loop guard, Trace view per set or folder with level pickers, coverage summary with a target set, impact trees on an item, CSV export of the trace, [ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md), [user guide](docs/user-guide/trace.md) (2026-10-13)
 - Suspect links built: pure flagging rule, link revisions for confirmations, markers in the Relationships panel, matrix and List view, "Suspect links" review page, suspect flag in baselines, backup format version 2, [ADR 0007](docs/adr/0007-suspect-links.md) (2026-10-13)
@@ -35,7 +36,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Verification tracking: built, waiting for the owner's test.**
+- **Reviews and approvals: built, waiting for the owner's test.**
+- Verification tracking: built, waiting for the owner's test.
 - Trace view and impact analysis: built, waiting for the owner's test.
 - Suspect links: built, waiting for the owner's test.
 - Finishing slice: built, waiting for the owner's test.
@@ -62,16 +64,17 @@ Known gaps left for later milestones or owner decision:
 - Suspect links: no notification when a link becomes suspect, no "suspect only" filter in List view, and baseline compare does not report suspect differences. The review page links to the changed item; its version compare is opened from there by hand.
 - Trace view: no filter by relationship type or state, no trace of a baseline, rows are not capped for very densely linked sets. Coverage is not shown on the project home page.
 - Verification: evidence is one image per result, no PDF or log files. A result goes out of date on any new version of the requirement, with no "still valid" confirmation. Status is not frozen in baselines. Test cases are found by an item type name containing "test", and the relationship type by the name "Verified by". Tokens do not expire and show no "last used" date.
+- Reviews: participants cannot be changed after creation, a review always covers its whole baseline, nobody is notified, and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: no password expiry, lockout or inactivity timeout, and the audit log is not tamper-evident. Opening a review does not set Status to "In review".
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
 - Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
 - Export is CSV only (Excel opens it). No .xlsx export.
 - Backup and restore hold the whole project in memory: fine for text, slow for hundreds of megabytes of images.
-- Not checked in a browser: image upload through the editor, inserting an equation, the Trace view's "Export CSV" button, evidence upload on a result, and the Access tokens section of the account dialog. All but the CSV button are covered by server tests.
+- Not checked in a browser: image upload through the editor, inserting an equation, the Trace view's "Export CSV" button, printing a review, evidence upload on a result, and the Access tokens section of the account dialog. All but the CSV button are covered by server tests.
 
 ## Open decisions
 
 - Project name
-- Four design details in [docs/DESIGN.md](docs/DESIGN.md) section 11
+- Three design details in [docs/DESIGN.md](docs/DESIGN.md) section 11
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance
 

@@ -19,13 +19,18 @@ import {
   nodes,
   projectMembers,
   projects,
+  reviewMarks,
+  reviewParticipants,
+  reviews,
   sets,
+  signatures,
   users,
   verificationResults,
 } from "./db/schema.ts";
 import { BACKUP_FORMAT, BACKUP_VERSION, type Backup, backupError, parentsFirst, remapIds } from "./domain/backup.ts";
 import { imageType } from "./domain/image.ts";
 import { NO_PASSWORD } from "./domain/password.ts";
+import { MARKS } from "./domain/review.ts";
 import { ROLES } from "./domain/roles.ts";
 import { OUTCOMES } from "./domain/verification.ts";
 import { searchTextOf } from "./nodes.ts";
@@ -51,7 +56,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -77,17 +82,35 @@ const backupSchema = {
       createdAt: when,
       deletedAt: whenOrNull,
     }),
-    itemRevisions: rows({
-      id,
-      itemId: id,
-      number: { type: "integer", minimum: 1 },
-      name: text(200),
-      description: { type: "object" },
-      attributes: { type: "object" },
-      authorId: id,
-      changeReason: textOrNull(500),
-      createdAt: when,
-    }),
+    itemRevisions: {
+      type: "array",
+      items: {
+        ...row({
+          id,
+          itemId: id,
+          number: { type: "integer", minimum: 1 },
+          name: text(200),
+          description: { type: "object" },
+          attributes: { type: "object" },
+          authorId: id,
+          changeReason: textOrNull(500),
+          // Not in files older than version 4.
+          statusOnly: { type: "boolean", default: false },
+          createdAt: when,
+        }),
+        required: [
+          "id",
+          "itemId",
+          "number",
+          "name",
+          "description",
+          "attributes",
+          "authorId",
+          "changeReason",
+          "createdAt",
+        ],
+      },
+    },
     linkTypes: rows({ id, name: text(200), position: count }),
     links: rows({
       id,
@@ -129,15 +152,59 @@ const backupSchema = {
       }),
       default: [],
     },
-    comments: rows({
-      id,
-      itemId: id,
-      authorId: id,
-      body: text(10_000),
-      mentions: { type: "array", items: id },
-      createdAt: when,
-      deletedAt: whenOrNull,
-    }),
+    comments: {
+      type: "array",
+      items: {
+        ...row({
+          id,
+          itemId: id,
+          authorId: id,
+          body: text(10_000),
+          mentions: { type: "array", items: id },
+          // Not in files older than version 4.
+          reviewId: { ...idOrNull, default: null },
+          createdAt: when,
+          deletedAt: whenOrNull,
+        }),
+        required: ["id", "itemId", "authorId", "body", "mentions", "createdAt", "deletedAt"],
+      },
+    },
+    // The next four are not in files older than version 4.
+    reviews: {
+      ...rows({
+        id,
+        baselineId: id,
+        name: text(200),
+        state: { enum: ["open", "closed", "approved", "rejected"] },
+        createdBy: id,
+        createdAt: when,
+        closedBy: idOrNull,
+        closedAt: whenOrNull,
+        statusSet: { type: "boolean" },
+      }),
+      default: [],
+    },
+    reviewParticipants: {
+      ...rows({ reviewId: id, userId: id, role: { enum: ["reviewer", "approver"] } }),
+      default: [],
+    },
+    reviewMarks: {
+      ...rows({ id, reviewId: id, itemId: id, userId: id, mark: { enum: [...MARKS] }, createdAt: when }),
+      default: [],
+    },
+    signatures: {
+      ...rows({
+        id,
+        reviewId: id,
+        userId: id,
+        meaning: { enum: ["approval", "rejection"] },
+        signerName: text(100),
+        signerEmail: text(254),
+        digest: text(64),
+        signedAt: when,
+      }),
+      default: [],
+    },
     baselines: rows({ id, setId: idOrNull, name: text(200), createdBy: id, createdAt: when }),
     baselineEntries: rows({
       baselineId: id,
@@ -170,7 +237,15 @@ const backupSchema = {
     }),
   }),
 };
-backupSchema.required = backupSchema.required.filter((key) => key !== "linkRevisions" && key !== "verificationResults");
+const ADDED_LATER = [
+  "linkRevisions",
+  "verificationResults",
+  "reviews",
+  "reviewParticipants",
+  "reviewMarks",
+  "signatures",
+];
+backupSchema.required = backupSchema.required.filter((key) => !ADDED_LATER.includes(key));
 
 const iso = (date: Date) => date.toISOString();
 const isoOrNull = (date: Date | null) => date?.toISOString() ?? null;
@@ -207,6 +282,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
         .where(eq(sets.projectId, projectId));
       const allBaselines = await db.select().from(baselines).where(inProject(baselines));
       const baselineIds = db.select({ id: baselines.id }).from(baselines).where(inProject(baselines));
+      const reviewIds = db.select({ id: reviews.id }).from(reviews).where(inProject(reviews));
       const files: Backup["attachments"] = [];
       for (const file of await db.select().from(attachments).where(inProject(attachments))) {
         // A row whose file has gone missing is left out, so one lost image cannot block every backup.
@@ -287,6 +363,23 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           .from(baselineEntries)
           .where(inArray(baselineEntries.baselineId, baselineIds)),
         baselineLinks: await db.select().from(baselineLinks).where(inArray(baselineLinks.baselineId, baselineIds)),
+        reviews: (await db.select().from(reviews).where(inProject(reviews))).map(({ projectId: _, ...r }) => ({
+          ...r,
+          createdAt: iso(r.createdAt),
+          closedAt: isoOrNull(r.closedAt),
+        })),
+        reviewParticipants: await db
+          .select()
+          .from(reviewParticipants)
+          .where(inArray(reviewParticipants.reviewId, reviewIds)),
+        reviewMarks: (await db.select().from(reviewMarks).where(inArray(reviewMarks.reviewId, reviewIds))).map((m) => ({
+          ...m,
+          createdAt: iso(m.createdAt),
+        })),
+        signatures: (await db.select().from(signatures).where(inArray(signatures.reviewId, reviewIds))).map((s) => ({
+          ...s,
+          signedAt: iso(s.signedAt),
+        })),
         attachments: files,
         auditEvents: (await db.select().from(auditEvents).where(inProject(auditEvents))).map(
           ({ projectId: _, ...event }) => ({ ...event, at: iso(event.at) }),
@@ -302,6 +395,8 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.verificationResults.map((r) => r.recordedBy),
           backup.comments.flatMap((c) => [c.authorId, ...c.mentions]),
           backup.baselines.map((b) => b.createdBy),
+          backup.reviews.flatMap((r) => (r.closedBy ? [r.createdBy, r.closedBy] : [r.createdBy])),
+          backup.reviewParticipants.map((p) => p.userId),
           backup.attachments.map((a) => a.createdBy),
           backup.auditEvents.flatMap((e) => (e.actorUserId ? [e.actorUserId] : [])),
         ].flat(),
@@ -434,16 +529,31 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           for (const part of parts(backup.linkRevisions)) {
             await tx.insert(linkRevisions).values(part.map((r) => ({ ...r, createdAt: date(r.createdAt) })));
           }
-          for (const part of parts(backup.comments)) {
-            await tx
-              .insert(comments)
-              .values(part.map((c) => ({ ...c, createdAt: date(c.createdAt), deletedAt: dateOrNull(c.deletedAt) })));
-          }
           for (const part of parts(backup.baselines)) {
             await tx.insert(baselines).values(part.map((b) => ({ ...b, projectId, createdAt: date(b.createdAt) })));
           }
           for (const part of parts(backup.baselineEntries)) await tx.insert(baselineEntries).values(part);
           for (const part of parts(backup.baselineLinks)) await tx.insert(baselineLinks).values(part);
+          for (const part of parts(backup.reviews)) {
+            await tx
+              .insert(reviews)
+              .values(
+                part.map((r) => ({ ...r, projectId, createdAt: date(r.createdAt), closedAt: dateOrNull(r.closedAt) })),
+              );
+          }
+          for (const part of parts(backup.reviewParticipants)) await tx.insert(reviewParticipants).values(part);
+          for (const part of parts(backup.reviewMarks)) {
+            await tx.insert(reviewMarks).values(part.map((m) => ({ ...m, createdAt: date(m.createdAt) })));
+          }
+          for (const part of parts(backup.signatures)) {
+            await tx.insert(signatures).values(part.map((s) => ({ ...s, signedAt: date(s.signedAt) })));
+          }
+          // After the reviews, because a comment may belong to one.
+          for (const part of parts(backup.comments)) {
+            await tx
+              .insert(comments)
+              .values(part.map((c) => ({ ...c, createdAt: date(c.createdAt), deletedAt: dateOrNull(c.deletedAt) })));
+          }
           for (const part of parts(backup.auditEvents)) {
             await tx.insert(auditEvents).values(part.map((event) => ({ ...event, projectId, at: date(event.at) })));
           }

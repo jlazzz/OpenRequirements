@@ -1,5 +1,5 @@
 import { matchJunit, parseJunit } from "@app/importers";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import {
@@ -25,7 +25,10 @@ const isTestType = (name: string) => /test/i.test(name);
 /** The relationship type that says a test verifies a requirement. Matched by name, because types come from the template. */
 const isVerifiedBy = (name: string) => /^verified by$/i.test(name.trim());
 
-/** The live items of a project with their current version, when it was saved, and whether they are test cases. */
+/**
+ * The live items of a project and whether they are test cases. `revision` and `revisedAt` are the latest version that
+ * changed more than Status: the one results are judged against (ADR 0010). `latest` is the newest version of any kind.
+ */
 async function currentItems(db: Db, projectId: string) {
   const rows = await db
     .selectDistinctOn([itemRevisions.itemId], {
@@ -34,12 +37,13 @@ async function currentItems(db: Db, projectId: string) {
       itemType: itemTypes.name,
       revision: itemRevisions.number,
       revisedAt: itemRevisions.createdAt,
+      latest: sql<number>`(select max(r.number) from item_revisions r where r.item_id = ${nodes.id})`,
     })
     .from(itemRevisions)
     .innerJoin(nodes, eq(nodes.id, itemRevisions.itemId))
     .innerJoin(sets, eq(sets.id, nodes.setId))
     .innerJoin(itemTypes, eq(itemTypes.id, sets.itemTypeId))
-    .where(and(eq(sets.projectId, projectId), isNull(nodes.deletedAt)))
+    .where(and(eq(sets.projectId, projectId), isNull(nodes.deletedAt), eq(itemRevisions.statusOnly, false)))
     .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
   return rows.map(({ itemType, ...item }) => ({ ...item, isTest: isTestType(itemType) }));
 }
@@ -124,7 +128,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
       const item = (await currentItems(db, projectId)).find((i) => i.id === itemId);
       if (!item) return reply.code(404).send({ error: "Item not found" });
       if (!item.isTest) return reply.code(400).send({ error: "Results can only be recorded on a test case" });
-      if (body.revision !== undefined && body.revision > item.revision) {
+      if (body.revision !== undefined && body.revision > item.latest) {
         return reply.code(400).send({ error: `This test case has no version ${body.revision}` });
       }
       const runAt = body.runAt ? new Date(body.runAt) : new Date();
@@ -143,7 +147,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
           .insert(verificationResults)
           .values({
             itemId,
-            revision: body.revision ?? item.revision,
+            revision: body.revision ?? item.latest,
             outcome: body.outcome,
             runAt,
             note: body.note?.trim() ?? "",
@@ -249,7 +253,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
             .insert(verificationResults)
             .values({
               itemId: item.id,
-              revision: item.revision,
+              revision: item.latest,
               outcome: result.outcome,
               runAt: now,
               note: result.note.slice(0, MAX_NOTE),

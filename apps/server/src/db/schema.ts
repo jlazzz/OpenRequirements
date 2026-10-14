@@ -13,6 +13,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { Mark, ReviewState } from "../domain/review.ts";
+
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 
 export const users = pgTable("users", {
@@ -141,6 +143,9 @@ export const itemRevisions = pgTable(
       .notNull()
       .references(() => users.id),
     changeReason: text(),
+    // True when this version says the same as the one before it apart from the Status field. Set once, when it is saved.
+    // Such a version does not make relationships suspect or test results out of date (ADR 0010).
+    statusOnly: boolean().notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.itemId, t.number)],
@@ -302,6 +307,8 @@ export const comments = pgTable("comments", {
   body: text().notNull(),
   // Ids of the users mentioned with @Name, resolved when the comment was posted.
   mentions: jsonb().$type<string[]>().notNull().default([]),
+  // Set when the comment was made in a review, on the item as the review's baseline froze it.
+  reviewId: uuid().references((): AnyPgColumn => reviews.id),
   createdAt: createdAt(),
   deletedAt: timestamp({ withTimezone: true }),
 });
@@ -355,6 +362,87 @@ export const baselineLinks = pgTable(
     suspect: boolean(),
   },
   (t) => [primaryKey({ columns: [t.baselineId, t.linkId] })],
+);
+
+/** A review of a baseline's items. Only `state`, `closedBy`, `closedAt` and `statusSet` ever change, once, when it is closed. */
+export const reviews = pgTable("reviews", {
+  id: uuid().primaryKey().defaultRandom(),
+  projectId: uuid()
+    .notNull()
+    .references(() => projects.id),
+  baselineId: uuid()
+    .notNull()
+    .references(() => baselines.id),
+  name: text().notNull(),
+  // One of ReviewState in domain/review.ts.
+  state: text().$type<ReviewState>().notNull().default("open"),
+  createdBy: uuid()
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  closedBy: uuid().references(() => users.id),
+  closedAt: timestamp({ withTimezone: true }),
+  // Whether closing wrote Status = Approved to the items.
+  statusSet: boolean().notNull().default(false),
+});
+
+/** Who takes part in a review. An approver can do everything a reviewer can. Fixed when the review is created. */
+export const reviewParticipants = pgTable(
+  "review_participants",
+  {
+    reviewId: uuid()
+      .notNull()
+      .references(() => reviews.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    role: text().$type<"reviewer" | "approver">().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.reviewId, t.userId] })],
+);
+
+/** Append-only. What a participant recorded on an item of a review; their latest row per item is the one that counts. */
+export const reviewMarks = pgTable(
+  "review_marks",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    reviewId: uuid()
+      .notNull()
+      .references(() => reviews.id),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    mark: text().$type<Mark>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.reviewId)],
+);
+
+/**
+ * An approver's electronic signature on their decisions in a review. Append-only, one per approver and review.
+ * The name and email are copied, so the signature reads the same if the account is renamed later.
+ */
+export const signatures = pgTable(
+  "signatures",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    reviewId: uuid()
+      .notNull()
+      .references(() => reviews.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    meaning: text().$type<"approval" | "rejection">().notNull(),
+    signerName: text().notNull(),
+    signerEmail: text().notNull(),
+    // signatureDigest in domain/review.ts: ties the signature to exactly what was signed.
+    digest: text().notNull(),
+    signedAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [unique().on(t.reviewId, t.userId)],
 );
 
 /** Append-only log of every write. Never update or delete rows. */

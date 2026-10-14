@@ -4,7 +4,8 @@ import { and, desc, eq, ilike, inArray, isNotNull, isNull, sql } from "drizzle-o
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
-import { checkAttributes } from "./domain/attributes.ts";
+import { checkAttributes, type FieldDef } from "./domain/attributes.ts";
+import { onlyStatusChanged } from "./domain/review.ts";
 import { descendantIds, placeBefore } from "./domain/tree.ts";
 
 const idParam = (name: string) =>
@@ -57,7 +58,7 @@ export async function projectNodes(db: Db, projectId: string) {
 }
 
 /** An item type's field definitions, in display order. */
-function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
+export function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
   return db
     .select({
       id: attributeDefinitions.id,
@@ -69,6 +70,9 @@ function fieldsOf(db: Pick<Db, "select">, itemTypeId: string) {
     .where(eq(attributeDefinitions.itemTypeId, itemTypeId))
     .orderBy(attributeDefinitions.position);
 }
+
+/** The field that holds an item's state: the enum field named "Status", when the item type has one. */
+export const statusFieldOf = (fields: FieldDef[]) => fields.find((f) => f.name === "Status" && f.type === "enum");
 
 /** What search matches for an item: its UID, name, description text and field values. */
 export function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
@@ -479,7 +483,12 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
         if (!item) return { error: [404, "Item not found"] } as const;
 
         const [current] = await tx
-          .select({ number: itemRevisions.number })
+          .select({
+            number: itemRevisions.number,
+            name: itemRevisions.name,
+            description: itemRevisions.description,
+            attributes: itemRevisions.attributes,
+          })
           .from(itemRevisions)
           .where(eq(itemRevisions.itemId, itemId))
           .orderBy(desc(itemRevisions.number))
@@ -487,16 +496,17 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
         if (current?.number !== body.baseRevision) {
           return { error: [409, "Someone else saved a newer version of this item. Reload to see it."] } as const;
         }
-        const checked = checkAttributes(await fieldsOf(tx, item.itemTypeId), body.attributes);
+        const fields = await fieldsOf(tx, item.itemTypeId);
+        const checked = checkAttributes(fields, body.attributes);
         if ("error" in checked) return { error: [400, checked.error] } as const;
 
         const revision = current.number + 1;
+        const next = { name: body.name.trim(), description: body.description, attributes: checked.attributes };
         await tx.insert(itemRevisions).values({
           itemId,
           number: revision,
-          name: body.name.trim(),
-          description: body.description,
-          attributes: checked.attributes,
+          ...next,
+          statusOnly: onlyStatusChanged(current, next, statusFieldOf(fields)?.id),
           authorId: userId,
           changeReason: body.changeReason?.trim() || null,
         });

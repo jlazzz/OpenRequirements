@@ -17,6 +17,7 @@ import { linkRoutes } from "./links.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
+import { reviewRoutes } from "./reviews.ts";
 import { traceRoutes } from "./trace.ts";
 import { verificationRoutes } from "./verification.ts";
 
@@ -33,6 +34,8 @@ export type AppContext = {
   db: Db;
   /** Rejects requests that are not signed in. Every non-public route needs it in `onRequest`. */
   requireUser: Guard;
+  /** Use after requireUser: rejects requests signed in with an access token, for actions that need the person themself. */
+  requireSession: Guard;
   /** Use after requireUser: rejects users who are not administrators. */
   requireAdmin: Guard;
   /** Records an audit event. Call it in the same transaction as the write. */
@@ -331,6 +334,7 @@ export async function buildApp(
     app,
     db,
     requireUser,
+    requireSession,
     requireAdmin,
     audit,
     access,
@@ -345,6 +349,7 @@ export async function buildApp(
   memberRoutes(context);
   commentRoutes(context);
   baselineRoutes(context);
+  reviewRoutes(context);
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
   attachmentRoutes(context, attachmentsDir);
   backupRoutes(context, attachmentsDir);

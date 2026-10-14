@@ -19,8 +19,9 @@ export async function liveLinks(
 ) {
   const up = alias(nodes, "up");
   const down = alias(nodes, "down");
+  // A version that only changed Status is not a change to review, so it is skipped (ADR 0010).
   const current = (item: AnyPgColumn) =>
-    sql<number>`(select max(r.number) from item_revisions r where r.item_id = ${item})`;
+    sql<number>`(select max(r.number) from item_revisions r where r.item_id = ${item} and not r.status_only)`;
   // The latest confirmation, or the revisions stored on the link when it has never been confirmed.
   const confirmed = (end: "upstream_revision" | "downstream_revision", made: AnyPgColumn) =>
     sql<number>`coalesce((select ${sql.raw(`c.${end}`)} from link_revisions c where c.link_id = ${links.id} order by c.number desc limit 1), ${made})`;

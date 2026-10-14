@@ -12,6 +12,7 @@ import {
   nodes,
   projectMembers,
   projects,
+  reviews,
   sets,
 } from "./db/schema.ts";
 import { type Role, roleAllows } from "./domain/roles.ts";
@@ -28,6 +29,7 @@ export type Where = {
   attachmentId?: string;
   commentId?: string;
   baselineId?: string;
+  reviewId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
@@ -60,6 +62,9 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
     return (await db.select({ id: baselines.projectId }).from(baselines).where(eq(baselines.id, where.baselineId)))[0]
       ?.id;
   }
+  if (where.reviewId) {
+    return (await db.select({ id: reviews.projectId }).from(reviews).where(eq(reviews.id, where.reviewId)))[0]?.id;
+  }
   return where.projectId;
 }
 
@@ -81,9 +86,11 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
               ? { commentId: params.commentId }
               : params.baselineId
                 ? { baselineId: params.baselineId }
-                : params.projectId
-                  ? { projectId: params.projectId }
-                  : null;
+                : params.reviewId
+                  ? { reviewId: params.reviewId }
+                  : params.projectId
+                    ? { projectId: params.projectId }
+                    : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 

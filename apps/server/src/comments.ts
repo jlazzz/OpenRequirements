@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, lt, notLike, or } from "drizzle-orm";
 import { roleIn } from "./access.ts";
 import type { AppContext } from "./app.ts";
-import { auditEvents, comments, nodes, projectMembers, users } from "./db/schema.ts";
+import { auditEvents, baselineEntries, comments, nodes, projectMembers, reviews, users } from "./db/schema.ts";
 import { findMentions } from "./domain/roles.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -24,9 +24,13 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
           createdAt: comments.createdAt,
           authorId: comments.authorId,
           author: users.name,
+          // Set on a comment made in a review.
+          reviewId: comments.reviewId,
+          review: reviews.name,
         })
         .from(comments)
         .innerJoin(users, eq(users.id, comments.authorId))
+        .leftJoin(reviews, eq(reviews.id, comments.reviewId))
         .where(and(eq(comments.itemId, itemId), isNull(comments.deletedAt)))
         .orderBy(comments.createdAt);
       return { comments: rows };
@@ -43,12 +47,17 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
           type: "object",
           required: ["body"],
           additionalProperties: false,
-          properties: { body: { type: "string", minLength: 1, maxLength: 5000, pattern: "\\S" } },
+          properties: {
+            body: { type: "string", minLength: 1, maxLength: 5000, pattern: "\\S" },
+            // Makes it a comment in a review, on the item as that review's baseline froze it.
+            reviewId: uuid,
+          },
         },
       },
     },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
+      const { reviewId } = req.body as { reviewId?: string };
       const body = (req.body as { body: string }).body.trim();
       const userId = req.user?.id as string;
       const projectId = await access(req, reply, { nodeId: itemId }, "reviewer");
@@ -58,6 +67,15 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
         .from(nodes)
         .where(and(eq(nodes.id, itemId), eq(nodes.kind, "item"), isNull(nodes.deletedAt)));
       if (!item) return reply.code(404).send({ error: "Item not found" });
+      if (reviewId) {
+        const [review] = await db
+          .select({ state: reviews.state })
+          .from(reviews)
+          .innerJoin(baselineEntries, eq(baselineEntries.baselineId, reviews.baselineId))
+          .where(and(eq(reviews.id, reviewId), eq(reviews.projectId, projectId), eq(baselineEntries.nodeId, itemId)));
+        if (!review) return reply.code(400).send({ error: "This item is not part of that review" });
+        if (review.state !== "open") return reply.code(409).send({ error: "This review is closed" });
+      }
 
       // Only people who can open the project can be mentioned: its members and the instance administrators.
       const people = await db
@@ -70,7 +88,7 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
       const id = await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(comments)
-          .values({ itemId, authorId: userId, body, mentions })
+          .values({ itemId, authorId: userId, body, mentions, reviewId: reviewId ?? null })
           .returning({ id: comments.id });
         if (!row) throw new Error("comment insert returned no row");
         await audit(tx, userId, "comment.create", "item", itemId, { mentions });
@@ -89,10 +107,15 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
       const projectId = await access(req, reply, { commentId }, "reviewer");
       if (!projectId || !req.user) return reply;
       const [comment] = await db
-        .select({ authorId: comments.authorId, itemId: comments.itemId })
+        .select({ authorId: comments.authorId, itemId: comments.itemId, review: reviews.state })
         .from(comments)
+        .leftJoin(reviews, eq(reviews.id, comments.reviewId))
         .where(and(eq(comments.id, commentId), isNull(comments.deletedAt)));
       if (!comment) return reply.code(404).send({ error: "Not found" });
+      // A closed review is a permanent record, comments included.
+      if (comment.review && comment.review !== "open") {
+        return reply.code(409).send({ error: "This comment belongs to a closed review and cannot be deleted" });
+      }
       if (comment.authorId !== req.user.id && (await roleIn(db, req.user, projectId)) !== "admin") {
         return reply.code(403).send({ error: "Only the author or a project admin can delete a comment" });
       }
@@ -137,6 +160,9 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
             notLike(auditEvents.action, "draft.%"),
             notLike(auditEvents.action, "junit.result.%"),
             notLike(auditEvents.action, "attachment.%"),
+            // Single marks in a review, and the items an approval updated: the review's own events say it in one line.
+            notLike(auditEvents.action, "review.mark%"),
+            notLike(auditEvents.action, "review.item.%"),
             before ? lt(auditEvents.at, new Date(before)) : undefined,
           ),
         )

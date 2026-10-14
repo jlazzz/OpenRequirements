@@ -56,6 +56,7 @@ export function Comments({ data, itemId }: { data: ProjectDetail; itemId: string
                   {comment.author}
                 </Text>{" "}
                 · {new Date(comment.createdAt).toLocaleString()}
+                {comment.review && ` · in review "${comment.review}"`}
               </Text>
               {(comment.authorId === me?.id || data.role === "admin") && (
                 <ActionIcon

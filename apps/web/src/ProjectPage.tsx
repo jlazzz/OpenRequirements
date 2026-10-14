@@ -214,6 +214,13 @@ export function ProjectPage() {
           py={4}
         />
         <RouterNavLink
+          to="/projects/$projectId/reviews"
+          params={{ projectId: info.id }}
+          label="Reviews"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
           to="/projects/$projectId/activity"
           params={{ projectId: info.id }}
           label="Activity"

@@ -21,7 +21,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, api_tokens, verification_results, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, audit_events cascade`,
+    sql`truncate users, sessions, api_tokens, verification_results, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, reviews, review_participants, review_marks, signatures, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -903,6 +903,7 @@ test("someone outside a project is refused on every route that names something i
   const invitationId = (await post("/api/invitations", { email: "i@example.com" }, owner)).json().id;
   const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B" }, owner)).json().id;
   const outsider = await person("Olga Outsider");
+  const ownerId = (await get("/api/session", owner)).json().user.id;
   const ids: Record<string, string> = {
     projectId,
     setId: sys.id,
@@ -913,6 +914,9 @@ test("someone outside a project is refused on every route that names something i
     attachmentId: upload.json().id,
     invitationId,
     baselineId,
+    reviewId: (
+      await post(`/api/projects/${projectId}/reviews`, { name: "R", baselineId, approvers: [ownerId] }, owner)
+    ).json().id,
     userId: outsider.id,
     tokenId: (await post("/api/tokens", { name: "CI" }, owner)).json().id,
   };
@@ -1125,7 +1129,16 @@ test("a backup restores as a new project with history, relationships, comments, 
     { baseRevision: 1, name: "Need 2", description: textToDoc(""), attributes: {} },
     cookie,
   );
-  await post(`/api/projects/${projectId}/baselines`, { name: "v1" }, cookie);
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "v1" }, cookie)).json().id;
+  // A signed and closed review of that baseline, with a comment made in it.
+  const me = (await get("/api/session", cookie)).json().user.id;
+  const reviewId = (
+    await post(`/api/projects/${projectId}/reviews`, { name: "Design review", baselineId, approvers: [me] }, cookie)
+  ).json().id;
+  await post(`/api/items/${req}/comments`, { body: "Reviewed in the meeting", reviewId }, cookie);
+  await post(`/api/reviews/${reviewId}/marks`, { itemIds: [req, need, testCase], mark: "approved" }, cookie);
+  expect((await post(`/api/reviews/${reviewId}/sign`, { password: admin.password }, cookie)).statusCode).toBe(201);
+  expect((await post(`/api/reviews/${reviewId}/close`, {}, cookie)).json()).toMatchObject({ state: "approved" });
   await post(
     `/api/projects/${projectId}/links/confirm`,
     { links: [{ id: linkId, upstreamRevision: 2, downstreamRevision: 2 }] },
@@ -1137,7 +1150,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 3, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 4, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1185,8 +1198,21 @@ test("a backup restores as a new project with history, relationships, comments, 
       changed: { upstream: false, downstream: false },
     }),
   ]);
-  const [comment] = (await get(`/api/items/${newReq.id}/comments`, cookie)).json().comments;
-  expect(comment).toMatchObject({ body: "@Rob Reviewer check", author: "Admin" });
+  const [comment, inReview] = (await get(`/api/items/${newReq.id}/comments`, cookie)).json().comments;
+  expect(comment).toMatchObject({ body: "@Rob Reviewer check", author: "Admin", reviewId: null });
+  // The review came along with its decision, and its signature still matches what was signed.
+  const [review] = (await get(`/api/projects/${copy.id}/reviews`, cookie)).json().reviews;
+  expect(review).toMatchObject({ name: "Design review", state: "approved", baseline: "v1" });
+  expect(review.id).not.toBe(reviewId);
+  expect(inReview).toMatchObject({ body: "Reviewed in the meeting", reviewId: review.id, review: "Design review" });
+  const copied = (await get(`/api/reviews/${review.id}`, cookie)).json();
+  expect(copied.participants).toEqual([
+    expect.objectContaining({
+      role: "approver",
+      signature: expect.objectContaining({ meaning: "approval", valid: true }),
+    }),
+  ]);
+  expect(Object.values(copied.outcomes)).toEqual(["approved", "approved", "approved"]);
   const [baseline] = (await get(`/api/projects/${copy.id}/baselines`, cookie)).json().baselines;
   const frozen = (await get(`/api/baselines/${baseline.id}`, cookie)).json();
   expect(frozen.entries).toHaveLength(4);
@@ -1251,7 +1277,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 4 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 5 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
@@ -1576,4 +1602,223 @@ test("a JUnit report from CI records results on the test cases it names by UID",
   );
   const feed = (await get(`/api/projects/${projectId}/activity`, cookie)).json().events as { action: string }[];
   expect(feed.filter((e) => e.action.startsWith("junit")).map((e) => e.action)).toEqual(["junit.import"]);
+});
+
+test("a review of a baseline is commented, marked, signed and closed; approval sets Status with no side effects", async () => {
+  const { cookie: owner, detail, un, sys, add } = await projectWithSets();
+  const project = await detail();
+  const projectId = project.project.id;
+  const ver = project.sets[2].id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const req = (await add(sys.id, { kind: "item", name: "Supply voltage" })).json().node.id;
+  const tc = (await add(ver, { kind: "item", name: "Measure supply" })).json().node.id;
+  const { linkTypes } = (await get(`/api/projects/${projectId}/links`, owner)).json();
+  const verifiedBy = linkTypes.find((t: { name: string }) => t.name === "Verified by").id;
+  await post("/api/links", { upstreamId: need, downstreamId: req, typeId: linkTypes[0].id }, owner);
+  await post("/api/links", { upstreamId: req, downstreamId: tc, typeId: verifiedBy }, owner);
+  await post(`/api/items/${tc}/results`, { outcome: "pass" }, owner);
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "1.0" }, owner)).json().id;
+  const empty = (await post(`/api/projects/${projectId}/baselines`, { name: "Empty" }, owner)).json().id;
+  // The need changes after the baseline: what the review approves is no longer its current text.
+  await post(
+    `/api/items/${need}/revisions`,
+    { baseRevision: 1, name: "Need, reworded", description: textToDoc(""), attributes: {} },
+    owner,
+  );
+  await db.execute(sql`delete from baseline_entries where baseline_id = ${empty}`);
+
+  const ownerId = (await get("/api/session", owner)).json().user.id;
+  const rob = await person("Rob Reviewer", "reviewer");
+  const ann = await person("Ann Approver", "reviewer");
+  const vera = await person("Vera Viewer", "viewer");
+  const create = (body: object, as = owner) => post(`/api/projects/${projectId}/reviews`, body, as);
+  const wanted = { name: " Design review ", baselineId, reviewers: [rob.id], approvers: [ann.id, ownerId, rob.id] };
+
+  expect((await create(wanted, rob.cookie)).statusCode, "creating needs the editor role").toBe(403);
+  expect((await create({ name: "X", baselineId })).statusCode, "nobody to review").toBe(400);
+  expect((await create({ name: "X", baselineId, reviewers: [vera.id] })).statusCode, "a viewer cannot review").toBe(
+    400,
+  );
+  expect((await create({ name: "X", baselineId: empty, reviewers: [rob.id] })).statusCode, "no items").toBe(400);
+  // Rob is named twice; he is an approver. This review is only here to be closed undecided.
+  const undecided = (await create(wanted)).json().id;
+  const created = await create({ ...wanted, approvers: [ann.id, ownerId] });
+  expect(created.statusCode).toBe(201);
+  const reviewId = created.json().id;
+  const read = async (as = owner) => (await get(`/api/reviews/${reviewId}`, as)).json();
+  const mark = (as: string, itemIds: string[], value: string) =>
+    post(`/api/reviews/${reviewId}/marks`, { itemIds, mark: value }, as);
+  const sign = (as: string, password = admin.password) => post(`/api/reviews/${reviewId}/sign`, { password }, as);
+  const all = [need, req, tc];
+
+  expect((await read(vera.cookie)).review).toMatchObject({ name: "Design review", state: "open", baseline: "1.0" });
+  expect((await read()).participants.map((p: { name: string; role: string }) => [p.name, p.role])).toEqual([
+    ["Admin", "approver"],
+    ["Ann Approver", "approver"],
+    ["Rob Reviewer", "reviewer"],
+  ]);
+
+  // A reviewer comments and marks items reviewed, and cannot decide. A viewer and a non-participant cannot mark.
+  const comment = await post(`/api/items/${req}/comments`, { body: "Unit missing", reviewId }, rob.cookie);
+  expect(comment.statusCode).toBe(201);
+  expect((await post(`/api/items/${req}/comments`, { body: "x", reviewId: undecided }, vera.cookie)).statusCode).toBe(
+    403,
+  );
+  expect((await mark(rob.cookie, [req], "reviewed")).json()).toEqual({ marked: 1 });
+  expect((await mark(rob.cookie, [req], "approved")).statusCode).toBe(403);
+  expect((await mark(vera.cookie, [req], "reviewed")).statusCode).toBe(403);
+  expect((await mark(rob.cookie, [empty], "reviewed")).statusCode, "not an item of the review").toBe(400);
+  expect((await sign(rob.cookie)).statusCode, "a reviewer cannot sign").toBe(403);
+  expect((await get(`/api/items/${req}/comments`, owner)).json().comments).toEqual([
+    expect.objectContaining({ body: "Unit missing", reviewId, review: "Design review" }),
+  ]);
+
+  // An approver decides every item, then signs once with their password. After that their decisions are final.
+  await mark(ann.cookie, [need, req], "approved");
+  expect((await sign(ann.cookie)).json().error).toContain("1 of 3 have no decision");
+  await mark(ann.cookie, [tc], "rejected");
+  await mark(ann.cookie, [tc], "approved");
+  expect((await sign(ann.cookie, "not my password")).statusCode).toBe(400);
+  const signed = await sign(ann.cookie);
+  expect(signed.statusCode).toBe(201);
+  expect(signed.json().meaning).toBe("approval");
+  expect((await mark(ann.cookie, [tc], "rejected")).statusCode).toBe(409);
+  expect((await sign(ann.cookie)).statusCode).toBe(409);
+  // An access token is not the person.
+  const { token } = (await post("/api/tokens", { name: "CI" }, owner)).json();
+  const byToken = await app.inject({
+    method: "POST",
+    url: `/api/reviews/${reviewId}/sign`,
+    payload: { password: admin.password },
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(byToken.statusCode).toBe(403);
+
+  // One approver has not decided yet, so nothing is approved.
+  expect((await read()).outcomes).toEqual({ [need]: "undecided", [req]: "undecided", [tc]: "undecided" });
+  await mark(owner, all, "approved");
+  expect((await sign(owner)).statusCode).toBe(201);
+  const open = await read();
+  expect(open.outcomes).toEqual({ [need]: "approved", [req]: "approved", [tc]: "approved" });
+  expect(open.comments).toEqual([
+    expect.objectContaining({ itemId: req, body: "Unit missing", author: "Rob Reviewer" }),
+  ]);
+  expect(open.participants.map((p: { signature?: { valid: boolean } }) => p.signature?.valid)).toEqual([
+    true,
+    true,
+    undefined,
+  ]);
+
+  // Closing works the state out and, when asked, sets Status on every item that is still what was reviewed.
+  expect((await post(`/api/reviews/${reviewId}/close`, { setStatus: true }, rob.cookie)).statusCode).toBe(403);
+  const closing = await post(`/api/reviews/${reviewId}/close`, { setStatus: true }, owner);
+  expect(closing.json()).toEqual({ state: "approved", updated: 2, skipped: ["UN-001"] });
+  const after = await read();
+  expect(after.review).toMatchObject({ state: "approved", closedBy: "Admin", statusSet: true });
+  const { item, fields } = (await get(`/api/items/${req}`, owner)).json();
+  const status = fields.find((f: { name: string }) => f.name === "Status").id;
+  expect(item).toMatchObject({ revision: 2, name: "Supply voltage", attributes: { [status]: "Approved" } });
+  const [latest] = (await get(`/api/items/${req}/revisions`, owner)).json().revisions;
+  expect(latest).toMatchObject({ number: 2, changeReason: 'Approved in review "Design review"', author: "Admin" });
+  expect((await get(`/api/items/${need}`, owner)).json().item.revision, "the reworded need is left alone").toBe(2);
+  expect((await get(`/api/projects/${projectId}/search?q=Approved`, owner)).json().ids.sort()).toEqual(
+    [req, tc].sort(),
+  );
+
+  // The approval is a new version of the requirement and of the test, yet nothing went suspect or out of date because of it.
+  const links = async () => (await get(`/api/projects/${projectId}/links`, owner)).json().links;
+  expect((await links()).map((l: { changed: object }) => l.changed)).toEqual([
+    { upstream: true, downstream: false },
+    { upstream: false, downstream: false },
+  ]);
+  const verification = async () => (await get(`/api/projects/${projectId}/verification`, owner)).json();
+  expect((await verification()).requirements[req]).toMatchObject({ status: "passing", outOfDate: false });
+  expect((await verification()).tests[tc]).toMatchObject({ outcome: "pass", outOfDate: false });
+  // The same holds for a Status change made by hand, and a result can be recorded against the newest version.
+  const revise = (name: string, value: string, baseRevision: number) =>
+    post(
+      `/api/items/${req}/revisions`,
+      { baseRevision, name, description: textToDoc(""), attributes: { [status]: value } },
+      owner,
+    );
+  expect((await revise("Supply voltage", "In review", 2)).statusCode).toBe(201);
+  expect((await links())[1].changed).toEqual({ upstream: false, downstream: false });
+  expect((await verification()).requirements[req]).toMatchObject({ status: "passing", outOfDate: false });
+  expect((await post(`/api/items/${tc}/results`, { outcome: "pass", revision: 2 }, owner)).statusCode).toBe(201);
+  // A change of content still does both.
+  await revise("Supply voltage, 5 V", "In review", 3);
+  expect((await links())[1].changed).toEqual({ upstream: true, downstream: false });
+  expect((await verification()).requirements[req]).toMatchObject({ status: "not_run", outOfDate: true });
+
+  // A closed review is permanent: no marks, comments, deletions or second closing.
+  expect((await mark(rob.cookie, [req], "cleared")).statusCode).toBe(409);
+  expect((await post(`/api/items/${req}/comments`, { body: "Late", reviewId }, rob.cookie)).statusCode).toBe(409);
+  expect((await send("DELETE", `/api/comments/${comment.json().id}`, rob.cookie)).statusCode).toBe(409);
+  expect((await post(`/api/reviews/${reviewId}/close`, {}, owner)).statusCode).toBe(409);
+  // Closed before every approver signed: no decision, and nothing is written to the items.
+  await post(`/api/reviews/${undecided}/marks`, { itemIds: all, mark: "approved" }, ann.cookie);
+  await post(`/api/reviews/${undecided}/sign`, { password: admin.password }, ann.cookie);
+  expect((await post(`/api/reviews/${undecided}/close`, { setStatus: true }, owner)).json()).toEqual({
+    state: "closed",
+    updated: 0,
+    skipped: [],
+  });
+
+  const list = (await get(`/api/projects/${projectId}/reviews`, ann.cookie)).json().reviews;
+  expect(list.map((r: { state: string; myRole: string }) => [r.state, r.myRole]).sort()).toEqual([
+    ["approved", "approver"],
+    ["closed", "approver"],
+  ]);
+  expect(await auditActions()).toEqual(
+    expect.arrayContaining([
+      "review.create",
+      "review.mark.reviewed",
+      "review.sign.failed",
+      "review.sign.approval",
+      "review.close.approved",
+      "review.close.closed",
+      "review.item.approve",
+    ]),
+  );
+  // The activity stream shows the review's own events, not every mark or every item it updated.
+  const stream = (await get(`/api/projects/${projectId}/activity`, owner))
+    .json()
+    .events.map((e: { action: string }) => e.action);
+  expect(stream).toContain("review.close.approved");
+  expect(stream.filter((a: string) => a.startsWith("review.mark") || a.startsWith("review.item"))).toEqual([]);
+
+  // A signature is tied to what was signed: altering a signed decision afterwards shows.
+  await db.execute(sql`update review_marks set mark = 'rejected' where review_id = ${reviewId} and item_id = ${tc}`);
+  expect((await read()).participants.map((p: { signature?: { valid: boolean } }) => p.signature?.valid)).toEqual([
+    false,
+    false,
+    undefined,
+  ]);
+});
+
+test("one rejected item rejects the review, and a rejected review writes nothing to its items", async () => {
+  const { cookie: owner, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const good = (await add(sys.id, { kind: "item", name: "Good" })).json().node.id;
+  const bad = (await add(sys.id, { kind: "item", name: "Bad" })).json().node.id;
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "1.0", setId: sys.id }, owner)).json()
+    .id;
+  const ownerId = (await get("/api/session", owner)).json().user.id;
+  const reviewId = (
+    await post(`/api/projects/${projectId}/reviews`, { name: "R", baselineId, approvers: [ownerId] }, owner)
+  ).json().id;
+
+  await post(`/api/reviews/${reviewId}/marks`, { itemIds: [good], mark: "approved" }, owner);
+  await post(`/api/reviews/${reviewId}/marks`, { itemIds: [bad], mark: "rejected" }, owner);
+  const signed = await post(`/api/reviews/${reviewId}/sign`, { password: admin.password }, owner);
+  expect(signed.json().meaning).toBe("rejection");
+  expect((await post(`/api/reviews/${reviewId}/close`, { setStatus: true }, owner)).json()).toEqual({
+    state: "rejected",
+    updated: 0,
+    skipped: [],
+  });
+  const review = (await get(`/api/reviews/${reviewId}`, owner)).json();
+  expect(review.outcomes).toEqual({ [good]: "approved", [bad]: "rejected" });
+  expect(review.review.statusSet).toBe(false);
+  expect((await get(`/api/items/${good}`, owner)).json().item.revision).toBe(1);
 });

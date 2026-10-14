@@ -120,6 +120,9 @@ export type Comment = {
   createdAt: string;
   authorId: string;
   author: string;
+  /** Set on a comment made in a review, with that review's name. */
+  reviewId?: string | null;
+  review?: string | null;
 };
 export type ActivityEvent = {
   id: string;

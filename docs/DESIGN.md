@@ -169,9 +169,16 @@ Within a milestone, build the domain logic and its tests first, then the API, th
 - CI sends a JUnit report to the API with a personal access token. Tests are matched to test cases by UID.
 - Not built, on purpose: test run planning and step-by-step execution.
 
+### Reviews and approvals (built after Phase 1, ADR 0010)
+
+- A review is created from a **baseline** by an Editor or Admin, who picks reviewers and approvers from members with the Reviewer role or higher.
+- Reviewers comment per item and mark items reviewed. Approvers approve or reject each item, then **sign once with their password**.
+- Closing fixes the state for good: **approved** (every approver signed, every item approved), **rejected** (signed, at least one item rejected) or **closed** (no decision).
+- An approved review can set Status = Approved on its items. Items changed since the baseline are skipped.
+- A version that only changes Status does not make relationships suspect or results out of date.
+
 ## 11. Still open
 
 - Conflict handling on commit (section 3) needs the owner's confirmation.
 - Whether a draft is visible to others as "being edited by X".
 - Home screen after login: project list or a project dashboard.
-- Reviewer role: what it can do before review workflows exist (Phase 3).

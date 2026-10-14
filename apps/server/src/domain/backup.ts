@@ -1,14 +1,16 @@
 import { docError, type RichNode } from "@app/shared";
 import { checkAttributes } from "./attributes.ts";
+import type { Mark, ReviewState } from "./review.ts";
 
 export const BACKUP_FORMAT = "open-requirements-backup";
-// Version 2 added linkRevisions and baselineLinks.suspect. Version 3 added verificationResults. Older files are still restored.
-export const BACKUP_VERSION = 3;
+// Version 2 added linkRevisions and baselineLinks.suspect. Version 3 added verificationResults. Version 4 added reviews,
+// their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Older files are still restored.
+export const BACKUP_VERSION = 4;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -44,6 +46,7 @@ export type Backup = {
     attributes: Record<string, unknown>;
     authorId: string;
     changeReason: string | null;
+    statusOnly: boolean;
     createdAt: string;
   }[];
   linkTypes: { id: string; name: string; position: number }[];
@@ -87,6 +90,7 @@ export type Backup = {
     authorId: string;
     body: string;
     mentions: string[];
+    reviewId: string | null;
     createdAt: string;
     deletedAt: string | null;
   }[];
@@ -100,6 +104,30 @@ export type Backup = {
     name: string | null;
   }[];
   baselineLinks: { baselineId: string; linkId: string; suspect: boolean | null }[];
+  reviews: {
+    id: string;
+    baselineId: string;
+    name: string;
+    state: ReviewState;
+    createdBy: string;
+    createdAt: string;
+    closedBy: string | null;
+    closedAt: string | null;
+    statusSet: boolean;
+  }[];
+  reviewParticipants: { reviewId: string; userId: string; role: "reviewer" | "approver" }[];
+  reviewMarks: { id: string; reviewId: string; itemId: string; userId: string; mark: Mark; createdAt: string }[];
+  /** Electronic signatures. The digest covers names and UIDs, not ids, so it still checks out after a restore. */
+  signatures: {
+    id: string;
+    reviewId: string;
+    userId: string;
+    meaning: "approval" | "rejection";
+    signerName: string;
+    signerEmail: string;
+    digest: string;
+    signedAt: string;
+  }[];
   /** `data` is the file's bytes in base64. */
   attachments: { id: string; createdBy: string; createdAt: string; data: string }[];
   auditEvents: {
@@ -136,6 +164,17 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["comments", "itemId", "nodes"],
   ["comments", "authorId", "users"],
   ["comments", "mentions", "users"],
+  ["comments", "reviewId", "reviews"],
+  ["reviews", "baselineId", "baselines"],
+  ["reviews", "createdBy", "users"],
+  ["reviews", "closedBy", "users"],
+  ["reviewParticipants", "reviewId", "reviews"],
+  ["reviewParticipants", "userId", "users"],
+  ["reviewMarks", "reviewId", "reviews"],
+  ["reviewMarks", "itemId", "nodes"],
+  ["reviewMarks", "userId", "users"],
+  ["signatures", "reviewId", "reviews"],
+  ["signatures", "userId", "users"],
   ["baselines", "setId", "sets"],
   ["baselines", "createdBy", "users"],
   ["baselineEntries", "baselineId", "baselines"],
