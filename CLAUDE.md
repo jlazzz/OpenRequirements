@@ -26,6 +26,7 @@ npm run dev:server   # API on :3000, restarts on change
 npm run dev:web      # Vite on :5173, proxies /api to :3000
 npm run db:generate  # new SQL migration after editing apps/server/src/db/schema.ts
 npm run up           # build and start the full stack in Docker on :3000
+npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
 npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
 
@@ -126,6 +127,9 @@ docs/
   adr/              Architecture Decision Records
   user-guide/
 deploy/             Dockerfile and docker-compose.yml
+scripts/demo/       `npm run demo`: builds the Kestrel-EO demo project through the API
+scripts/samples/    `npm run samples:import`: writes the synthetic import files
+samples/import/     Synthetic DOORS, Polarion, Jama and Word files for testing import
 e2e/                Playwright tests (empty)
 ```
 

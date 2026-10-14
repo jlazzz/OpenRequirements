@@ -1,0 +1,9 @@
+ID,Global ID,Item Type,Name,Description,Status,Priority,Location,Folder
+CUST-2,GID-88215,Stakeholder Requirement,Land coverage,<p>The system <b>shall</b> image all land between 82° S and 82° N.</p>,Approved,High,Customer Requirements/Imaging,Imaging
+CUST-3,GID-88216,Stakeholder Requirement,Revisit,<p>Any point <b>shall</b> be revisited at least every 5 days.</p>,Approved,High,Customer Requirements/Imaging,Imaging
+CUST-4,GID-88217,Stakeholder Requirement,Ground sampling distance,<p>Images <b>shall</b> resolve 4 m on the ground.</p><p>Measured at nadir.</p>,Approved,High,Customer Requirements/Imaging,Imaging
+CUST-6,GID-88219,Stakeholder Requirement,Same-day delivery,<p>90 % of products <b>shall</b> be delivered within 6 hours.</p>,Draft,High,Customer Requirements/Delivery,Delivery
+CUST-7,GID-88220,Stakeholder Requirement,Emergency tasking,"<p>During a disaster, an image <b>shall</b> be delivered within 24 hours of a request.</p>",Approved,Medium,Customer Requirements/Delivery,Delivery
+CUST-8,GID-88221,Stakeholder Requirement,Delivery formats,<ul><li>GeoTIFF</li><li>JPEG 2000</li><li>Cloud-optimised GeoTIFF</li></ul>,Draft,Low,Customer Requirements/Delivery,Delivery
+CUST-10,GID-88223,Stakeholder Requirement,Service life,<p>The service <b>shall</b> run for 5 years.</p>,Approved,Medium,Customer Requirements/Service,Service
+CUST-11,GID-88224,Stakeholder Requirement,Archive,"<p>Products <b>shall</b> stay available for 10 years, including after the end of the mission.</p>",Rejected,Low,Customer Requirements/Service,Service

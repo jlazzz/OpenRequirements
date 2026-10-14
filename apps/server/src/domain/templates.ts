@@ -43,4 +43,95 @@ export const templates: Template[] = [
     ],
     linkTypes: ["Related to", "Derived from", "Verified by"],
   },
+  {
+    id: "spacecraft",
+    name: "Spacecraft",
+    description:
+      "Mission needs, mission, system and subsystem requirements, interfaces, hazards, and tests at each level.",
+    itemTypes: [
+      {
+        name: "Stakeholder Need",
+        fields: [
+          status,
+          priority,
+          { name: "Stakeholder", type: "text" },
+          {
+            name: "Mission phase",
+            type: "multi_enum",
+            options: ["Launch", "Commissioning", "Operations", "Safe mode", "Disposal"],
+          },
+        ],
+      },
+      {
+        name: "Requirement",
+        fields: [
+          status,
+          priority,
+          method,
+          {
+            name: "Subsystem",
+            type: "enum",
+            options: ["System", "ADCS", "EPS", "COMMS", "C&DH", "FSW", "PROP", "THERM", "STR", "PAYLOAD", "GROUND"],
+          },
+          { name: "Criticality", type: "enum", options: ["Mission critical", "Safety critical", "Standard"] },
+          { name: "Rationale", type: "text" },
+          { name: "Margin (%)", type: "number" },
+          { name: "Need date", type: "date" },
+        ],
+      },
+      {
+        name: "Interface",
+        fields: [
+          status,
+          { name: "Interface type", type: "enum", options: ["Electrical", "Data", "Mechanical", "Thermal", "RF"] },
+          { name: "Side A", type: "text" },
+          { name: "Side B", type: "text" },
+          { name: "Controlled", type: "boolean" },
+        ],
+      },
+      {
+        name: "Hazard",
+        fields: [
+          status,
+          { name: "Severity", type: "enum", options: ["Catastrophic", "Critical", "Marginal", "Negligible"] },
+          {
+            name: "Likelihood",
+            type: "enum",
+            options: ["Frequent", "Probable", "Occasional", "Remote", "Improbable"],
+          },
+          { name: "Cause", type: "text" },
+          { name: "Mitigation", type: "text" },
+        ],
+      },
+      {
+        name: "Test Case",
+        role: "test",
+        fields: [
+          status,
+          method,
+          {
+            name: "Test level",
+            type: "enum",
+            options: ["Unit", "Component", "Subsystem", "Integrated system", "Environmental", "Mission validation"],
+          },
+          { name: "Facility", type: "text" },
+          { name: "Expected result", type: "text" },
+          { name: "Steps", type: "steps" },
+        ],
+      },
+    ],
+    sets: [
+      { name: "Mission Needs", uidPrefix: "MN", itemType: "Stakeholder Need" },
+      { name: "Mission Requirements", uidPrefix: "MR", itemType: "Requirement" },
+      { name: "System Requirements", uidPrefix: "SYS", itemType: "Requirement" },
+      { name: "Subsystem Requirements", uidPrefix: "SUB", itemType: "Requirement" },
+      { name: "Interfaces", uidPrefix: "ICD", itemType: "Interface" },
+      { name: "Hazards", uidPrefix: "HAZ", itemType: "Hazard" },
+      { name: "Component Tests", uidPrefix: "CT", itemType: "Test Case" },
+      { name: "Subsystem Tests", uidPrefix: "ST", itemType: "Test Case" },
+      { name: "System Tests", uidPrefix: "SVT", itemType: "Test Case" },
+      { name: "Mission Validation", uidPrefix: "VAL", itemType: "Test Case" },
+    ],
+    linkTypes: ["Derived from", "Verified by", "Mitigated by", "Interfaces with", "Related to"],
+  },
 ];

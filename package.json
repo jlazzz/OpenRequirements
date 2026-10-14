@@ -18,7 +18,9 @@
     "dev:server": "DATABASE_URL=postgres://app:app@localhost:5432/app node --watch apps/server/src/main.ts",
     "dev:web": "npm run dev -w @app/web",
     "up": "docker compose -f deploy/docker-compose.yml up -d --build",
-    "openapi": "UPDATE_OPENAPI=1 vitest run apps/server/src/integrations.test.ts -t OpenAPI"
+    "openapi": "UPDATE_OPENAPI=1 vitest run apps/server/src/integrations.test.ts -t OpenAPI",
+    "demo": "node scripts/demo/spacecraft.ts",
+    "samples:import": "node scripts/samples/make-import-samples.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

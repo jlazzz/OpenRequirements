@@ -1,9 +1,10 @@
 # Roadmap plans
 
-Written 2026-10-13. Ten plans in two tracks:
+Written 2026-10-13. Fifteen plans in three tracks:
 
 - **Track J:** close the gap to Jama Connect (J1 to J5).
 - **Track T:** full test planning and execution (T1 to T5), allowed by [ADR 0011](adr/0011-test-planning-and-execution-in-scope.md).
+- **Track A:** adoption by companies with serious requirements (A1 to A5), added 2026-10-14, after bundle I.
 
 Each plan lists what exists, the slices to build in order, the data model, and the decisions the owner must make. One slice is one working session: domain module and tests first, then API, then screen. Every slice keeps the hard rules in `CLAUDE.md`: soft delete, append-only history, audit on every write, a permission test per route.
 
@@ -19,6 +20,11 @@ Estimates are in sessions and are rough.
 | G | J2: Word export, import upgrades, Word import, ReqIF | 7 | Export a spec to Word, re-import a ReqIF file |
 | H | J4: OpenAPI, webhooks, external references, OIDC | 6 | A webhook fires on a save; log in through an identity provider |
 | I | J1, J5: review gaps, editable types, compare, dashboard, child items | 8 | Add a field to an item type; compare two baselines |
+| J | A3, A5: release and security basics, documentation site, in-app help | 5 | Install a numbered release from its signed image; open help from a screen |
+| K | A2: compliance evidence | 4 | Download the validation pack of a release; break the audit chain and see it reported |
+| L | A1: migration | 4 | Import a real DOORS or Jama export into a new project without setting it up first |
+
+Bundle letters J, K and L follow I; they are not the plans of track J. J comes first of the three because it is cheap and every evaluator meets it. K needs the Part 11 work of J1 (bundle I). L slice 1 needs editable item types (J5 slice 1, bundle I) and real export files from a design partner.
 
 D comes first because it is the owner's stated priority and it depends on nothing else. F comes before G and H because HTTPS blocks any install at a real company. J1 is last because its open gaps depend on F (email) and G (Word export).
 
@@ -27,7 +33,10 @@ D comes first because it is the owner's stated priority and it depends on nothin
 1. **Edit conflicts (J3):** decided 2026-10-14: merge screen with "keep mine / take theirs" per field.
 2. **Test terms (T2):** decided 2026-10-13: Plan, Cycle, Run, as in Jama.
 3. **Signing with SSO (H):** decided 2026-10-14: an SSO user signs by logging in again at the identity provider ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)).
-4. **New dependencies:** none for H: OpenAPI and OpenID Connect are written by hand ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). `nodemailer` was added in F; `@fastify/helmet` was not needed (ADR 0014). `docx`, `mammoth`, `fast-xml-parser` and `fflate` were not needed: Word and ReqIF are read and written by hand (ADR 0011, ADR 0015).
+4. **Documentation site (A5):** recommended 2026-10-14: keep the Markdown in `docs/user-guide` as the source, publish it as a website, and ship the same pages inside the app. Needs a static site tool as a dev dependency (VitePress or Starlight), or a small hand-written Markdown page in the web app.
+5. **SAML (A3):** only when a design partner asks. Needs `@node-saml/node-saml`: XML signature checking is too risky to write by hand.
+6. **Money (A3, A4):** a third-party penetration test, about $5k to $30k, once there is a paying customer. SOC 2 or ISO 27001 only if the project offers hosting.
+7. **New dependencies:** none for H: OpenAPI and OpenID Connect are written by hand ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). `nodemailer` was added in F; `@fastify/helmet` was not needed (ADR 0014). `docx`, `mammoth`, `fast-xml-parser` and `fflate` were not needed: Word and ReqIF are read and written by hand (ADR 0011, ADR 0015).
 
 ---
 
@@ -195,3 +204,76 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 Charts use Mantine `Progress` with sections. No chart library.
 
 **Later:** signing a closed cycle with the review signature, test environments as a managed list, automated test scheduling.
+
+---
+
+# Track A: Adoption
+
+Added 2026-10-14. Companies with serious requirements (medical, automotive, aerospace) adopt a tool they trust, not the one with the longest feature list. This track covers what they check before they adopt: how they move in, what auditors will ask for, what their IT department requires, and whether the project will still be here in five years. A4 is the owner's work, not code.
+
+## A1. Migration from DOORS, Polarion and Jama
+
+**Exists:** ReqIF import onto existing sets, fields and relationship types, re-import by ReqIF identifier, spreadsheet import with Folder and UID columns, Word import. Synthetic test files in `samples/import` (see its README), checked through the import route on 2026-10-14: every ReqIF file imports, and a re-import of the DOORS file adds 1 item, updates 1 and leaves 12 alone.
+
+**How a company moves today:** set up sets and fields by hand, export each module as ReqIF (Jama: Excel), import each one, check counts, keep the old tool read-only as the archive, and take a first baseline "Migrated from …". History, baselines, reviews, signatures, comments and results do not move. That is normal in regulated work: migrated history is hard to defend to an auditor.
+
+**Found by the sample files:**
+
+- A Jama export has an "ID" column. The spreadsheet import guesses it is our UID, so the first import fails ("CUST-2 is not in this set") until the user skips that column. Guess UID only when the values carry this set's prefix.
+- Jama writes rich text as HTML in its Excel cells. The spreadsheet import keeps the tags as text (`<p>… <b>shall</b> …</p>`). Read a cell that starts with an HTML tag through `xhtmlToDoc`, as ReqIF does.
+- Word heading mode makes a heading with paragraphs under it one item, sub-headings included. Expected, but worth a line in the guide.
+
+**Slices (4 sessions):**
+
+1. **Structure from the file.** On the ReqIF import page, "Create a set for this specification" with an item type and fields from the file's attributes (enumerations as enum fields). Needs J5 slice 1.
+2. **Spreadsheet fixes** above, with tests from `samples/import`.
+3. **Migration guide.** One page per source tool in the user guide: what to export, how to map, what does not move, how to check counts.
+4. **Real files.** Replace the synthetic samples with anonymised exports from a design partner, and add a round-trip test per tool.
+
+**Later, on request:** a Jama importer through its REST API that also brings versions, marked as imported (about 3 sessions).
+
+## A2. Compliance evidence
+
+**Exists:** append-only history and audit events, electronic signatures with password, status-only versions, permanent closing of reviews and cycles. J1 slice 3 plans account lockout, password expiry, inactivity timeout and a tamper-evident audit log.
+
+**Slices (4 sessions):**
+
+1. **Anchored audit chain.** J1 slice 3 stores a SHA-256 of each audit row with the previous row's hash. A database administrator could still rewrite the whole chain, so: a daily job writes the latest hash to a place the database cannot change (an email to a configured address, a file on another volume, or an external log), and `GET /api/audit/verify` checks the chain against those anchors.
+2. **The tool's own requirements in the tool.** Dogfooding (Next item 3): 100 to 300 requirements for this product, each with the tests that prove it, test names carrying the UID so the existing JUnit import links them.
+3. **Validation pack.** CI builds, for each release tag: requirements with their verification status, the test results, the environment (Node, Postgres, browser versions), a traceability matrix, and the list of known gaps. Built by the app's own Word export from a baseline named after the release. CI fails if a requirement has no passing test.
+4. **Customer test scripts.** A short set of installation and operational checks (IQ/OQ) a customer reruns on their own install, with expected results, written as test cases they can import.
+
+**Cannot be promised:** that the tool is "compliant". Compliance belongs to the customer's process; the pack is evidence that saves them weeks. A third-party tool qualification certificate (e.g. ISO 26262 by a certification body) is possible later, at a cost in the tens of thousands of euros: get a quote first.
+
+## A3. Enterprise IT gates
+
+**Exists:** OIDC sign-in, HTTPS by Caddy, security headers, personal access tokens with expiry, OpenAPI document, Docker Compose deployment.
+
+**Slices (3 sessions), no money:**
+
+1. **Security policy.** `SECURITY.md` with GitHub's private vulnerability reporting, a page in the user guide answering the usual security questionnaire (data stored, encryption, sessions, dependencies, backups).
+2. **Releases.** Numbered releases with a changelog. CI builds the image, signs it with cosign (keyless, in GitHub Actions), attaches an SBOM from `npm sbom`, and runs an upgrade test: start the previous release, load the demo project, upgrade, check it opens.
+3. **Measured budgets.** A CI job loads a project of 2,000 items (the demo script in `scripts/demo` scaled up) and fails when the document opens in more than 2 s or search takes more than 500 ms. The numbers go in the user guide.
+
+**On request (2 to 3 sessions each):** SAML (owner decision 5), SCIM provisioning from the company directory.
+
+**Costs money:** penetration test (owner decision 6). SOC 2 and ISO 27001 certify a hosted service, so they wait for a hosting offer.
+
+## A4. Owner's work (no code)
+
+- One design partner running a real project, and their export files for A1 slice 4.
+- Test the bundles still waiting for the owner's test.
+- Decide the project name; nothing can be published before it.
+- A way to pay for support: the AGPL with a CLA already allows open-core or paid support.
+- A public demo instance loaded with the Kestrel-EO demo (`scripts/demo/spacecraft.ts`).
+
+## A5. Documentation and help
+
+**Exists:** Markdown user guide in `docs/user-guide`, install guide, OpenAPI document at `/api/openapi.json` and an API page in the app, the Kestrel-EO demo project.
+
+**Recommendation:** the repository stays the source, because the pages are then versioned with the code, reviewed with the change that needs them, and match the version a customer runs. A wiki drifts from the code and is not versioned per release. The pages are published two ways from the same files: a public website for evaluators (GitHub Pages), and inside the app image at `/help`, because many regulated customers run without internet access.
+
+**Slices (2 sessions):**
+
+1. **Docs site.** Build `docs/user-guide` into a static site in CI, published to GitHub Pages and copied into the app image. Owner decision 4 picks the tool.
+2. **Help in the app.** A "?" on each screen opens its page of the guide. Empty states say what to do first and link to the guide. "Load the demo project" on an empty instance. No guided product tour: it costs more than it gives until there are users to watch.
