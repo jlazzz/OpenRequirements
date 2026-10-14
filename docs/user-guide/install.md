@@ -151,3 +151,20 @@ Upgrades only move forward. To go back to an older version, restore the backup f
 ### Check an image's signature
 
 Release images are signed with [cosign](https://docs.sigstore.dev/) (keyless) and carry an SBOM. See [docs/RELEASING.md](https://github.com/jlazzz/OpenRequirements/blob/development/docs/RELEASING.md) for the command.
+
+## Measured performance
+
+`npm run perf` loads a project through the API and times it against the budgets: a document of 2,000 items opens in under 2 seconds, and search answers in under 500 ms. It makes a new project on the instance it is pointed at, so use a scratch one. The figures are the API's response time (the browser then draws the rows), the slowest of five calls, with the client on the same machine as the server.
+
+Measured 2026-10-14 on a MacBook Air (Apple M4, 10 cores, 16 GB, macOS 15.6), Node 26, PostgreSQL 17 in Docker on the same machine, 2,000 requirements, 500 tests, 200 needs and 4,000 relationships:
+
+| Measure | Budget | Slowest of 5 |
+|---|---|---|
+| Open a document (project tree and 2,000 items) | 2,000 ms | 50 ms |
+| Search, four kinds of query | 500 ms | 6 ms |
+| Trace view of the set, two levels down | none set (5,000 ms in the script) | 47 ms |
+| Create a baseline of the project | none set (10,000 ms in the script) | 351 ms |
+
+With `PERF_ITEMS=3500` (4,700 items in the project): document 86 ms, search 11 ms, trace 67 ms, baseline 537 ms. Searching scans every item of the project without an index, so it grows with project size; the code names the index to add when it nears the budget. Numbers from a small server or a database on another machine will differ: run the script there.
+
+A GitHub workflow, `perf.yml`, runs the same script on demand and nightly on a GitHub-hosted runner.

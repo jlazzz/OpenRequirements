@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (A3 slice 3)
 Last updated: 2026-10-14 (A2 slice 2)
 Last updated: 2026-10-14 (bundle I, T7 slice 2)
 Last updated: 2026-10-14 (bundle I, T6 slice 1 and 2)
@@ -13,6 +14,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)
 - T7 slice 2, files in steps and in results: a `file` node in rich text (any uploaded attachment, a download link; images stay `image`), added with **Image / file**, paste or drop in every rich-text box; the actual result of a step is rich text (stored as the document's JSON in the existing `actual` column, plain text still reads as one paragraph; backup limit 100,000 characters). Word and ReqIF write a file as its name. No migration, no new file type. Checked in a browser on a scratch instance: a file in an actual result survives a reload; the read-only view and the Word export of a file were not looked at (2026-10-14)
 - T6 CI runs: each JUnit upload is a `ci_runs` row (pipeline, branch, commit, build URL, counts, unmatched names) that its results point at; "CI runs" page with filters and a run page with results, requirements and unmatched names; link from a result on the test case; backup format version 9, migration 0020, [ADR 0022](docs/adr/0022-ci-runs.md), [user guide](docs/user-guide/verification.md). Checked in a browser on a scratch instance with the demo project (2026-10-14)

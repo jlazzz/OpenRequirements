@@ -22,6 +22,7 @@
     "openapi": "UPDATE_OPENAPI=1 vitest run apps/server/src/integrations.test.ts -t OpenAPI",
     "demo": "node scripts/demo/spacecraft.ts",
     "dogfood": "node scripts/dogfood/dogfood.ts",
+    "perf": "node scripts/perf/perf.ts",
     "samples:import": "node scripts/samples/make-import-samples.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
