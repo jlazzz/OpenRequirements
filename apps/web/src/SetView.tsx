@@ -47,7 +47,7 @@ import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { ExportMenu } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
-import { StatusBadge } from "./Status.tsx";
+import { KindIcon, StatusBadge } from "./Status.tsx";
 import { TraceView } from "./TraceView.tsx";
 import { OutcomeBadge, resultText, STATUSES, statusText, useVerification, VerificationBadge } from "./Verification.tsx";
 
@@ -68,6 +68,39 @@ export function FolderPage() {
   return <Container key={folder.id} data={project.data} set={set} folder={folder} title={folder.name} />;
 }
 
+/** The direct sub-folders of a set or folder, above its items, each with its item count. */
+function SubFolders({ data, containerId }: { data: ProjectDetail; containerId: string }) {
+  const folders = childrenOf(data.nodes, containerId).filter((n) => n.kind === "folder");
+  if (folders.length === 0) return null;
+  return (
+    <Table withTableBorder aria-label="Folders">
+      <Table.Tbody>
+        {folders.map((folder) => {
+          const items = itemsWithin(data.nodes, folder.id).length;
+          return (
+            <Table.Tr key={folder.id}>
+              <Table.Td>
+                <Group gap="xs" wrap="nowrap">
+                  <KindIcon kind="folder" />
+                  <RouterAnchor
+                    to="/projects/$projectId/folders/$nodeId"
+                    params={{ projectId: data.project.id, nodeId: folder.id }}
+                  >
+                    {folder.name}
+                  </RouterAnchor>
+                </Group>
+              </Table.Td>
+              <Table.Td c="dimmed" ta="right" w={120}>
+                {items} {items === 1 ? "item" : "items"}
+              </Table.Td>
+            </Table.Tr>
+          );
+        })}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
 type ContainerProps = { data: ProjectDetail; set: ProjectSet; folder?: TreeNode; title: string };
 
 /** A set or one of its folders, shown as a List view or a Reading view. */
@@ -83,6 +116,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
   });
   const count = itemsWithin(data.nodes, folder?.id ?? set.id).length;
   const editor = canEdit(data.role);
+  const subfolders = childrenOf(data.nodes, folder?.id ?? set.id).filter((n) => n.kind === "folder").length;
 
   return (
     <Stack gap="sm">
@@ -136,7 +170,8 @@ function Container({ data, set, folder, title }: ContainerProps) {
           {list.error.message}
         </Alert>
       )}
-      {count === 0 && <Text c="dimmed">No items here yet.</Text>}
+      {view === undefined && <SubFolders data={data} containerId={folder?.id ?? set.id} />}
+      {count === 0 && subfolders === 0 && <Text c="dimmed">No items here yet.</Text>}
       {count > 0 && list.data && view === "reading" && (
         <ReadingView data={data} list={list.data} containerId={folder?.id ?? set.id} title={title} />
       )}

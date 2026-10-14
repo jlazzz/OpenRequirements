@@ -27,3 +27,9 @@ Setting a field is refused while you have an unsaved draft of one of the items. 
 ## Dark mode
 
 The button left of your name in the top bar switches between light and dark. Until you choose, the app follows your computer's setting. Printing always uses light.
+
+## Folders and the side bar
+
+- A set or folder in List view shows its **sub-folders** above its items, each with the number of items inside. Click one to open it.
+- In the explorer's lower part, **Baselines**, **Reviews**, **Test plans**, **Test runs** and **Reports** open and close like folders. They list the newest baselines, open reviews, each plan with its open cycles under it, your runs then open cycles, and the reports. At most 10 are listed; "All …" opens the full page.
+- What is open stays open in this browser.
