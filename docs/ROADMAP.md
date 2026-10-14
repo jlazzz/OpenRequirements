@@ -10,6 +10,40 @@ Each plan lists what exists, the slices to build in order, the data model, and t
 
 Estimates are in sessions and are rough.
 
+## Slices left, and the model for each
+
+One slice per fresh session. Opus for slices with hard data-model or security logic, Sonnet for the rest.
+
+| Bundle | Slice | What | Model |
+|---|---|---|---|
+| I | J5 slice 1 | Editable item types, fields, relationship types | Opus |
+| I | J5 slice 2 | Baseline to baseline compare | Sonnet |
+| I | J5 slice 3 | Trace filters, project dashboard | Sonnet |
+| I | J5 slice 4 | Child items | Opus |
+| I | J5 slice 5 | Drag and drop, bulk edit | Sonnet |
+| I | J5 slice 6 | Exports of traceability and baselines | Sonnet |
+| I | J5 slice 7 | Folders and the side bar | Sonnet |
+| I | J5 slice 8 | Section home pages | Opus |
+| I | T7 slice 1 | Rich text in steps | Opus |
+| I | T7 slice 2 | Files in steps and in results | Sonnet |
+| I | J1 slice 1 | Review participants and scope | Sonnet |
+| I | J1 slice 2 | Review notifications and signed record | Sonnet |
+| I | J1 slice 3 | Part 11 hardening | Opus |
+| I | T6 | CI runs | Sonnet |
+| J | A3 slice 1 | Security policy | Sonnet |
+| J | A3 slice 2 | Releases | Opus |
+| J | A3 slice 3 | Measured budgets | Sonnet |
+| J | A5 slice 1 | Docs site | Sonnet |
+| J | A5 slice 2 | Help in the app | Sonnet |
+| K | A2 slice 1 | Anchored audit chain | Opus |
+| K | A2 slice 2 | The tool's own requirements in the tool | Sonnet |
+| K | A2 slice 3 | Validation pack | Sonnet |
+| K | A2 slice 4 | Customer test scripts | Sonnet |
+| L | A1 slice 1 | Structure from the file | Opus |
+| L | A1 slice 3 | Migration guide | Sonnet |
+| L | A1 slice 4 | Real files (needs a design partner's exports) | Sonnet |
+| none | Phase 1 | Playwright end-to-end tests | Sonnet |
+
 ## Build order
 
 | Bundle | Contents | Sessions | Checkpoint test |
