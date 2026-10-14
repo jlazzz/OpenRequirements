@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A5 slice 1, docs site: `docs/user-guide` built by VitePress (dev dependency, offline search, dead links fail the build), published to GitHub Pages by `docs.yml`, copied into the image and served at `/help` without sign-in, [ADR 0018](docs/adr/0018-docs-site-vitepress-help.md). Not checked on a real Pages deployment (2026-10-14)
 - J5 slice 2, baseline to baseline: `GET /api/baselines/:baselineId/compare?with=` reports item, relationship (added, removed, became or stopped being suspect) and frozen verification differences; a "Compare with another baseline" picker on the baseline page (server test) (2026-10-14)
 - J5 slice 6, exports: the traceability matrix exports as CSV and Word from the rows on screen, a baseline exports as CSV with each item's frozen verification status and suspect relationships (new route `/api/baselines/:baselineId/csv`, entry in the baseline Export menu). `toDocx` takes an optional table. No new dependency (2026-10-14)
 - J5 slice 3: Trace view filters by relationship type and Status, traces a baseline (relationships and suspect flags as frozen), and draws 100 items at a time with "Show more". The project home page lists per set: items, not covered, suspect, verification. No new route or migration (2026-10-14)
@@ -76,7 +77,7 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 2. Playwright end-to-end tests
 3. Dogfood: write this project's own requirements spec and import it
 
-After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, docs site, in-app help), K (compliance evidence), L (migration).
+After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
 Known gaps left for later milestones or owner decision:
 

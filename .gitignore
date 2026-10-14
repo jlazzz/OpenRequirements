@@ -6,3 +6,6 @@ coverage/
 !.env.example
 .DS_Store
 data/
+
+docs/.vitepress/cache/
+docs/.vitepress/dist/

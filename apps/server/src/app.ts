@@ -92,6 +92,8 @@ export async function buildApp(
   db: Db,
   opts: {
     webRoot?: string;
+    /** The built user guide, served without sign-in at /help. */
+    helpRoot?: string;
     logger?: boolean;
     loginAttemptsPerMinute?: number;
     attachmentsDir?: string;
@@ -483,6 +485,11 @@ export async function buildApp(
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });
+  }
+  if (opts.helpRoot && existsSync(opts.helpRoot)) {
+    // The guide is public, static and outside /api/. `decorateReply: false` because the app shell registered `sendFile`.
+    await app.register(fastifyStatic, { root: opts.helpRoot, prefix: "/help/", decorateReply: false });
+    app.get("/help", { config: { public: true } }, async (_req, reply) => reply.redirect("/help/"));
   }
   app.setNotFoundHandler((req, reply) => {
     // The web app does its own routing, so unknown non-API paths get the app shell.

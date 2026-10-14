@@ -26,6 +26,7 @@ npm run dev:server   # API on :3000, restarts on change
 npm run dev:web      # Vite on :5173, proxies /api to :3000
 npm run db:generate  # new SQL migration after editing apps/server/src/db/schema.ts
 npm run up           # build and start the full stack in Docker on :3000
+npm run docs:dev     # user guide with live reload; docs:build writes docs/.vitepress/dist (served at /help)
 npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
 npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
