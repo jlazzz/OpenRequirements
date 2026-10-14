@@ -74,3 +74,35 @@ export function onlyStatusChanged(before: Content, after: Content, statusFieldId
     isDeepStrictEqual(rest(before.attributes), rest(after.attributes))
   );
 }
+
+export type Participant = { userId: string; role: "reviewer" | "approver"; signed: boolean };
+
+/** Why a participant cannot be added to an open review, or null. A role change is a removal followed by an addition. */
+export function addParticipantError(active: Participant[], userId: string): string | null {
+  return active.some((p) => p.userId === userId) ? "This person already takes part in the review" : null;
+}
+
+/**
+ * Why a participant cannot be removed from an open review, or null.
+ * A signature stands for good, so an approver who signed stays; and a review never ends up with nobody in it.
+ */
+export function removeParticipantError(active: Participant[], userId: string): string | null {
+  const person = active.find((p) => p.userId === userId);
+  if (!person) return "This person does not take part in the review";
+  if (person.signed) return "This approver has signed. Their signature stands, so they cannot be removed";
+  if (active.length === 1) return "A review needs at least one reviewer or approver";
+  return null;
+}
+
+/**
+ * Whether an item is still what the review was about: every version saved since the baseline only changed Status.
+ * `later` holds the versions after the reviewed one, oldest first.
+ */
+export function stillReviewed(later: { statusOnly: boolean }[]): boolean {
+  return later.every((version) => version.statusOnly);
+}
+
+/** Opening a review shows it on the item: Status becomes "In review", unless the item is Approved or already there. */
+export function opensAsInReview(current: unknown, options: string[] | null | undefined): boolean {
+  return !!options?.includes("In review") && current !== "In review" && current !== "Approved";
+}

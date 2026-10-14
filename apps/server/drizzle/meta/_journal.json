@@ -148,6 +148,13 @@
       "when": 1791995988154,
       "tag": "0020_even_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791996565268,
+      "tag": "0021_thankful_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

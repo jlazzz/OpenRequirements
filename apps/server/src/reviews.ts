@@ -10,6 +10,7 @@ import {
   itemRevisions,
   nodes,
   projectMembers,
+  projects,
   reviewMarks,
   reviewParticipants,
   reviews,
@@ -19,7 +20,17 @@ import {
   users,
 } from "./db/schema.ts";
 import { verifyPassword } from "./domain/password.ts";
-import { closedState, itemOutcome, MARKS, type Mark, signatureDigest } from "./domain/review.ts";
+import {
+  addParticipantError,
+  closedState,
+  itemOutcome,
+  MARKS,
+  type Mark,
+  opensAsInReview,
+  removeParticipantError,
+  signatureDigest,
+  stillReviewed,
+} from "./domain/review.ts";
 import { roleAllows } from "./domain/roles.ts";
 import { notify } from "./mail.ts";
 import { searchTextOf } from "./nodes.ts";
@@ -29,6 +40,7 @@ const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
 const people = { type: "array", maxItems: 100, items: uuid } as const;
 const APPROVED = "Approved";
+const IN_REVIEW = "In review";
 
 /** Everything the rules need about one review: its frozen items, who takes part, each person's latest marks, and the signatures. */
 async function loadReview(db: Db | Tx, reviewId: string) {
@@ -61,9 +73,9 @@ async function loadReview(db: Db | Tx, reviewId: string) {
     .select({ userId: reviewParticipants.userId, name: users.name, role: reviewParticipants.role })
     .from(reviewParticipants)
     .innerJoin(users, eq(users.id, reviewParticipants.userId))
-    .where(eq(reviewParticipants.reviewId, reviewId))
+    .where(and(eq(reviewParticipants.reviewId, reviewId), isNull(reviewParticipants.removedAt)))
     .orderBy(users.name);
-  const marks = await db
+  const everyMark = await db
     .selectDistinctOn([reviewMarks.itemId, reviewMarks.userId], {
       itemId: reviewMarks.itemId,
       userId: reviewMarks.userId,
@@ -73,6 +85,9 @@ async function loadReview(db: Db | Tx, reviewId: string) {
     .from(reviewMarks)
     .where(eq(reviewMarks.reviewId, reviewId))
     .orderBy(reviewMarks.itemId, reviewMarks.userId, desc(reviewMarks.createdAt));
+  // Someone taken out of the review no longer counts: their marks stay in the table but are not read.
+  const active = new Set(participants.map((p) => p.userId));
+  const marks = everyMark.filter((m) => active.has(m.userId));
   const signed = await db.select().from(signatures).where(eq(signatures.reviewId, reviewId));
   const latest = new Map(marks.map((m) => [`${m.itemId}:${m.userId}`, m.mark]));
   const markOf = (itemId: string, userId: string) => latest.get(`${itemId}:${userId}`);
@@ -128,7 +143,11 @@ export function reviewRoutes({
         .innerJoin(users, eq(users.id, reviews.createdBy))
         .leftJoin(
           reviewParticipants,
-          and(eq(reviewParticipants.reviewId, reviews.id), eq(reviewParticipants.userId, req.user?.id as string)),
+          and(
+            eq(reviewParticipants.reviewId, reviews.id),
+            eq(reviewParticipants.userId, req.user?.id as string),
+            isNull(reviewParticipants.removedAt),
+          ),
         )
         .where(eq(reviews.projectId, projectId))
         .orderBy(desc(reviews.createdAt));
@@ -204,8 +223,11 @@ export function reviewRoutes({
         if (!row) throw new Error("review insert returned no row");
         await tx
           .insert(reviewParticipants)
-          .values([...roles].map(([userId, role]) => ({ reviewId: row.id, userId, role })));
+          .values([...roles].map(([userId, role]) => ({ reviewId: row.id, userId, role, addedBy: req.user?.id })));
         await audit(tx, req.user?.id ?? null, "review.create", "review", row.id, { projectId, label: name });
+        // Opening the review shows on each item that it is being reviewed.
+        const opened = await loadReview(tx, row.id);
+        if (opened) await writeStatus(tx, opened.items, req.user?.id as string, projectId, name, IN_REVIEW);
         await notify(
           tx,
           mail,
@@ -221,6 +243,128 @@ export function reviewRoutes({
         return row.id;
       });
       return reply.code(201).send({ id });
+    },
+  );
+
+  // Every open review the signed-in person takes part in, across projects.
+  app.get("/api/reviews/mine", { onRequest: requireUser }, async (req) => {
+    const rows = await db
+      .select({
+        id: reviews.id,
+        name: reviews.name,
+        projectId: reviews.projectId,
+        project: projects.name,
+        baseline: baselines.name,
+        createdAt: reviews.createdAt,
+        role: reviewParticipants.role,
+      })
+      .from(reviewParticipants)
+      .innerJoin(reviews, eq(reviews.id, reviewParticipants.reviewId))
+      .innerJoin(projects, eq(projects.id, reviews.projectId))
+      .innerJoin(baselines, eq(baselines.id, reviews.baselineId))
+      .where(
+        and(
+          eq(reviewParticipants.userId, req.user?.id as string),
+          isNull(reviewParticipants.removedAt),
+          eq(reviews.state, "open"),
+          isNull(projects.archivedAt),
+        ),
+      )
+      .orderBy(desc(reviews.createdAt));
+    return { reviews: rows };
+  });
+
+  // Adds a person to an open review. They get an invitation like everyone named when it was made.
+  app.post(
+    "/api/reviews/:reviewId/participants",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("reviewId"),
+        body: {
+          type: "object",
+          required: ["userId", "role"],
+          additionalProperties: false,
+          properties: { userId: uuid, role: { enum: ["reviewer", "approver"] } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { reviewId } = req.params as { reviewId: string };
+      const projectId = await access(req, reply, { reviewId }, "editor");
+      if (!projectId) return reply;
+      const { userId, role } = req.body as { userId: string; role: "reviewer" | "approver" };
+      const [able] = await db
+        .select({ isAdmin: users.isAdmin, role: projectMembers.role })
+        .from(users)
+        .leftJoin(projectMembers, and(eq(projectMembers.userId, users.id), eq(projectMembers.projectId, projectId)))
+        .where(and(eq(users.id, userId), isNull(users.deactivatedAt)));
+      if (!able || !(able.isAdmin || (able.role && roleAllows(able.role, "reviewer")))) {
+        return reply.code(400).send({
+          error: "Reviewers and approvers must be active members of this project with the Reviewer role or higher",
+        });
+      }
+      const result = await db.transaction(async (tx) => {
+        if (!(await lockOpen(tx, reviewId))) return closed;
+        const loaded = await loadReview(tx, reviewId);
+        if (!loaded) return closed;
+        const refusal = addParticipantError(
+          loaded.participants.map((p) => ({ ...p, signed: false })),
+          userId,
+        );
+        if (refusal) return { error: [409, refusal] } as const;
+        await tx.insert(reviewParticipants).values({ reviewId, userId, role, addedBy: req.user?.id });
+        await audit(tx, req.user?.id ?? null, `review.participant.add.${role}`, "review", reviewId, {
+          projectId,
+          label: loaded.review.name,
+        });
+        return { ok: true as const };
+      });
+      if (!("ok" in result)) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return reply.code(201).send(result);
+    },
+  );
+
+  // Takes a person out of an open review. Their row stays, with `removedAt`; their marks stay but no longer count.
+  app.delete(
+    "/api/reviews/:reviewId/participants/:userId",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: { type: "object", required: ["reviewId", "userId"], properties: { reviewId: uuid, userId: uuid } },
+      },
+    },
+    async (req, reply) => {
+      const { reviewId, userId } = req.params as { reviewId: string; userId: string };
+      const projectId = await access(req, reply, { reviewId }, "editor");
+      if (!projectId) return reply;
+      const result = await db.transaction(async (tx) => {
+        if (!(await lockOpen(tx, reviewId))) return closed;
+        const loaded = await loadReview(tx, reviewId);
+        if (!loaded) return closed;
+        const refusal = removeParticipantError(
+          loaded.participants.map((p) => ({ ...p, signed: loaded.signed.some((s) => s.userId === p.userId) })),
+          userId,
+        );
+        if (refusal) return { error: [409, refusal] } as const;
+        await tx
+          .update(reviewParticipants)
+          .set({ removedAt: new Date(), removedBy: req.user?.id })
+          .where(
+            and(
+              eq(reviewParticipants.reviewId, reviewId),
+              eq(reviewParticipants.userId, userId),
+              isNull(reviewParticipants.removedAt),
+            ),
+          );
+        await audit(tx, req.user?.id ?? null, "review.participant.remove", "review", reviewId, {
+          projectId,
+          label: loaded.review.name,
+        });
+        return { ok: true as const };
+      });
+      if (!("ok" in result)) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
     },
   );
 
@@ -469,7 +613,7 @@ export function reviewRoutes({
         );
         const statusSet = state === "approved" && setStatus === true;
         const applied = statusSet
-          ? await approveItems(tx, loaded.items, userId, projectId, loaded.review.name)
+          ? await writeStatus(tx, loaded.items, userId, projectId, loaded.review.name, APPROVED)
           : { updated: 0, skipped: [] };
         await tx
           .update(reviews)
@@ -484,28 +628,31 @@ export function reviewRoutes({
   );
 
   /**
-   * Writes Status = Approved to every reviewed item that is still exactly what was reviewed, as a new version marked
-   * `statusOnly`. An item that was edited or deleted since the baseline is skipped: nobody approved its current text.
+   * Writes Status = `target` ("In review" when a review opens, "Approved" when it closes approved) to every reviewed
+   * item that is still what was reviewed, as a new version marked `statusOnly`. An item that was edited or deleted
+   * since the baseline is skipped: nobody reviewed its current text. Versions that only changed Status do not count
+   * as edits, so the "In review" version written at opening does not stop the "Approved" one.
    */
-  async function approveItems(
+  async function writeStatus(
     tx: Tx,
-    items: { id: string; uid: string | null; revisionId: string; deleted: boolean }[],
+    items: { id: string; uid: string | null; revisionId: string; revision: number; deleted: boolean }[],
     userId: string,
     projectId: string,
     reviewName: string,
+    target: typeof APPROVED | typeof IN_REVIEW,
   ) {
     const ids = items.map((item) => item.id);
+    if (ids.length === 0) return { updated: 0, skipped: [] };
     // Locks the items, so a version saved at the same moment cannot slip between the check and the write.
     await tx.select({ id: nodes.id }).from(nodes).where(inArray(nodes.id, ids)).orderBy(nodes.id).for("update");
     const current = await tx
       .selectDistinctOn([itemRevisions.itemId], {
         itemId: itemRevisions.itemId,
-        id: itemRevisions.id,
         number: itemRevisions.number,
         name: itemRevisions.name,
         description: itemRevisions.description,
         attributes: itemRevisions.attributes,
-        // The item type's Status field, when it has one that can say "Approved".
+        // The item type's Status field, when it has one that can say `target`.
         statusField: attributeDefinitions.id,
         options: attributeDefinitions.options,
       })
@@ -524,18 +671,24 @@ export function reviewRoutes({
       .where(inArray(itemRevisions.itemId, ids))
       .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
     const latest = new Map(current.map((row) => [row.itemId, row]));
+    const history = await tx
+      .select({ itemId: itemRevisions.itemId, number: itemRevisions.number, statusOnly: itemRevisions.statusOnly })
+      .from(itemRevisions)
+      .where(inArray(itemRevisions.itemId, ids));
 
     const skipped: string[] = [];
     let updated = 0;
     for (const item of items) {
       const now = latest.get(item.id);
-      if (!now || item.deleted || now.id !== item.revisionId) {
+      const later = history.filter((h) => h.itemId === item.id && h.number > item.revision);
+      if (!now || item.deleted || !stillReviewed(later)) {
         skipped.push(item.uid ?? "");
         continue;
       }
-      if (!now.statusField || !now.options?.includes(APPROVED) || now.attributes[now.statusField] === APPROVED)
-        continue;
-      const attributes = { ...now.attributes, [now.statusField]: APPROVED };
+      if (!now.statusField || !now.options?.includes(target)) continue;
+      const status = now.attributes[now.statusField];
+      if (target === IN_REVIEW ? !opensAsInReview(status, now.options) : status === APPROVED) continue;
+      const attributes = { ...now.attributes, [now.statusField]: target };
       await tx.insert(itemRevisions).values({
         itemId: item.id,
         number: now.number + 1,
@@ -544,12 +697,12 @@ export function reviewRoutes({
         attributes,
         statusOnly: true,
         authorId: userId,
-        changeReason: `Approved in review "${reviewName}"`.slice(0, 500),
+        changeReason: `${target === APPROVED ? "Approved in" : "Opened in"} review "${reviewName}"`.slice(0, 500),
       });
       const searchText = searchTextOf(item.uid ?? "", now.name, now.description, attributes);
       await tx.update(nodes).set({ searchText }).where(eq(nodes.id, item.id));
-      // One event per item for the audit log. The activity stream shows the review's single "closed" event instead.
-      await audit(tx, userId, "review.item.approve", "approval", item.id, {
+      // One event per item for the audit log. The activity stream shows the review's single event instead.
+      await audit(tx, userId, target === APPROVED ? "review.item.approve" : "review.item.open", "approval", item.id, {
         projectId,
         label: `${item.uid} ${now.name}`,
       });

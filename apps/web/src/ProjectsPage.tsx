@@ -29,6 +29,14 @@ export function ProjectsPage() {
     queryKey: ["test-runs", "mine"],
     queryFn: () => api<{ runs: (RunSummary & { project: string })[] }>("test-runs/mine"),
   });
+  // The reviews the signed-in user takes part in, in every project.
+  const reviews = useQuery({
+    queryKey: ["reviews", "mine"],
+    queryFn: () =>
+      api<{
+        reviews: { id: string; name: string; projectId: string; project: string; baseline: string; role: string }[];
+      }>("reviews/mine"),
+  });
   const [creating, { open, close }] = useDisclosure(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -100,6 +108,41 @@ export function ProjectsPage() {
             ))}
           </Table.Tbody>
         </Table>
+      )}
+
+      {reviews.data && reviews.data.reviews.length > 0 && (
+        <>
+          <Title order={2} size="h4" mt="xl" mb="xs">
+            My reviews
+          </Title>
+          <Table highlightOnHover withTableBorder bg="var(--mantine-color-body)" aria-label="My reviews">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Review</Table.Th>
+                <Table.Th>Project</Table.Th>
+                <Table.Th>Baseline</Table.Th>
+                <Table.Th>My part</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {reviews.data.reviews.map((review) => (
+                <Table.Tr key={review.id}>
+                  <Table.Td>
+                    <RouterAnchor
+                      to="/projects/$projectId/reviews/$reviewId"
+                      params={{ projectId: review.projectId, reviewId: review.id }}
+                    >
+                      {review.name}
+                    </RouterAnchor>
+                  </Table.Td>
+                  <Table.Td>{review.project}</Table.Td>
+                  <Table.Td>{review.baseline}</Table.Td>
+                  <Table.Td>{review.role === "approver" ? "Approver" : "Reviewer"}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </>
       )}
 
       {runs.data && runs.data.runs.length > 0 && (

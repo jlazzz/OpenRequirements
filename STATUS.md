@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (J1 slice 1)
 Last updated: 2026-10-14 (A2 slice 2)
 Last updated: 2026-10-14 (bundle I, T7 slice 2)
 Last updated: 2026-10-14 (bundle I, T6 slice 1 and 2)
@@ -13,6 +14,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J1 slice 1, review participants: add or remove a participant on an open review (`review_participants` rows kept with `removedAt`; a signer and the last person stay), opening a review sets Status to "In review" as a status-only version (closing still approves, as status-only versions are not edits), "My reviews" on the home page. Migration 0021, backup format version 10, [ADR 0023](docs/adr/0023-review-participants-and-in-review.md). Checked in a browser on a scratch instance: add, remove, My reviews (2026-10-14)
 - A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)
 - T7 slice 2, files in steps and in results: a `file` node in rich text (any uploaded attachment, a download link; images stay `image`), added with **Image / file**, paste or drop in every rich-text box; the actual result of a step is rich text (stored as the document's JSON in the existing `actual` column, plain text still reads as one paragraph; backup limit 100,000 characters). Word and ReqIF write a file as its name. No migration, no new file type. Checked in a browser on a scratch instance: a file in an actual result survives a reload; the read-only view and the Word export of a file were not looked at (2026-10-14)
 - T6 CI runs: each JUnit upload is a `ci_runs` row (pipeline, branch, commit, build URL, counts, unmatched names) that its results point at; "CI runs" page with filters and a run page with results, requirements and unmatched names; link from a result on the test case; backup format version 9, migration 0020, [ADR 0022](docs/adr/0022-ci-runs.md), [user guide](docs/user-guide/verification.md). Checked in a browser on a scratch instance with the demo project (2026-10-14)
@@ -61,6 +63,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J1 slice 1 (review participants, In review status, My reviews): built, waiting for the owner's test.** Checkpoint: open a review, add and remove a person, see items go In review.
 - **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.
 - **T6 CI runs: built, waiting for the owner's test.** Checkpoint: upload a JUnit report with `?pipeline=&branch=`, open it under CI runs.
 - **J5 slice 5 (drag and drop, multi-select fields): built, waiting for the owner's test.** Checkpoint: drag a folder and an item in the explorer; drop an item on another item in List view.
@@ -112,7 +115,7 @@ Known gaps left for later milestones or owner decision:
 - Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
 - Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
 - Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. Tokens do not expire and show no "last used" date.
-- Reviews: participants cannot be changed after creation, a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: the audit hash chain is not anchored outside the database (roadmap A2 slice 1), so a full rewrite or deleting the newest rows goes unseen; no password history or complexity rules. Opening a review does not set Status to "In review".
+- Reviews: a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: the audit hash chain is not anchored outside the database (roadmap A2 slice 1), so a full rewrite or deleting the newest rows goes unseen; no password history or complexity rules.
 - Comparing two baselines lists differences only; it has no field-level diff.
 - Import updates items but never moves them, and an empty cell cannot clear a field. At most 5,000 folders and items per file. A folder name with "/" cannot be given in the Folder column.
 - List export is CSV only (Excel opens it). No .xlsx export.

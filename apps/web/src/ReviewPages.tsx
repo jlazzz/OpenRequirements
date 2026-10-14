@@ -295,6 +295,25 @@ export function ReviewPage() {
   const [shownId, setShownId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"sign" | "close" | null>(null);
   const [setStatus, setSetStatus] = useState(true);
+  const [newPerson, setNewPerson] = useState("");
+  const [newRole, setNewRole] = useState<Part>("reviewer");
+  const editor = canEdit(project?.role);
+  const people = useQuery({
+    queryKey: ["projects", projectId, "members"],
+    queryFn: () => api<People>(`projects/${projectId}/members`),
+    enabled: editor && detail.data?.review.state === "open",
+  });
+  const addPerson = useMutation({
+    mutationFn: () => api(`reviews/${reviewId}/participants`, { userId: newPerson, role: newRole }),
+    onSuccess: () => {
+      setNewPerson("");
+      return refresh();
+    },
+  });
+  const removePerson = useMutation({
+    mutationFn: (userId: string) => api(`reviews/${reviewId}/participants/${userId}`, undefined, "DELETE"),
+    onSuccess: refresh,
+  });
 
   const failed = detail.error ?? frozen.error;
   if (failed) {
@@ -324,7 +343,16 @@ export function ReviewPage() {
     mark.mutate({ itemIds: [itemId], mark: markOf(itemId, me?.id) === value ? "cleared" : value });
   const shown = items.find((item) => item.id === shownId);
   const shownFields = shown ? (fields[sets.findIndex((s) => s.id === shown.setId)]?.data?.fields ?? []) : [];
-  const error = mark.error ?? comment.error ?? close.error;
+  const error = mark.error ?? comment.error ?? close.error ?? addPerson.error ?? removePerson.error;
+  // Who could still be added: Reviewer role or higher, and not already taking part.
+  const able = new Map<string, string>();
+  for (const admin of people.data?.instanceAdmins ?? []) able.set(admin.userId, admin.name);
+  for (const member of people.data?.members ?? []) if (member.role !== "viewer") able.set(member.userId, member.name);
+  const addable = [...able]
+    .filter(([userId]) => !participants.some((p) => p.userId === userId))
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const manage = editor && open;
 
   const controls = (itemId: string) =>
     approver ? (
@@ -456,6 +484,7 @@ export function ReviewPage() {
             <Table.Th>Part</Table.Th>
             <Table.Th>Progress</Table.Th>
             <Table.Th>Signature</Table.Th>
+            {manage && <Table.Th />}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -487,10 +516,47 @@ export function ReviewPage() {
                   </Text>
                 ) : null}
               </Table.Td>
+              {manage && (
+                <Table.Td>
+                  {!person.signature && participants.length > 1 && (
+                    <Button
+                      size="compact-xs"
+                      variant="default"
+                      loading={removePerson.isPending && removePerson.variables === person.userId}
+                      onClick={() => removePerson.mutate(person.userId)}
+                      aria-label={`Remove ${person.name} from the review`}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </Table.Td>
+              )}
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
+      {manage && (
+        <Group align="flex-end" gap="xs" mt="xs">
+          <NativeSelect
+            label="Add a person"
+            value={newPerson}
+            onChange={(event) => setNewPerson(event.currentTarget.value)}
+            data={[{ value: "", label: "Choose…" }, ...addable]}
+          />
+          <NativeSelect
+            label="Part"
+            value={newRole}
+            onChange={(event) => setNewRole(event.currentTarget.value as Part)}
+            data={[
+              { value: "reviewer", label: "Reviewer" },
+              { value: "approver", label: "Approver" },
+            ]}
+          />
+          <Button disabled={!newPerson} loading={addPerson.isPending} onClick={() => addPerson.mutate()}>
+            Add
+          </Button>
+        </Group>
+      )}
 
       {sets.map((set) => {
         const rows = itemsWithin(entries, set.id);

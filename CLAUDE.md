@@ -218,7 +218,7 @@ Project ─< Attachment              (uploaded files: images embedded in rich te
 Item ─< ExternalReference          (URL, title, kind, source repository for code tags, state read from the other tool; soft-deleted)
 Project ─< Integration             (a connection: Jira, GitHub or GitLab base URL, encrypted token; soft-deleted)
 Project ─< Webhook ─< WebhookDelivery  (URL, secret, event filter; deliveries retried like the outbox)
-Baseline ─< Review ─< ReviewParticipant  (reviewer or approver; fixed at creation)
+Baseline ─< Review ─< ReviewParticipant  (reviewer or approver; added and removed while the review is open, rows kept)
 Review ─< ReviewMark                  (append-only: reviewed, approved, rejected or cleared, per person and item; the latest counts)
 Review ─< Signature                   (append-only, one per approver: meaning, copied name and email, digest of the signed decisions)
 AuditEvent                          (append-only log of every write; project id and a label feed the activity stream)

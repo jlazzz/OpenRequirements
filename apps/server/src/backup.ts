@@ -360,7 +360,23 @@ const backupSchema = {
       default: [],
     },
     reviewParticipants: {
-      ...rows({ reviewId: id, userId: id, role: { enum: ["reviewer", "approver"] } }),
+      type: "array",
+      items: {
+        type: "object",
+        // The last five are not in files older than version 10.
+        required: ["reviewId", "userId", "role"],
+        additionalProperties: false,
+        properties: {
+          id,
+          reviewId: id,
+          userId: id,
+          role: { enum: ["reviewer", "approver"] },
+          addedAt: when,
+          addedBy: idOrNull,
+          removedAt: whenOrNull,
+          removedBy: idOrNull,
+        },
+      },
       default: [],
     },
     reviewMarks: {
@@ -621,10 +637,9 @@ export function backupRoutes(
           createdAt: iso(r.createdAt),
           closedAt: isoOrNull(r.closedAt),
         })),
-        reviewParticipants: await db
-          .select()
-          .from(reviewParticipants)
-          .where(inArray(reviewParticipants.reviewId, reviewIds)),
+        reviewParticipants: (
+          await db.select().from(reviewParticipants).where(inArray(reviewParticipants.reviewId, reviewIds))
+        ).map((p) => ({ ...p, addedAt: iso(p.addedAt), removedAt: isoOrNull(p.removedAt) })),
         reviewMarks: (await db.select().from(reviewMarks).where(inArray(reviewMarks.reviewId, reviewIds))).map((m) => ({
           ...m,
           createdAt: iso(m.createdAt),
@@ -655,7 +670,9 @@ export function backupRoutes(
           backup.externalReferences.map((r) => r.createdBy),
           backup.baselines.map((b) => b.createdBy),
           backup.reviews.flatMap((r) => (r.closedBy ? [r.createdBy, r.closedBy] : [r.createdBy])),
-          backup.reviewParticipants.map((p) => p.userId),
+          backup.reviewParticipants.flatMap((p) =>
+            [p.userId, p.addedBy, p.removedBy].filter((id): id is string => typeof id === "string"),
+          ),
           files.map((file) => file.createdBy),
           backup.auditEvents.flatMap((e) => (e.actorUserId ? [e.actorUserId] : [])),
         ].flat(),
@@ -837,7 +854,15 @@ export function backupRoutes(
                 part.map((r) => ({ ...r, projectId, createdAt: date(r.createdAt), closedAt: dateOrNull(r.closedAt) })),
               );
           }
-          for (const part of parts(backup.reviewParticipants)) await tx.insert(reviewParticipants).values(part);
+          for (const part of parts(backup.reviewParticipants)) {
+            await tx.insert(reviewParticipants).values(
+              part.map((p) => ({
+                ...p,
+                addedAt: p.addedAt ? date(p.addedAt) : undefined,
+                removedAt: dateOrNull(p.removedAt ?? null),
+              })),
+            );
+          }
           for (const part of parts(backup.reviewMarks)) {
             await tx.insert(reviewMarks).values(part.map((m) => ({ ...m, createdAt: date(m.createdAt) })));
           }

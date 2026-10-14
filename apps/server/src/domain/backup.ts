@@ -9,14 +9,15 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // Version 6 added attachments.name, resultAttachments (which replace verificationResults.attachmentId), baselineVerification
 // and testCycles.baselineId. Version 7 added externalReferences. Version 8 added archivedAt on itemTypes,
 // attributeDefinitions, sets and linkTypes, attributeDefinitions.archivedOptions and linkTypes.role.
-// Version 9 added ciRuns and verificationResults.ciRunId.
+// Version 9 added ciRuns and verificationResults.ciRunId. Version 10 added id, addedAt, addedBy, removedAt and
+// removedBy to reviewParticipants (a row per time someone took part).
 // Older files are still restored.
-export const BACKUP_VERSION = 9;
+export const BACKUP_VERSION = 10;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -216,7 +217,17 @@ export type Backup = {
     closedAt: string | null;
     statusSet: boolean;
   }[];
-  reviewParticipants: { reviewId: string; userId: string; role: "reviewer" | "approver" }[];
+  /** The fields after `role` are not in files older than version 10: everyone listed then took part from the start. */
+  reviewParticipants: {
+    id?: string;
+    reviewId: string;
+    userId: string;
+    role: "reviewer" | "approver";
+    addedAt?: string;
+    addedBy?: string | null;
+    removedAt?: string | null;
+    removedBy?: string | null;
+  }[];
   reviewMarks: { id: string; reviewId: string; itemId: string; userId: string; mark: Mark; createdAt: string }[];
   /** Electronic signatures. The digest covers names and UIDs, not ids, so it still checks out after a restore. */
   signatures: {
@@ -293,6 +304,8 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["reviews", "closedBy", "users"],
   ["reviewParticipants", "reviewId", "reviews"],
   ["reviewParticipants", "userId", "users"],
+  ["reviewParticipants", "addedBy", "users"],
+  ["reviewParticipants", "removedBy", "users"],
   ["reviewMarks", "reviewId", "reviews"],
   ["reviewMarks", "itemId", "nodes"],
   ["reviewMarks", "userId", "users"],
@@ -342,7 +355,7 @@ export function backupError(backup: Backup): string | null {
   for (const [collection, field, target] of REFERENCES) {
     for (const row of backup[collection] as Record<string, unknown>[]) {
       for (const id of [row[field]].flat()) {
-        if (id !== null && !ids[target].has(id as string)) {
+        if (id !== null && id !== undefined && !ids[target].has(id as string)) {
           return `The backup is not complete: ${collection}.${field} refers to ${String(id)}, which is not in ${target}`;
         }
       }
