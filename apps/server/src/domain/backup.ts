@@ -321,13 +321,12 @@ export function backupError(backup: Backup): string | null {
   const nodes = new Map(backup.nodes.map((node) => [node.id, node]));
   for (const node of backup.nodes) {
     const parent = node.parentId ? nodes.get(node.parentId) : undefined;
-    if (parent && (parent.kind !== "folder" || parent.setId !== node.setId)) {
-      return "The backup has a node whose parent is not a folder in the same set";
-    }
+    if (parent && parent.setId !== node.setId) return "The backup has a node whose parent is in another set";
+    if (parent?.kind === "item" && node.kind === "folder") return "The backup has a folder under an item";
     if ((node.kind === "item") !== (node.uid !== null))
       return "The backup has an item without an id, or a folder with one";
   }
-  if (!parentsFirst(backup.nodes)) return "The backup has folders that contain each other";
+  if (!parentsFirst(backup.nodes)) return "The backup has nodes that contain each other";
   const isItem = (id: string) => nodes.get(id)?.kind === "item";
   if (!backup.links.every((link) => isItem(link.upstreamId) && isItem(link.downstreamId))) {
     return "The backup has a relationship that does not join two items";

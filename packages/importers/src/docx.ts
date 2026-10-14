@@ -332,6 +332,8 @@ export async function toDocx(
         body.push(paragraph([textRun(`${node.uid ?? ""} ${node.name}`.trim())], { indent: 0 }, [style("ItemTitle")]));
         if (node.description) body.push(...blocks(node.description, { indent: 0 }));
         body.push(...fieldTable(set.fields, node.attributes));
+        // Child items follow their parent.
+        write(node.id, depth);
       }
     };
     write(null, 0);

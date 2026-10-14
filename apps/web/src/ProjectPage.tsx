@@ -19,9 +19,12 @@ export function childrenOf(nodes: TreeNode[], containerId: string) {
   return nodes.filter((n) => (n.parentId ?? n.setId) === containerId);
 }
 
-/** Every item inside a set or folder, including those in sub-folders, in explorer order. */
+/** Every item inside a set, folder or item, including those in sub-folders and child items, in explorer order. */
 export function itemsWithin(nodes: TreeNode[], containerId: string): TreeNode[] {
-  return childrenOf(nodes, containerId).flatMap((n) => (n.kind === "item" ? [n] : itemsWithin(nodes, n.id)));
+  return childrenOf(nodes, containerId).flatMap((n) => [
+    ...(n.kind === "item" ? [n] : []),
+    ...itemsWithin(nodes, n.id),
+  ]);
 }
 
 /** Project frame: explorer on the left, the selected set, folder or item on the right. */
@@ -65,7 +68,8 @@ export function ProjectPage() {
   const selectedId = selected.nodeId ?? selected.setId;
   const toggle = (id: string) =>
     setToggled((previous) => (previous.includes(id) ? previous.filter((other) => other !== id) : [...previous, id]));
-  const folderIds = nodes.filter((n) => n.kind === "folder").map((n) => n.id);
+  // Folders and items that hold something: what "expand all" opens.
+  const folderIds = nodes.filter((n) => nodes.some((child) => child.parentId === n.id)).map((n) => n.id);
 
   /** One explorer level: each row is an expand button (when it has children) and a link. */
   const branch = (containerId: string | null, depth: number) => {

@@ -505,14 +505,44 @@ test("concurrent creates in one set never share a UID", async () => {
   expect(uids).toEqual(Array.from({ length: 8 }, (_, i) => `SYS-00${i + 1}`));
 });
 
-test("a node's parent must be a folder in the same set", async () => {
-  const { un, sys, add } = await projectWithSets();
-  const item = (await add(sys.id, { kind: "item", name: "A" })).json().node;
+test("items hold child items in the same set; folders never sit under items; nothing goes under itself", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const parent = (await add(sys.id, { kind: "item", name: "A" })).json().node;
   const otherFolder = (await add(un.id, { kind: "folder", name: "F" })).json().node;
-  expect((await add(sys.id, { kind: "item", name: "B", parentId: item.id })).statusCode).toBe(400);
+  const child = (await add(sys.id, { kind: "item", name: "A.1", parentId: parent.id })).json().node;
+  expect(child).toMatchObject({ parentId: parent.id, uid: "SYS-002" });
+  const grandchild = (await add(sys.id, { kind: "item", name: "A.1.1", parentId: child.id })).json().node;
+  expect((await add(sys.id, { kind: "folder", name: "G", parentId: parent.id })).json().error).toMatch(/folder cannot/);
   expect((await add(sys.id, { kind: "item", name: "B", parentId: otherFolder.id })).statusCode).toBe(400);
   // A rejected create must not use up a UID.
-  expect((await add(sys.id, { kind: "item", name: "B" })).json().node.uid).toBe("SYS-002");
+  expect((await add(sys.id, { kind: "item", name: "B" })).json().node.uid).toBe("SYS-004");
+
+  const move = (nodeId: string, parentId: string | null) =>
+    post(`/api/nodes/${nodeId}/move`, { parentId, beforeId: null }, cookie);
+  expect((await move(parent.id, grandchild.id)).json().error).toMatch(/itself/);
+  const folder = (await add(sys.id, { kind: "folder", name: "H" })).json().node;
+  expect((await move(folder.id, parent.id)).json().error).toMatch(/folder cannot/);
+  expect((await move(grandchild.id, parent.id)).statusCode).toBe(200);
+  const bulk = (itemIds: string[], parentId: string) =>
+    post(`/api/sets/${sys.id}/bulk`, { action: "move", itemIds, parentId }, cookie);
+  expect((await bulk([parent.id, child.id], child.id)).statusCode).toBe(400);
+  expect((await bulk([grandchild.id], child.id)).json()).toEqual({ changed: 1 });
+
+  // A baseline keeps the parent each item had at that moment.
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B1", setId: sys.id }, cookie)).json()
+    .id;
+  await move(child.id, null);
+  const { entries } = (await get(`/api/baselines/${baselineId}`, cookie)).json();
+  expect(entries.find((e: { id: string }) => e.id === child.id).parentId).toBe(parent.id);
+
+  // Deleting a parent deletes its children; restoring brings them back under it.
+  await move(child.id, parent.id);
+  await app.inject({ method: "DELETE", url: `/api/nodes/${parent.id}`, headers: { cookie } });
+  expect((await detail()).nodes.some((n: { id: string }) => n.id === grandchild.id)).toBe(false);
+  expect((await post(`/api/nodes/${parent.id}/restore`, {}, cookie)).json()).toEqual({ restored: 3 });
+  const back = (await detail()).nodes.find((n: { id: string }) => n.id === grandchild.id);
+  expect(back.parentId).toBe(child.id);
 });
 
 test("creating a node rejects blank names and unknown sets, and a folder is not an item", async () => {
@@ -2334,7 +2364,7 @@ test("a structured import creates folders, items and relationships with one audi
               { kind: "folder", name: "Inner", children: [{ ref: "b", kind: "item", name: "Deep" }] },
             ],
           },
-          { kind: "item", name: "Loose" },
+          { kind: "item", name: "Loose", children: [{ kind: "item", name: "Kid" }] },
         ],
       },
       { setId: un.id, nodes: [{ ref: "n", kind: "item", name: "Need" }] },
@@ -2349,7 +2379,10 @@ test("a structured import creates folders, items and relationships with one audi
   const item = { kind: "item", name: "X" };
   const bad: [object, string][] = [
     [{ sets: [{ setId: sys.id, nodes: [{ ...item, attributes: { [status]: "Nope" } }] }] }, "Status must be"],
-    [{ sets: [{ setId: sys.id, nodes: [{ ...item, children: [item] }] }] }, "cannot hold other items"],
+    [
+      { sets: [{ setId: sys.id, nodes: [{ ...item, children: [{ kind: "folder", name: "F" }] }] }] },
+      "folder cannot be placed under an item",
+    ],
     [
       { sets: [{ setId: sys.id, nodes: [{ ...item, description: { type: "doc", content: [{ type: "script" }] } }] }] },
       "Unsupported",
@@ -2379,7 +2412,7 @@ test("a structured import creates folders, items and relationships with one audi
       "listed twice",
     ],
     [{ sets: [{ setId: "00000000-0000-4000-8000-000000000000", nodes: [item] }] }, "Set not found"],
-    [{ sets: [{ setId: sys.id, parentId: "00000000-0000-4000-8000-000000000000", nodes: [item] }] }, "Parent must be"],
+    [{ sets: [{ setId: sys.id, parentId: "00000000-0000-4000-8000-000000000000", nodes: [item] }] }, "parent must be"],
     [{ ...body, links: [{ typeId, upstream: "n", downstream: "missing" }] }, "not in this import"],
     [{ ...body, links: [{ typeId: sys.id, upstream: "n", downstream: "a" }] }, "Unknown relationship type"],
     [{ ...body, links: [...body.links, { typeId, upstream: "a", downstream: "n" }] }, "linked once"],
@@ -2396,7 +2429,7 @@ test("a structured import creates folders, items and relationships with one audi
 
   const res = await run(body);
   expect(res.statusCode).toBe(201);
-  expect(res.json()).toMatchObject({ created: { items: 4, folders: 2, links: 2 }, changed: 0, unchanged: 0 });
+  expect(res.json()).toMatchObject({ created: { items: 5, folders: 2, links: 2 }, changed: 0, unchanged: 0 });
   const tree = (await detail()).nodes as { id: string; parentId: string | null; name: string; uid: string | null }[];
   const named = (name: string) => tree.find((n) => n.name === name);
   // UIDs follow the order of the file and continue after what the set already held.
@@ -2405,11 +2438,12 @@ test("a structured import creates folders, items and relationships with one audi
       .filter((n) => n.uid)
       .map((n) => `${n.uid} ${n.name}`)
       .sort(),
-  ).toEqual(["SYS-001 Existing", "SYS-002 Supply", "SYS-003 Deep", "SYS-004 Loose", "UN-001 Need"]);
+  ).toEqual(["SYS-001 Existing", "SYS-002 Supply", "SYS-003 Deep", "SYS-004 Loose", "SYS-005 Kid", "UN-001 Need"]);
   expect(named("Supply")?.parentId).toBe(named("Power")?.id);
   expect(named("Deep")?.parentId).toBe(named("Inner")?.id);
   expect(named("Inner")?.parentId).toBe(named("Power")?.id);
   expect(named("Loose")?.parentId).toBeNull();
+  expect(named("Kid")?.parentId).toBe(named("Loose")?.id);
   const supply = (await get(`/api/items/${named("Supply")?.id}`, cookie)).json().item;
   expect(supply).toMatchObject({ revision: 1, description: textToDoc("12 V"), attributes: { [status]: "Draft" } });
   const made = (await get(`/api/projects/${projectId}/links`, cookie)).json().links;
@@ -2424,7 +2458,7 @@ test("a structured import creates folders, items and relationships with one audi
   const events = (await db.select().from(auditEvents)).filter((e) => e.action.endsWith(".import"));
   expect(events.map((e) => [e.action, e.data?.label]).sort()).toEqual([
     ["item.import", "1 item into User Needs"],
-    ["item.import", "3 items and 2 folders into System Requirements"],
+    ["item.import", "4 items and 2 folders into System Requirements"],
     ["link.import", "2 relationships"],
   ]);
   expect(events.every((e) => e.projectId === projectId)).toBe(true);

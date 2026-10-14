@@ -23,7 +23,7 @@ import {
 import { useLocalStorage } from "@mantine/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import {
   type Attributes,
   api,
@@ -178,7 +178,10 @@ function Container({ data, set, folder, title }: ContainerProps) {
   );
 }
 
-/** Reads like a document: folder names as headings, then each item's name and description in order. */
+/**
+ * Reads like a document: folder names as headings, then each item's name and description in order.
+ * Everything is numbered as an outline (1, 1.2, 1.2.1), so child items read as numbered under their parent.
+ */
 function ReadingView({
   data,
   list,
@@ -194,19 +197,21 @@ function ReadingView({
   // The running header of printed pages. A CSS string: backslashes and quotes escaped.
   const header = `${data.project.name} · ${title}`.replace(/[\\"]/g, "\\$&").replace(/\s+/g, " ");
   const details = new Map(list.items.map((item) => [item.id, item]));
-  const level = (id: string, depth: number) =>
-    childrenOf(data.nodes, id).map((node) =>
-      node.kind === "folder" ? (
+  const level = (id: string, depth: number, prefix: string): ReactNode[] =>
+    childrenOf(data.nodes, id).map((node, index) => {
+      const number = `${prefix}${index + 1}`;
+      return node.kind === "folder" ? (
         <section key={node.id}>
           <Title order={Math.min(depth + 2, 6) as 2 | 3 | 4 | 5 | 6} size={depth === 0 ? "h3" : "h4"} mt="md" mb="xs">
-            {node.name}
+            {number} {node.name}
           </Title>
-          {level(node.id, depth + 1)}
+          {level(node.id, depth + 1, `${number}.`)}
         </section>
       ) : (
         <article key={node.id} style={{ marginBottom: 16 }}>
           <Group gap="xs" wrap="nowrap" align="baseline" className="print-keep-next">
             <Text fw={600}>
+              {number}{" "}
               <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }} inherit>
                 {node.uid}
               </RouterAnchor>{" "}
@@ -215,9 +220,13 @@ function ReadingView({
             <StatusBadge status={node.status} />
           </Group>
           <RichView doc={details.get(node.id)?.description ?? { type: "doc" }} />
+          {/* Child items, set in under their parent. */}
+          {data.nodes.some((n) => n.parentId === node.id) && (
+            <div style={{ paddingLeft: 24, marginTop: 16 }}>{level(node.id, depth + 1, `${number}.`)}</div>
+          )}
         </article>
-      ),
-    );
+      );
+    });
   return (
     <div
       style={{
@@ -233,7 +242,7 @@ function ReadingView({
         <Text size="lg">{data.project.name}</Text>
         <Text c="dimmed">Printed {new Date().toLocaleDateString()}</Text>
       </div>
-      {level(containerId, 0)}
+      {level(containerId, 0, "")}
     </div>
   );
 }
@@ -440,7 +449,8 @@ function ListTable({
     const names: string[] = [];
     for (let at = data.nodes.find((n) => n.id === id)?.parentId; at && at !== containerId; ) {
       const folder = data.nodes.find((n) => n.id === at);
-      names.unshift(folder?.name ?? "");
+      // A parent item is not a folder: the Folder column names folders only.
+      if (folder?.kind !== "item") names.unshift(folder?.name ?? "");
       at = folder?.parentId;
     }
     return names.join(" / ");

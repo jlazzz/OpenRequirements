@@ -6,7 +6,7 @@ import type { Db } from "./db/client.ts";
 import { attributeDefinitions, itemDrafts, itemRevisions, nodes, sets, users } from "./db/schema.ts";
 import { checkAttributes, type FieldDef } from "./domain/attributes.ts";
 import { onlyStatusChanged } from "./domain/review.ts";
-import { descendantIds, placeBefore } from "./domain/tree.ts";
+import { descendantIds, placeBefore, placementError } from "./domain/tree.ts";
 import { watchSuspect } from "./links.ts";
 
 const idParam = (name: string) =>
@@ -134,11 +134,12 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
         if (!set) return { error: [404, "Set not found"] } as const;
 
         if (body.parentId) {
-          const [parent] = await tx
-            .select({ kind: nodes.kind })
+          const parent = await tx
+            .select({ id: nodes.id, parentId: nodes.parentId, kind: nodes.kind })
             .from(nodes)
             .where(and(eq(nodes.id, body.parentId), eq(nodes.setId, setId), isNull(nodes.deletedAt)));
-          if (parent?.kind !== "folder") return { error: [400, "Parent must be a folder in the same set"] } as const;
+          const problem = placementError(parent, null, body.kind, body.parentId);
+          if (problem) return { error: [400, problem] } as const;
         }
 
         let uid: string | null = null;
@@ -572,14 +573,8 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
         if (!locked) return { error: [404, "Not found"] } as const;
         const { node, live } = locked;
 
-        if (parentId) {
-          if (live.find((n) => n.id === parentId)?.kind !== "folder") {
-            return { error: [400, "Destination must be a folder in the same set"] } as const;
-          }
-          if (parentId === nodeId || descendantIds(live, nodeId).has(parentId)) {
-            return { error: [400, "A folder cannot be moved into itself"] } as const;
-          }
-        }
+        const problem = placementError(live, nodeId, node.kind, parentId);
+        if (problem) return { error: [400, problem] } as const;
         const siblings = live.filter((n) => n.parentId === parentId);
         const order = placeBefore(
           siblings.map((n) => n.id),
@@ -620,7 +615,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
             action: { enum: ["delete", "move", "edit"] },
             // shortcut: 500 items per request, each written and audited on its own, batch the writes when larger selections are needed
             itemIds: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", format: "uuid" } },
-            // Move: the destination folder, or null for directly under the set.
+            // Move: the destination folder or item, or null for directly under the set.
             parentId: nullableId,
             // Edit: field id to new value. Only these fields change; null clears one.
             attributes: { type: "object", minProperties: 1 },
@@ -673,8 +668,9 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
         if (body.action === "move") {
           if (body.parentId === undefined) return { error: [400, "Say where to move the items: parentId"] } as const;
           const parentId = body.parentId;
-          if (parentId && live.find((n) => n.id === parentId)?.kind !== "folder") {
-            return { error: [400, "Destination must be a folder in the same set"] } as const;
+          for (const item of items) {
+            const problem = placementError(live, item.id, "item", parentId);
+            if (problem) return { error: [400, problem] } as const;
           }
           // Items already there stay where they are. The others go last, keeping their order.
           const moving = items.filter((item) => item.parentId !== parentId);

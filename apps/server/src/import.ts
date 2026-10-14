@@ -150,9 +150,9 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
             .from(nodes)
             .where(and(eq(nodes.setId, set.id), isNull(nodes.deletedAt)));
           const parentId = part.parentId ?? null;
-          if (parentId && live.find((n) => n.id === parentId)?.kind !== "folder") {
-            return { error: [400, "Parent must be a folder in the same set"] } as const;
-          }
+          const parentKind = parentId ? live.find((n) => n.id === parentId)?.kind : undefined;
+          if (parentId && !parentKind)
+            return { error: [400, "The parent must be a folder or item in the same set"] } as const;
           const fields = await fieldsOf(tx, set.itemTypeId);
           // New nodes go after the ones already in a folder.
           const after = (under: string | null) =>
@@ -181,7 +181,13 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
           };
 
           // Parents are added before their children, so the rows can be inserted in this order.
-          const place = (list: ImportNode[], under: string | null, depth: number): string | null => {
+          const place = (
+            list: ImportNode[],
+            under: string | null,
+            underItem: boolean,
+            depth: number,
+          ): string | null => {
+            if (depth >= MAX_DEPTH) return "Folders and items are nested too deeply";
             let position = after(under);
             for (const node of list) {
               if (nodeRows.length + matched.length >= MAX_NODES) {
@@ -191,7 +197,7 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
               const existing = match(node, name);
               if (typeof existing === "string") return existing;
               if (node.kind === "folder") {
-                if (depth >= MAX_DEPTH) return "Folders are nested too deeply";
+                if (underItem) return `Folder "${name}": a folder cannot be placed under an item`;
                 if (node.ref || node.uid || node.description || node.attributes) {
                   return `Folder "${name}": a folder has only a name and children`;
                 }
@@ -209,11 +215,10 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
                   });
                   count.folders++;
                 }
-                const problem = place(node.children ?? [], id, depth + 1);
+                const problem = place(node.children ?? [], id, false, depth + 1);
                 if (problem) return problem;
                 continue;
               }
-              if (node.children?.length) return `Item "${name}": items cannot hold other items`;
               const problem = node.description && docError(node.description);
               if (problem) return `Item "${name}": ${problem}`;
               const id = existing?.id ?? randomUUID();
@@ -225,39 +230,41 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
                 // Checked and compared once the current versions are read, below.
                 matched.push({ ...existing, setId: set.id, node, at: rows.length });
                 rows.push({ uid: existing.uid, name, status: "unchanged" });
-                continue;
+              } else {
+                const checked = checkAttributes(fields, node.attributes ?? {});
+                if ("error" in checked) return `Item "${name}": ${checked.error}`;
+                const description = node.description ?? emptyDoc;
+                const uid = formatUid(set.uidPrefix, ++counter);
+                const searchText = searchTextOf(uid, name, description, checked.attributes);
+                const externalId = node.externalId ?? null;
+                nodeRows.push({
+                  id,
+                  setId: set.id,
+                  parentId: under,
+                  position: position++,
+                  kind: "item",
+                  uid,
+                  searchText,
+                  externalId,
+                });
+                revisionRows.push({
+                  itemId: id,
+                  number: 1,
+                  name,
+                  description,
+                  attributes: checked.attributes,
+                  authorId: user.id,
+                  changeReason: "Imported",
+                });
+                rows.push({ uid, name, status: "added" });
+                count.items++;
               }
-              const checked = checkAttributes(fields, node.attributes ?? {});
-              if ("error" in checked) return `Item "${name}": ${checked.error}`;
-              const description = node.description ?? emptyDoc;
-              const uid = formatUid(set.uidPrefix, ++counter);
-              const searchText = searchTextOf(uid, name, description, checked.attributes);
-              const externalId = node.externalId ?? null;
-              nodeRows.push({
-                id,
-                setId: set.id,
-                parentId: under,
-                position: position++,
-                kind: "item",
-                uid,
-                searchText,
-                externalId,
-              });
-              revisionRows.push({
-                itemId: id,
-                number: 1,
-                name,
-                description,
-                attributes: checked.attributes,
-                authorId: user.id,
-                changeReason: "Imported",
-              });
-              rows.push({ uid, name, status: "added" });
-              count.items++;
+              const nested = place(node.children ?? [], id, true, depth + 1);
+              if (nested) return nested;
             }
             return null;
           };
-          const problem = place(part.nodes, parentId, 0);
+          const problem = place(part.nodes, parentId, parentKind === "item", 0);
           if (problem) return { error: [400, problem] } as const;
           counts.push({ ...count, counter });
         }

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { descendantIds, placeBefore } from "./tree.ts";
+import { descendantIds, placeBefore, placementError } from "./tree.ts";
 
 test("descendantIds finds every level below a node and nothing else", () => {
   const nodes = [
@@ -23,4 +23,21 @@ test("placeBefore reorders within a list and inserts into another", () => {
 test("placeBefore rejects a target that is not another sibling", () => {
   expect(placeBefore(["a", "b"], "a", "zzz")).toBeNull();
   expect(placeBefore(["a", "b"], "a", "a")).toBeNull();
+});
+
+test("placementError: items go under folders or items of the set, folders never under items, nothing under itself", () => {
+  const nodes = [
+    { id: "f", parentId: null, kind: "folder" as const },
+    { id: "a", parentId: "f", kind: "item" as const },
+    { id: "b", parentId: "a", kind: "item" as const },
+  ];
+  expect(placementError(nodes, null, "item", null)).toBeNull();
+  expect(placementError(nodes, null, "item", "a")).toBeNull();
+  expect(placementError(nodes, null, "folder", "f")).toBeNull();
+  expect(placementError(nodes, "b", "item", "f")).toBeNull();
+  expect(placementError(nodes, null, "folder", "a")).toMatch(/folder cannot/);
+  expect(placementError(nodes, null, "item", "elsewhere")).toMatch(/same set/);
+  expect(placementError(nodes, "a", "item", "a")).toMatch(/itself/);
+  expect(placementError(nodes, "a", "item", "b")).toMatch(/itself/);
+  expect(placementError(nodes, "f", "folder", "b")).toMatch(/folder cannot/);
 });

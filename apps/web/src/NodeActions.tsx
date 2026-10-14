@@ -11,11 +11,11 @@ function descendants(nodes: TreeNode[], id: string): string[] {
   return nodes.filter((n) => n.parentId === id).flatMap((n) => [n.id, ...descendants(nodes, n.id)]);
 }
 
-/** "Actions" menu for a folder or item: reorder, move, rename (folders) and delete. */
+/** "Actions" menu for a folder or item: reorder, move, rename (folders), add a child item (items) and delete. */
 export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNode }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [dialog, setDialog] = useState<"move" | "rename" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"move" | "rename" | "child" | "delete" | null>(null);
   const projectId = data.project.id;
   const set = data.sets.find((s) => s.id === node.setId);
   const label = node.kind === "item" ? `${node.uid} ${node.name}` : node.name;
@@ -23,12 +23,18 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
   const siblings = data.nodes.filter((n) => n.setId === node.setId && n.parentId === node.parentId);
   const index = siblings.findIndex((n) => n.id === node.id);
   const inside = descendants(data.nodes, node.id);
+  // A folder goes under folders only; an item under folders or other items. Never under itself.
   const folders = data.nodes.filter(
-    (n) => n.setId === node.setId && n.kind === "folder" && n.id !== node.id && !inside.includes(n.id),
+    (n) =>
+      n.setId === node.setId &&
+      (n.kind === "folder" || node.kind === "item") &&
+      n.id !== node.id &&
+      !inside.includes(n.id),
   );
-  const pathOf = (folder: TreeNode): string => {
-    const parent = data.nodes.find((n) => n.id === folder.parentId);
-    return parent ? `${pathOf(parent)} / ${folder.name}` : folder.name;
+  const pathOf = (at: TreeNode): string => {
+    const parent = data.nodes.find((n) => n.id === at.parentId);
+    const name = at.kind === "item" ? `${at.uid} ${at.name}` : at.name;
+    return parent ? `${pathOf(parent)} / ${name}` : name;
   };
   const destinations = [
     { value: ROOT, label: `${set?.name ?? "Set"} (top level)` },
@@ -56,6 +62,17 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     if (dialog === "rename") run.mutate(() => api(`nodes/${node.id}`, { name: String(form.get("name")) }, "PATCH"));
+    if (dialog === "child") {
+      const name = String(form.get("name"));
+      run.mutate(async () => {
+        const { node: child } = await api<{ node: TreeNode }>(`sets/${node.setId}/nodes`, {
+          kind: "item",
+          name,
+          parentId: node.id,
+        });
+        await navigate({ to: "/projects/$projectId/items/$nodeId", params: { projectId, nodeId: child.id } });
+      });
+    }
     if (dialog === "move") {
       const destination = String(form.get("destination"));
       move(destination === ROOT ? null : destination, null);
@@ -88,6 +105,7 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
             Move to…
           </Menu.Item>
           {node.kind === "folder" && <Menu.Item onClick={() => open("rename")}>Rename</Menu.Item>}
+          {node.kind === "item" && <Menu.Item onClick={() => open("child")}>Add child item</Menu.Item>}
           <Menu.Divider />
           <Menu.Item color="red" onClick={() => open("delete")}>
             Delete
@@ -103,7 +121,15 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
       <Modal
         opened={dialog !== null}
         onClose={() => setDialog(null)}
-        title={dialog === "move" ? `Move ${label}` : dialog === "rename" ? "Rename folder" : `Delete ${label}?`}
+        title={
+          dialog === "move"
+            ? `Move ${label}`
+            : dialog === "rename"
+              ? "Rename folder"
+              : dialog === "child"
+                ? `Add a child item under ${label}`
+                : `Delete ${label}?`
+        }
       >
         <form onSubmit={onSubmit}>
           <Stack gap="sm">
@@ -122,6 +148,7 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
             {dialog === "rename" && (
               <TextInput name="name" label="Name" defaultValue={node.name} required maxLength={200} data-autofocus />
             )}
+            {dialog === "child" && <TextInput name="name" label="Name" required maxLength={200} data-autofocus />}
             {dialog === "delete" && (
               <Text size="sm">
                 {inside.length > 0
@@ -145,7 +172,7 @@ export function NodeActions({ data, node }: { data: ProjectDetail; node: TreeNod
                 </Button>
               ) : (
                 <Button type="submit" loading={run.isPending}>
-                  {dialog === "move" ? "Move" : "Rename"}
+                  {dialog === "move" ? "Move" : dialog === "child" ? "Add item" : "Rename"}
                 </Button>
               )}
             </Group>
