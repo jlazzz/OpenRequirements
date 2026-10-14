@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { ApiDocsPage } from "./ApiDocs.tsx";
 import { BaselinePage, BaselinesPage } from "./BaselinePages.tsx";
 import { ImpactPage } from "./ImpactPage.tsx";
+import { IntegrationsPage } from "./IntegrationsPage.tsx";
 import { ItemPage } from "./ItemPage.tsx";
 import { MatrixPage } from "./MatrixPage.tsx";
 import { ProjectHome, ProjectPage } from "./ProjectPage.tsx";
@@ -24,6 +26,7 @@ const projectRoute = createRoute({
   path: "projects/$projectId",
   component: ProjectPage,
 });
+const apiDocsRoute = createRoute({ getParentRoute: () => rootRoute, path: "api-docs", component: ApiDocsPage });
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "users", component: UsersPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "invite/$token", component: InvitePage });
 const resetRoute = createRoute({
@@ -51,6 +54,7 @@ const projectChildren = [
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
   createRoute({ ...inProject, path: "items/$nodeId/impact", component: ImpactPage }),
   createRoute({ ...inProject, path: "members", component: MembersPage }),
+  createRoute({ ...inProject, path: "integrations", component: IntegrationsPage }),
   createRoute({ ...inProject, path: "activity", component: ActivityPage }),
   createRoute({ ...inProject, path: "trash", component: TrashPage }),
   createRoute({ ...inProject, path: "suspect", component: SuspectPage }),
@@ -86,6 +90,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     projectsRoute,
     usersRoute,
+    apiDocsRoute,
     inviteRoute,
     resetRoute,
     projectRoute.addChildren(projectChildren),

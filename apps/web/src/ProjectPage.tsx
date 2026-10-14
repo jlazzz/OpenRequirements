@@ -264,6 +264,15 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
+        {project.data?.role === "admin" && (
+          <RouterNavLink
+            to="/projects/$projectId/integrations"
+            params={{ projectId: info.id }}
+            label="Integrations"
+            pl={26}
+            py={4}
+          />
+        )}
       </Box>
       <Box flex={1} p="lg" className="print-flow" style={{ overflow: "auto" }}>
         <Outlet />

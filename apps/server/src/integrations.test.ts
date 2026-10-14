@@ -246,7 +246,7 @@ test("a connection reads the title and state of references, with its token store
   expect(seen[0]).toMatchObject({ url: "/api/v3/repos/acme/pump/issues/7" });
   expect(seen[0]?.headers.authorization).toBe("Bearer ghp_secret");
   const refs = (await get(`/api/items/${id}/references`, owner)).json().references;
-  expect(refs[0]).toMatchObject({ title: "Pump stalls", state: "closed" });
+  expect(refs[0]).toMatchObject({ title: "Pump stalls", state: "closed", kind: "github" });
   expect(refs[1]).toMatchObject({ state: null });
   expect(refs[1].checkedAt).not.toBeNull();
 

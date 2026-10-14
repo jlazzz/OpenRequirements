@@ -1,18 +1,33 @@
-import { ActionIcon, Alert, Button, Code, CopyButton, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Button,
+  Code,
+  CopyButton,
+  Group,
+  NativeSelect,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "./api.ts";
 
-type Token = { id: string; name: string; createdAt: string };
+type Token = { id: string; name: string; createdAt: string; expiresAt: string | null; lastUsedAt: string | null };
+const day = (at: string) => new Date(at).toLocaleDateString();
 
 /** The signed-in user's access tokens, for CI and scripts. A token is shown once, when it is made. */
 export function Tokens() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
+  // Days until the token stops working; empty for never.
+  const [days, setDays] = useState("90");
   const tokens = useQuery({ queryKey: ["tokens"], queryFn: () => api<{ tokens: Token[] }>("tokens") });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["tokens"] });
   const create = useMutation({
-    mutationFn: () => api<{ token: string }>("tokens", { name }),
+    mutationFn: () => api<{ token: string }>("tokens", days ? { name, expiresInDays: Number(days) } : { name }),
     onSuccess: () => {
       setName("");
       return refresh();
@@ -56,7 +71,10 @@ export function Tokens() {
           <Text size="sm" flex={1}>
             {token.name}{" "}
             <Text span size="xs" c="dimmed">
-              · made {new Date(token.createdAt).toLocaleDateString()}
+              · made {day(token.createdAt)}
+              {token.expiresAt &&
+                (new Date(token.expiresAt) < new Date() ? " · expired" : ` · expires ${day(token.expiresAt)}`)}
+              {` · ${token.lastUsedAt ? `last used ${day(token.lastUsedAt)}` : "never used"}`}
             </Text>
           </Text>
           <ActionIcon
@@ -86,6 +104,18 @@ export function Tokens() {
             maxLength={100}
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
+          />
+          <NativeSelect
+            label="Expires"
+            size="xs"
+            value={days}
+            onChange={(e) => setDays(e.currentTarget.value)}
+            data={[
+              { value: "30", label: "In 30 days" },
+              { value: "90", label: "In 90 days" },
+              { value: "365", label: "In a year" },
+              { value: "", label: "Never" },
+            ]}
           />
           <Button type="submit" size="xs" variant="default" disabled={!name.trim()} loading={create.isPending}>
             Create token

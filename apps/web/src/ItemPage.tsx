@@ -23,6 +23,7 @@ import { Comments } from "./Comments.tsx";
 import { EditingNotice, MergePanel } from "./Merge.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { useProject } from "./ProjectPage.tsx";
+import { References } from "./References.tsx";
 import { Relationships } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
 import { RichView } from "./RichView.tsx";
@@ -103,6 +104,7 @@ function ItemReadOnly({ item, fields }: ItemData) {
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
         {project && <VerificationPanel data={project} item={item} />}
         {project && <Relationships data={project} itemId={item.id} />}
+        {project && <References data={project} itemId={item.id} />}
         {project && <Comments data={project} itemId={item.id} />}
         <Versions itemId={item.id} fields={fields} />
       </Stack>
@@ -333,6 +335,7 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
         {project && <VerificationPanel data={project} item={item} />}
         {project && <Relationships data={project} itemId={item.id} />}
+        {project && <References data={project} itemId={item.id} />}
         {project && <Comments data={project} itemId={item.id} />}
         <Versions itemId={item.id} fields={fields} editable />
       </Stack>

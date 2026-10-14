@@ -54,11 +54,13 @@ export function Root() {
   }
   if (invited) return <Outlet />;
   if (session.data.needsSetup) return <AuthForm mode="setup" />;
-  if (!session.data.user) return <AuthForm mode="login" canRecover={session.data.mail === true} />;
+  if (!session.data.user) {
+    return <AuthForm mode="login" canRecover={session.data.mail === true} sso={session.data.sso ?? null} />;
+  }
   return <Shell user={session.data.user} />;
 }
 
-function AuthForm({ mode, canRecover }: { mode: "setup" | "login"; canRecover?: boolean }) {
+function AuthForm({ mode, canRecover, sso }: { mode: "setup" | "login"; canRecover?: boolean; sso?: string | null }) {
   const queryClient = useQueryClient();
   const [forgot, setForgot] = useState(false);
   const submit = useMutation({
@@ -103,6 +105,16 @@ function AuthForm({ mode, canRecover }: { mode: "setup" | "login"; canRecover?: 
           <Button type="submit" loading={submit.isPending}>
             {setup ? "Create account" : "Sign in"}
           </Button>
+          {!setup && sso && (
+            <Button
+              component="a"
+              variant="default"
+              // Comes back to the page that was asked for.
+              href={`/api/oidc/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+            >
+              Sign in with {sso}
+            </Button>
+          )}
           {!setup && canRecover && (
             <Anchor component="button" type="button" size="sm" onClick={() => setForgot(true)}>
               Forgot password?
@@ -182,6 +194,7 @@ function ColorSchemeToggle() {
 }
 
 function Shell({ user }: { user: User }) {
+  const hasPassword = useSession().data?.password !== false;
   const queryClient = useQueryClient();
   const logout = useMutation({
     mutationFn: () => api("logout", {}),
@@ -221,6 +234,9 @@ function Shell({ user }: { user: User }) {
               Users
             </RouterAnchor>
           )}
+          <RouterAnchor to="/api-docs" c="white" size="sm" ml="lg">
+            API
+          </RouterAnchor>
         </nav>
         <Group gap="xs" ml="auto" wrap="nowrap">
           <NotificationBell />
@@ -237,7 +253,11 @@ function Shell({ user }: { user: User }) {
         <Outlet />
       </main>
       <Modal opened={changing} onClose={() => setChanging(false)} title={`${user.name}: account`}>
+        {!hasPassword && (
+          <Text size="sm">You sign in through your identity provider, so this account has no password here.</Text>
+        )}
         <form
+          hidden={!hasPassword}
           onSubmit={(event) => {
             event.preventDefault();
             password.mutate(Object.fromEntries(new FormData(event.currentTarget)));

@@ -1,6 +1,7 @@
 import type { RichNode } from "@app/shared";
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Checkbox,
@@ -235,7 +236,9 @@ const OUTCOME = {
 export function ReviewPage() {
   const project = useProject().data;
   const projectId = project?.project.id ?? "";
-  const me = useSession().data?.user;
+  const session = useSession().data;
+  const me = session?.user;
+  const hasPassword = session?.password !== false;
   const { reviewId } = useParams({ from: "/projects/$projectId/reviews/$reviewId" });
   const queryClient = useQueryClient();
   const queryKey = ["projects", projectId, "reviews", reviewId];
@@ -266,7 +269,8 @@ export function ReviewPage() {
     onSuccess: refresh,
   });
   const sign = useMutation({
-    mutationFn: (password: string) => api(`reviews/${reviewId}/sign`, { password }),
+    // Without a password: the person has just confirmed themself at the identity provider.
+    mutationFn: (password?: string) => api(`reviews/${reviewId}/sign`, password === undefined ? {} : { password }),
     onSuccess: () => {
       setDialog(null);
       return refresh();
@@ -615,7 +619,7 @@ export function ReviewPage() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            sign.mutate(String(new FormData(event.currentTarget).get("password")));
+            sign.mutate(hasPassword ? String(new FormData(event.currentTarget).get("password")) : undefined);
           }}
         >
           <Stack gap="sm">
@@ -630,13 +634,23 @@ export function ReviewPage() {
               </Text>{" "}
               of {items.length} items in "{review.name}". After signing you cannot change your decisions.
             </Text>
-            <PasswordInput
-              name="password"
-              label="Your password"
-              required
-              autoComplete="current-password"
-              data-autofocus
-            />
+            {hasPassword ? (
+              <PasswordInput
+                name="password"
+                label="Your password"
+                required
+                autoComplete="current-password"
+                data-autofocus
+              />
+            ) : (
+              <Text size="sm">
+                First{" "}
+                <Anchor href={`/api/oidc/reauth?returnTo=${encodeURIComponent(window.location.pathname)}`}>
+                  confirm who you are at {session?.sso ?? "your identity provider"}
+                </Anchor>
+                . It asks for your password and brings you back here. Then sign within five minutes.
+              </Text>
+            )}
             {sign.isError && (
               <Alert color="red" role="alert">
                 {sign.error.message}

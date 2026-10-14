@@ -1,8 +1,17 @@
 import { type RichNode, type Step, stepsToText } from "@app/shared";
 
 export type User = { id: string; email: string; name: string; isAdmin: boolean };
-/** `mail` says whether the server can send email, so whether "Forgot password" can work. */
-export type Session = { user: User | null; needsSetup: boolean; mail?: boolean };
+/**
+ * `mail` says whether the server can send email, so whether "Forgot password" can work. `sso` names the identity
+ * provider people can sign in through, if there is one. `password` is false for someone who has no password.
+ */
+export type Session = {
+  user: User | null;
+  needsSetup: boolean;
+  mail?: boolean;
+  sso?: string | null;
+  password?: boolean;
+};
 export type Project = { id: string; name: string; createdAt: string };
 /** `isTest` says the set holds test cases: they take steps, results and runs. */
 export type ProjectSet = { id: string; name: string; uidPrefix: string; itemType: string; isTest: boolean };

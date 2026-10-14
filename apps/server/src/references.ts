@@ -58,7 +58,7 @@ export async function refreshReferences(
     );
   let read = 0;
   for (const ref of due) {
-    let found: { title: string; state: "open" | "closed" } | null = null;
+    let found: { title: string; state: "open" | "closed"; kind: string } | null = null;
     for (const connection of connections.filter((c) => c.projectId === ref.projectId)) {
       let token: string | null = null;
       try {
@@ -70,7 +70,9 @@ export async function refreshReferences(
       if (!request) continue;
       try {
         const res = await outboundFetch(request.url, { headers: request.headers }, config.allowPrivate);
-        found = res.ok ? readStatus(connection.kind, await res.json()) : null;
+        const status = res.ok ? readStatus(connection.kind, await res.json()) : null;
+        // The connection also says which tool it is, e.g. for a GitHub Enterprise address the URL alone does not reveal.
+        found = status && { ...status, kind: connection.kind };
       } catch {
         found = null;
       }
@@ -78,7 +80,10 @@ export async function refreshReferences(
     }
     await db
       .update(externalReferences)
-      .set({ checkedAt: now, ...(found ? { title: found.title.slice(0, 500), state: found.state } : {}) })
+      .set({
+        checkedAt: now,
+        ...(found ? { title: found.title.slice(0, 500), state: found.state, kind: found.kind } : {}),
+      })
       .where(eq(externalReferences.id, ref.id));
     if (found) read++;
   }
