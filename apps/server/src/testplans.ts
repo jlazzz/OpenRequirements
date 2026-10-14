@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import {
+  baselines,
   itemRevisions,
   itemTypes,
   nodes,
@@ -113,6 +114,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
           id: testCycles.id,
           name: testCycles.name,
           environment: testCycles.environment,
+          baselineId: testCycles.baselineId,
           createdAt: testCycles.createdAt,
           closedAt: testCycles.closedAt,
         })
@@ -130,6 +132,41 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
         plan,
         cases: await liveCases(db, testPlanId),
         cycles: cycles.map((cycle) => ({ ...cycle, runs: tally(cycle.id) })),
+      };
+    },
+  );
+
+  // Plan history: every cycle of the plan side by side, oldest first, with the state each test case reached in each.
+  // This is how two cycles are compared. A test case that was not part of a cycle has no entry for it.
+  app.get(
+    "/api/test-plans/:testPlanId/history",
+    { onRequest: requireUser, schema: { params: idParam("testPlanId") } },
+    async (req, reply) => {
+      const { testPlanId } = req.params as { testPlanId: string };
+      if (!(await access(req, reply, { testPlanId }, "viewer"))) return reply;
+      const cycles = await db
+        .select({ id: testCycles.id, name: testCycles.name, createdAt: testCycles.createdAt })
+        .from(testCycles)
+        .where(eq(testCycles.planId, testPlanId))
+        .orderBy(testCycles.createdAt);
+      const rows = new Map<
+        string,
+        { itemId: string; uid: string | null; name: string; states: Record<string, RunState> }
+      >();
+      // Runs come cycle by cycle in no useful order, so the name shown is the one from the newest cycle that has the test.
+      const age = new Map(cycles.map((cycle, index) => [cycle.id, index]));
+      const runs = (await loadRuns(db, eq(testCycles.planId, testPlanId))).sort(
+        (a, b) => (age.get(a.cycleId) ?? 0) - (age.get(b.cycleId) ?? 0),
+      );
+      for (const run of runs) {
+        const row = rows.get(run.itemId) ?? { itemId: run.itemId, uid: run.uid, name: run.name, states: {} };
+        rows.set(run.itemId, { ...row, name: run.name, states: { ...row.states, [run.cycleId]: run.state } });
+      }
+      return {
+        cycles,
+        tests: [...rows.values()].sort((a, b) =>
+          (a.uid ?? "").localeCompare(b.uid ?? "", undefined, { numeric: true }),
+        ),
       };
     },
   );
@@ -357,6 +394,8 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
             // Which test cases to run: all of the plan, one group, or those whose run failed or was blocked in the plan's last cycle.
             scope: { enum: ["all", "group", "failed"] },
             group,
+            // The baseline this cycle verifies. A review of that baseline then lists the cycle as its evidence.
+            baselineId: uuid,
           },
         },
       },
@@ -371,8 +410,16 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
         environment?: string;
         scope?: "all" | "group" | "failed";
         group?: string;
+        baselineId?: string;
       };
       const cycleName = body.name.trim();
+      if (body.baselineId) {
+        const [baseline] = await db
+          .select({ id: baselines.id })
+          .from(baselines)
+          .where(and(eq(baselines.id, body.baselineId), eq(baselines.projectId, projectId)));
+        if (!baseline) return reply.code(400).send({ error: "The baseline is not in this project" });
+      }
 
       const result = await db.transaction(async (tx) => {
         const plan = await lockPlan(tx, testPlanId);
@@ -413,6 +460,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
             planId: testPlanId,
             name: cycleName,
             environment: body.environment?.trim() ?? "",
+            baselineId: body.baselineId ?? null,
             createdBy: userId,
             // The moment of the write, so "the last cycle" is the last one started even within one second.
             createdAt: sql`clock_timestamp()`,

@@ -1,7 +1,18 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
-import { baselineEntries, baselineLinks, baselines, itemRevisions, links, nodes, sets, users } from "./db/schema.ts";
+import {
+  baselineEntries,
+  baselineLinks,
+  baselines,
+  baselineVerification,
+  itemRevisions,
+  links,
+  nodes,
+  sets,
+  users,
+} from "./db/schema.ts";
 import { liveLinks } from "./links.ts";
+import { projectVerification } from "./verification.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -84,6 +95,20 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
             })),
           );
         }
+        // The verification status of each frozen item that is not a test case, as it is now. Status is computed, so
+        // without this copy a baseline could not say what had been verified when it was made.
+        const { requirements } = await projectVerification(tx, projectId);
+        const inBaseline = await tx
+          .select({ id: baselineEntries.nodeId })
+          .from(baselineEntries)
+          .where(eq(baselineEntries.baselineId, row.id));
+        const statuses = inBaseline.flatMap(({ id }) => {
+          const entry = requirements[id];
+          return entry ? [{ baselineId: row.id, itemId: id, status: entry.status, outOfDate: entry.outOfDate }] : [];
+        });
+        for (let i = 0; i < statuses.length; i += 500) {
+          await tx.insert(baselineVerification).values(statuses.slice(i, i + 500));
+        }
         await audit(tx, req.user?.id ?? null, "baseline.create", "baseline", row.id, { projectId, label: name });
         return row.id;
       });
@@ -140,7 +165,21 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
         .innerJoin(links, eq(links.id, baselineLinks.linkId))
         .where(eq(baselineLinks.baselineId, baselineId))
         .orderBy(links.createdAt);
-      return { baseline, entries, links: frozenLinks };
+      const statuses = await db
+        .select({
+          itemId: baselineVerification.itemId,
+          status: baselineVerification.status,
+          outOfDate: baselineVerification.outOfDate,
+        })
+        .from(baselineVerification)
+        .where(eq(baselineVerification.baselineId, baselineId));
+      return {
+        baseline,
+        entries,
+        links: frozenLinks,
+        // By item id. Empty for a baseline made before status was frozen.
+        verification: Object.fromEntries(statuses.map(({ itemId, ...status }) => [itemId, status])),
+      };
     },
   );
 }

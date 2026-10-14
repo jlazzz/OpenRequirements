@@ -24,8 +24,10 @@ services:
     environment:
       DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:-app}@db:5432/app
       ATTACHMENTS_DIR: /data/attachments
+      # The largest image or evidence file that can be uploaded, in megabytes.
+      MAX_ATTACHMENT_MB: ${MAX_ATTACHMENT_MB:-25}
     volumes:
-      # Uploaded images. Back this up together with the database.
+      # Uploaded images and evidence files. Back this up together with the database.
       - attachments:/data/attachments
     ports:
       - "${APP_PORT:-3000}:3000"

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { isOutOfDate, type Outcome, verificationStatus } from "./verification.ts";
+import { isFlaky, isOutOfDate, type Outcome, verificationStatus } from "./verification.ts";
 
 const revised = new Date("2026-01-10");
 const before = new Date("2026-01-09");
@@ -45,4 +45,14 @@ test("a test's own result is judged without a requirement", () => {
   expect(isOutOfDate(result, 2)).toBe(false);
   expect(isOutOfDate(result, 3)).toBe(true);
   expect(isOutOfDate(result, 2, revised)).toBe(true);
+});
+
+test("a test is flaky when its last five results changed outcome more than once", () => {
+  expect(isFlaky(["pass", "fail", "pass"])).toBe(true);
+  expect(isFlaky(["fail", "fail", "pass", "pass"])).toBe(false);
+  expect(isFlaky(["pass", "blocked", "fail"])).toBe(true);
+  expect(isFlaky(["pass"])).toBe(false);
+  expect(isFlaky([])).toBe(false);
+  // Only the last five count: the early flapping has aged out.
+  expect(isFlaky(["pass", "fail", "pass", "pass", "pass", "pass", "pass"])).toBe(false);
 });

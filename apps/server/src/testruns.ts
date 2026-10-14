@@ -6,10 +6,12 @@ import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import {
   attributeDefinitions,
+  baselines,
   itemRevisions,
   nodes,
   projectMembers,
   projects,
+  resultAttachments,
   sets,
   stepResults,
   testCycles,
@@ -21,6 +23,7 @@ import {
 import { roleAllows } from "./domain/roles.ts";
 import { runOutcome, runState, runSteps } from "./domain/testrun.ts";
 import { OUTCOMES, type Outcome } from "./domain/verification.ts";
+import { areUploadsOf, loadEvidence } from "./verification.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -197,6 +200,9 @@ export function testRunRoutes({ app, db, requireUser, audit, access }: AppContex
           environment: testCycles.environment,
           planId: testCycles.planId,
           plan: testPlans.name,
+          // The baseline the cycle verifies, when it names one.
+          baselineId: testCycles.baselineId,
+          baseline: baselines.name,
           createdAt: testCycles.createdAt,
           author: users.name,
           closedAt: testCycles.closedAt,
@@ -204,6 +210,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access }: AppContex
         })
         .from(testCycles)
         .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+        .leftJoin(baselines, eq(baselines.id, testCycles.baselineId))
         .innerJoin(users, eq(users.id, testCycles.createdBy))
         .leftJoin(closer, eq(closer.id, testCycles.closedBy))
         .where(eq(testCycles.id, testCycleId));
@@ -336,8 +343,15 @@ export function testRunRoutes({ app, db, requireUser, audit, access }: AppContex
         .innerJoin(users, eq(users.id, verificationResults.recordedBy))
         .where(eq(verificationResults.runId, testRunId));
       const { description, ...cycle } = frozen;
+      const evidence = await loadEvidence(db, eq(resultAttachments.runId, testRunId));
       return {
-        run: { ...run, description, result: result ?? null },
+        run: {
+          ...run,
+          description,
+          result: result ?? null,
+          // Evidence files, oldest first. `step` is set on a file that belongs to one step.
+          attachments: evidence.map(({ resultId: _, runId: __, ...file }) => file),
+        },
         cycle: { ...cycle, id: cycle.cycleId, name: run.cycle },
         nextRunId: next?.id ?? null,
         // What the screen offers; every action is checked again.
@@ -402,6 +416,55 @@ export function testRunRoutes({ app, db, requireUser, audit, access }: AppContex
         });
         const [after] = await loadRuns(tx, eq(testRuns.id, testRunId));
         return { state: after?.state };
+      });
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return reply.code(201).send(result);
+    },
+  );
+
+  // Attaches an uploaded file to a run as evidence, of one step or of the whole test. Appended, never removed.
+  app.post(
+    "/api/test-runs/:testRunId/attachments",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("testRunId"),
+        body: {
+          type: "object",
+          required: ["attachmentId"],
+          additionalProperties: false,
+          properties: { attachmentId: uuid, step: { type: "integer", minimum: 1 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { testRunId } = req.params as { testRunId: string };
+      const projectId = await access(req, reply, { testRunId }, "reviewer");
+      if (!projectId) return reply;
+      const userId = req.user?.id as string;
+      const body = req.body as { attachmentId: string; step?: number };
+
+      const result = await db.transaction(async (tx) => {
+        const cycle = await lockCycle(tx, { testRunId });
+        const [run] = await loadRuns(tx, eq(testRuns.id, testRunId));
+        if (!cycle || !run) return noRun;
+        if (!(await mayExecute(req, projectId, run.assigneeId))) return notYours;
+        if (cycle.closedAt) return closed;
+        if (run.finished) return { error: [409, "This run is finished"] } as const;
+        if (body.step !== undefined && body.step > run.steps.length) {
+          return { error: [400, `This run has ${run.steps.length} steps`] } as const;
+        }
+        if (!(await areUploadsOf(tx, projectId, [body.attachmentId]))) {
+          return { error: [400, "The evidence is not an upload of this project"] } as const;
+        }
+        await tx
+          .insert(resultAttachments)
+          .values({ runId: testRunId, step: body.step ?? null, attachmentId: body.attachmentId, createdBy: userId });
+        await audit(tx, userId, "run.evidence", "run", testRunId, {
+          projectId,
+          label: `${run.uid} ${run.name}${body.step ? `: step ${body.step}` : ""}`,
+        });
+        return { ok: true };
       });
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);

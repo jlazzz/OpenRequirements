@@ -38,3 +38,12 @@ export function verificationStatus(
       : "not_run";
   return { status, outOfDate: tests.some(stale) };
 }
+
+/**
+ * A test case is flaky when its recent results (at most the last five, in order) changed outcome more than once:
+ * pass, fail, pass is flaky; a test that failed and was then fixed is not.
+ */
+export function isFlaky(outcomes: Outcome[]): boolean {
+  const recent = outcomes.slice(-5);
+  return recent.filter((outcome, index) => index > 0 && outcome !== recent[index - 1]).length > 1;
+}

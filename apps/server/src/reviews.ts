@@ -15,12 +15,14 @@ import {
   reviews,
   sets,
   signatures,
+  testCycles,
   users,
 } from "./db/schema.ts";
 import { verifyPassword } from "./domain/password.ts";
 import { closedState, itemOutcome, MARKS, type Mark, signatureDigest } from "./domain/review.ts";
 import { roleAllows } from "./domain/roles.ts";
 import { searchTextOf } from "./nodes.ts";
+import { loadRuns } from "./testruns.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -267,6 +269,22 @@ export function reviewRoutes({ app, db, requireUser, requireSession, audit, acce
           items.map((item) => [item.id, itemOutcome(approvers.map(({ userId }) => markOf(item.id, userId)))]),
         ),
         comments: posted,
+        // The test cycles that were run to verify this review's baseline: the evidence its approvers sign for.
+        cycles: await Promise.all(
+          (
+            await db
+              .select({ id: testCycles.id, name: testCycles.name, closedAt: testCycles.closedAt })
+              .from(testCycles)
+              .where(eq(testCycles.baselineId, review.baselineId))
+              .orderBy(testCycles.createdAt)
+          ).map(async (cycle) => {
+            const runs: Record<string, number> = {};
+            for (const run of await loadRuns(db, eq(testCycles.id, cycle.id))) {
+              runs[run.state] = (runs[run.state] ?? 0) + 1;
+            }
+            return { ...cycle, runs };
+          }),
+        ),
       };
     },
   );

@@ -74,7 +74,14 @@ const credentials = {
 
 export async function buildApp(
   db: Db,
-  opts: { webRoot?: string; logger?: boolean; loginAttemptsPerMinute?: number; attachmentsDir?: string } = {},
+  opts: {
+    webRoot?: string;
+    logger?: boolean;
+    loginAttemptsPerMinute?: number;
+    attachmentsDir?: string;
+    /** The largest file that can be uploaded, in megabytes. */
+    maxAttachmentMb?: number;
+  } = {},
 ) {
   const app = Fastify({ logger: opts.logger ?? false });
   await app.register(cookie);
@@ -357,8 +364,9 @@ export async function buildApp(
   testPlanRoutes(context);
   testRunRoutes(context);
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
-  attachmentRoutes(context, attachmentsDir);
-  backupRoutes(context, attachmentsDir);
+  const maxAttachmentBytes = (opts.maxAttachmentMb || 25) * 1024 * 1024;
+  attachmentRoutes(context, attachmentsDir, maxAttachmentBytes);
+  backupRoutes(context, attachmentsDir, maxAttachmentBytes);
   importRoutes(context);
   reqifRoutes(context, attachmentsDir);
 

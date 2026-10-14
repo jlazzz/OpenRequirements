@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access as fileExists, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import {
@@ -10,6 +11,7 @@ import {
   baselineEntries,
   baselineLinks,
   baselines,
+  baselineVerification,
   comments,
   itemRevisions,
   itemTypes,
@@ -19,6 +21,7 @@ import {
   nodes,
   projectMembers,
   projects,
+  resultAttachments,
   reviewMarks,
   reviewParticipants,
   reviews,
@@ -33,14 +36,12 @@ import {
   verificationResults,
 } from "./db/schema.ts";
 import { BACKUP_FORMAT, BACKUP_VERSION, type Backup, backupError, parentsFirst, remapIds } from "./domain/backup.ts";
-import { imageType } from "./domain/image.ts";
+import { fileType, safeFileName } from "./domain/filetype.ts";
 import { NO_PASSWORD } from "./domain/password.ts";
 import { MARKS } from "./domain/review.ts";
 import { ROLES } from "./domain/roles.ts";
 import { OUTCOMES } from "./domain/verification.ts";
 import { searchTextOf } from "./nodes.ts";
-
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 const id = { type: "string", format: "uuid" } as const;
 const idOrNull = { type: ["string", "null"], format: "uuid" } as const;
@@ -61,7 +62,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, 4, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, 5, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -179,6 +180,28 @@ const backupSchema = {
       },
       default: [],
     },
+    // Not in files older than version 6.
+    resultAttachments: {
+      ...rows({
+        id,
+        resultId: idOrNull,
+        runId: idOrNull,
+        step: { type: ["integer", "null"], minimum: 1 },
+        attachmentId: id,
+        createdBy: id,
+        createdAt: when,
+      }),
+      default: [],
+    },
+    baselineVerification: {
+      ...rows({
+        baselineId: id,
+        itemId: id,
+        status: { enum: ["not_covered", "not_run", "passing", "failing"] },
+        outOfDate: { type: "boolean" },
+      }),
+      default: [],
+    },
     // The next five are not in files older than version 5.
     testPlans: { ...rows({ id, name: text(200), createdBy: id, createdAt: when, deletedAt: whenOrNull }), default: [] },
     testPlanCases: {
@@ -186,16 +209,22 @@ const backupSchema = {
       default: [],
     },
     testCycles: {
-      ...rows({
-        id,
-        planId: id,
-        name: text(200),
-        environment: text(200),
-        createdBy: id,
-        createdAt: when,
-        closedBy: idOrNull,
-        closedAt: whenOrNull,
-      }),
+      type: "array",
+      items: {
+        ...row({
+          id,
+          planId: id,
+          name: text(200),
+          environment: text(200),
+          // Not in files older than version 6.
+          baselineId: { ...idOrNull, default: null },
+          createdBy: id,
+          createdAt: when,
+          closedBy: idOrNull,
+          closedAt: whenOrNull,
+        }),
+        required: ["id", "planId", "name", "environment", "createdBy", "createdAt", "closedBy", "closedAt"],
+      },
       default: [],
     },
     testRuns: {
@@ -291,7 +320,20 @@ const backupSchema = {
         required: ["baselineId", "linkId"],
       },
     },
-    attachments: rows({ id, createdBy: id, createdAt: when, data: { type: "string" } }),
+    attachments: {
+      type: "array",
+      items: {
+        // `name` is not in files older than version 6.
+        ...row({
+          id,
+          name: { ...textOrNull(200), default: null },
+          createdBy: id,
+          createdAt: when,
+          data: { type: "string" },
+        }),
+        required: ["id", "createdBy", "createdAt", "data"],
+      },
+    },
     auditEvents: rows({
       id,
       at: when,
@@ -310,6 +352,8 @@ const backupSchema = {
 const ADDED_LATER = [
   "linkRevisions",
   "verificationResults",
+  "resultAttachments",
+  "baselineVerification",
   "reviews",
   "reviewParticipants",
   "reviewMarks",
@@ -331,8 +375,13 @@ const parts = <T>(list: T[]): T[][] =>
   Array.from({ length: Math.ceil(list.length / 500) }, (_, i) => list.slice(i * 500, i * 500 + 500));
 
 /** Full-project backup as one JSON file, and restore of such a file as a new project. */
-export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access }: AppContext, dir: string) {
-  // shortcut: the whole backup is built and parsed in memory, switch to a streamed archive when projects carry hundreds of megabytes of images
+export function backupRoutes(
+  { app, db, requireUser, requireAdmin, audit, access }: AppContext,
+  dir: string,
+  maxAttachmentBytes: number,
+) {
+  // The download streams the files one at a time.
+  // shortcut: restore still parses the whole file in memory (256 MB at most), switch to a streamed archive when projects outgrow that
   app.get(
     "/api/projects/:projectId/backup",
     {
@@ -361,21 +410,21 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
       const planIds = db.select({ id: testPlans.id }).from(testPlans).where(inProject(testPlans));
       const cycleIds = db.select({ id: testCycles.id }).from(testCycles).where(inArray(testCycles.planId, planIds));
       const runIds = db.select({ id: testRuns.id }).from(testRuns).where(inArray(testRuns.cycleId, cycleIds));
-      const files: Backup["attachments"] = [];
+      const files: (typeof attachments.$inferSelect)[] = [];
       for (const file of await db.select().from(attachments).where(inProject(attachments))) {
         // A row whose file has gone missing is left out, so one lost image cannot block every backup.
-        const bytes = await readFile(join(dir, file.id)).catch(() => null);
-        if (bytes) {
-          files.push({
-            id: file.id,
-            createdBy: file.createdBy,
-            createdAt: iso(file.createdAt),
-            data: bytes.toString("base64"),
-          });
+        if (
+          await fileExists(join(dir, file.id)).then(
+            () => true,
+            () => false,
+          )
+        ) {
+          files.push(file);
         }
       }
+      const stored = new Set(files.map((file) => file.id));
 
-      const backup: Backup = {
+      const backup: Omit<Backup, "attachments"> = {
         format: BACKUP_FORMAT,
         version: BACKUP_VERSION,
         exportedAt: iso(new Date()),
@@ -421,15 +470,19 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
             .from(linkRevisions)
             .where(inArray(linkRevisions.linkId, db.select({ id: links.id }).from(links).where(inProject(links))))
         ).map((r) => ({ ...r, createdAt: iso(r.createdAt) })),
-        // Evidence whose file has gone missing is left out with it, so the result itself still restores.
         verificationResults: (
           await db.select().from(verificationResults).where(inArray(verificationResults.itemId, nodeIds))
-        ).map((r) => ({
-          ...r,
-          attachmentId: files.some((file) => file.id === r.attachmentId) ? r.attachmentId : null,
-          runAt: iso(r.runAt),
-          createdAt: iso(r.createdAt),
-        })),
+        ).map((r) => ({ ...r, attachmentId: null, runAt: iso(r.runAt), createdAt: iso(r.createdAt) })),
+        // Evidence whose file has gone missing is left out with it, so the result itself still restores.
+        resultAttachments: (
+          await db
+            .select({ evidence: resultAttachments })
+            .from(resultAttachments)
+            .innerJoin(attachments, eq(attachments.id, resultAttachments.attachmentId))
+            .where(inProject(attachments))
+        )
+          .filter(({ evidence }) => stored.has(evidence.attachmentId))
+          .map(({ evidence }) => ({ ...evidence, createdAt: iso(evidence.createdAt) })),
         testPlans: (await db.select().from(testPlans).where(inProject(testPlans))).map(({ projectId: _, ...plan }) => ({
           ...plan,
           createdAt: iso(plan.createdAt),
@@ -459,6 +512,10 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           .from(baselineEntries)
           .where(inArray(baselineEntries.baselineId, baselineIds)),
         baselineLinks: await db.select().from(baselineLinks).where(inArray(baselineLinks.baselineId, baselineIds)),
+        baselineVerification: await db
+          .select()
+          .from(baselineVerification)
+          .where(inArray(baselineVerification.baselineId, baselineIds)),
         reviews: (await db.select().from(reviews).where(inProject(reviews))).map(({ projectId: _, ...r }) => ({
           ...r,
           createdAt: iso(r.createdAt),
@@ -476,7 +533,6 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           ...s,
           signedAt: iso(s.signedAt),
         })),
-        attachments: files,
         auditEvents: (await db.select().from(auditEvents).where(inProject(auditEvents))).map(
           ({ projectId: _, ...event }) => ({ ...event, at: iso(event.at) }),
         ),
@@ -489,6 +545,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.links.map((l) => l.createdBy),
           backup.linkRevisions.map((r) => r.confirmedBy),
           backup.verificationResults.map((r) => r.recordedBy),
+          backup.resultAttachments.map((a) => a.createdBy),
           backup.testPlans.map((p) => p.createdBy),
           backup.testCycles.flatMap((c) => (c.closedBy ? [c.createdBy, c.closedBy] : [c.createdBy])),
           backup.testRuns.flatMap((r) => (r.assigneeId ? [r.assigneeId] : [])),
@@ -497,7 +554,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.baselines.map((b) => b.createdBy),
           backup.reviews.flatMap((r) => (r.closedBy ? [r.createdBy, r.closedBy] : [r.createdBy])),
           backup.reviewParticipants.map((p) => p.userId),
-          backup.attachments.map((a) => a.createdBy),
+          files.map((file) => file.createdBy),
           backup.auditEvents.flatMap((e) => (e.actorUserId ? [e.actorUserId] : [])),
         ].flat(),
       );
@@ -512,9 +569,26 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
       for (const comment of backup.comments) comment.mentions = comment.mentions.filter((m) => known.has(m));
 
       await audit(db, req.user?.id ?? null, "project.backup", "project", projectId);
+      // The files are read and sent one at a time, so a backup never holds more than one of them in memory.
+      const head = JSON.stringify(backup);
+      async function* body() {
+        yield `${head.slice(0, -1)},"attachments":[`;
+        for (const [index, file] of files.entries()) {
+          const entry: Backup["attachments"][number] = {
+            id: file.id,
+            name: file.name,
+            createdBy: file.createdBy,
+            createdAt: iso(file.createdAt),
+            data: (await readFile(join(dir, file.id))).toString("base64"),
+          };
+          yield `${index ? "," : ""}${JSON.stringify(entry)}`;
+        }
+        yield "]}";
+      }
       return reply
+        .type("application/json; charset=utf-8")
         .header("content-disposition", `attachment; filename="backup-${iso(new Date()).slice(0, 10)}.json"`)
-        .send(backup);
+        .send(Readable.from(body()));
     },
   );
 
@@ -528,12 +602,15 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
       if (problem) return reply.code(400).send({ error: problem });
       const userId = req.user?.id as string;
 
+      // A file's type is decided from its bytes again, exactly as when it was first uploaded.
       const images: { bytes: Buffer; contentType: string }[] = [];
       for (const file of uploaded.attachments) {
         const bytes = Buffer.from(file.data, "base64");
-        const contentType = imageType(bytes);
-        if (!contentType || bytes.length > MAX_ATTACHMENT_BYTES) {
-          return reply.code(400).send({ error: "The backup holds an attachment that is not an image of at most 5 MB" });
+        const contentType = fileType(bytes, file.name ?? "");
+        if (!contentType || bytes.length > maxAttachmentBytes) {
+          return reply.code(400).send({
+            error: `The backup holds a file that is not an allowed type, or is larger than ${maxAttachmentBytes / 1024 / 1024} MB`,
+          });
         }
         images.push({ bytes, contentType });
       }
@@ -637,6 +714,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           }
           for (const part of parts(backup.baselineEntries)) await tx.insert(baselineEntries).values(part);
           for (const part of parts(backup.baselineLinks)) await tx.insert(baselineLinks).values(part);
+          for (const part of parts(backup.baselineVerification)) await tx.insert(baselineVerification).values(part);
           for (const part of parts(backup.reviews)) {
             await tx
               .insert(reviews)
@@ -669,6 +747,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
               id: file.id,
               projectId,
               contentType: image.contentType,
+              name: file.name ? safeFileName(file.name) : null,
               size: image.bytes.length,
               createdBy: file.createdBy,
               createdAt: date(file.createdAt),
@@ -697,12 +776,31 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           for (const part of parts(backup.stepResults)) {
             await tx.insert(stepResults).values(part.map((s) => ({ ...s, createdAt: date(s.createdAt) })));
           }
-          // After the attachments and the test runs, because a result may point at its evidence and at its run.
+          // After the test runs, because a result may point at its run.
           for (const part of parts(backup.verificationResults)) {
             await tx
               .insert(verificationResults)
-              .values(part.map((r) => ({ ...r, runAt: date(r.runAt), createdAt: date(r.createdAt) })));
+              .values(
+                part.map((r) => ({ ...r, attachmentId: null, runAt: date(r.runAt), createdAt: date(r.createdAt) })),
+              );
           }
+          // After the attachments and the results. In a file older than version 6 a result names its one evidence image itself.
+          const evidence = [
+            ...backup.resultAttachments.map((file) => ({ ...file, createdAt: date(file.createdAt) })),
+            ...backup.verificationResults.flatMap((r) =>
+              r.attachmentId
+                ? [
+                    {
+                      resultId: r.id,
+                      attachmentId: r.attachmentId,
+                      createdBy: r.recordedBy,
+                      createdAt: date(r.createdAt),
+                    },
+                  ]
+                : [],
+            ),
+          ];
+          for (const part of parts(evidence)) await tx.insert(resultAttachments).values(part);
           await audit(tx, userId, "project.restore", "project", projectId);
           return created;
         });

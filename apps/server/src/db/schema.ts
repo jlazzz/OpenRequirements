@@ -226,13 +226,16 @@ export const linkRevisions = pgTable(
   (t) => [unique().on(t.linkId, t.number)],
 );
 
-/** An uploaded image. The bytes are a file named by this id in the attachments directory. */
+/** An uploaded file: an image in rich text, or evidence of a test. The bytes are a file named by this id in the attachments directory. */
 export const attachments = pgTable("attachments", {
   id: uuid().primaryKey().defaultRandom(),
   projectId: uuid()
     .notNull()
     .references(() => projects.id),
+  // Decided from the file's bytes, never from what the browser said (domain/filetype.ts).
   contentType: text().notNull(),
+  // What the file was called when it was uploaded, made safe. Null for uploads from before names were kept.
+  name: text(),
   size: integer().notNull(),
   createdBy: uuid()
     .notNull()
@@ -256,7 +259,7 @@ export const verificationResults = pgTable(
     // When the test was run, as stated by whoever recorded it. `createdAt` is when it was recorded, and decides what is out of date.
     runAt: timestamp({ withTimezone: true }).notNull(),
     note: text().notNull().default(""),
-    // Evidence: an uploaded image of the same project.
+    // No longer written: evidence lives in result_attachments. Kept because migrations never drop a column in use by old rows.
     attachmentId: uuid().references(() => attachments.id),
     source: text().$type<"manual" | "junit" | "run">().notNull(),
     recordedBy: uuid()
@@ -270,6 +273,30 @@ export const verificationResults = pgTable(
   },
   // The latest result of an item is looked up on every status request.
   (t) => [index().on(t.itemId, t.createdAt), unique().on(t.runId)],
+);
+
+/**
+ * Append-only. One evidence file of a result. Evidence of a manual or CI result hangs on the result; evidence gathered
+ * while a run is executed hangs on the run, optionally on one of its steps, and belongs to the result the run records.
+ */
+export const resultAttachments = pgTable(
+  "result_attachments",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // Exactly one of the next two is set.
+    resultId: uuid().references(() => verificationResults.id),
+    runId: uuid().references((): AnyPgColumn => testRuns.id),
+    // Counted from 1. Null when the file is evidence of the whole test.
+    step: integer(),
+    attachmentId: uuid()
+      .notNull()
+      .references(() => attachments.id),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.resultId), index().on(t.runId)],
 );
 
 /** A named selection of test cases for a goal, e.g. "Release 1.2 verification". Soft-deleted. */
@@ -316,6 +343,8 @@ export const testCycles = pgTable(
     name: text().notNull(),
     // Free text, e.g. "Bench 2, firmware 1.4.0".
     environment: text().notNull().default(""),
+    // The baseline this cycle verifies, when it was started for one. A review of that baseline lists the cycle.
+    baselineId: uuid().references((): AnyPgColumn => baselines.id),
     createdBy: uuid()
       .notNull()
       .references(() => users.id),
@@ -466,6 +495,23 @@ export const baselineLinks = pgTable(
     suspect: boolean(),
   },
   (t) => [primaryKey({ columns: [t.baselineId, t.linkId] })],
+);
+
+/** The verification status of an item that is not a test case, as it was when the baseline was made. Never changed. */
+export const baselineVerification = pgTable(
+  "baseline_verification",
+  {
+    baselineId: uuid()
+      .notNull()
+      .references(() => baselines.id),
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    // One of VerificationStatus in domain/verification.ts.
+    status: text().$type<"not_covered" | "not_run" | "passing" | "failing">().notNull(),
+    outOfDate: boolean().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.baselineId, t.itemId] })],
 );
 
 /** A review of a baseline's items. Only `state`, `closedBy`, `closedAt` and `statusSet` ever change, once, when it is closed. */

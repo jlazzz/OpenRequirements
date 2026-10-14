@@ -6,13 +6,14 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // Version 2 added linkRevisions and baselineLinks.suspect. Version 3 added verificationResults. Version 4 added reviews,
 // their participants, marks and signatures, itemRevisions.statusOnly and comments.reviewId. Version 5 added itemTypes.role,
 // test plans with their cases, cycles, runs and step results, and verificationResults.runId and defectUrl.
-// Older files are still restored.
-export const BACKUP_VERSION = 5;
+// Version 6 added attachments.name, resultAttachments (which replace verificationResults.attachmentId), baselineVerification
+// and testCycles.baselineId. Older files are still restored.
+export const BACKUP_VERSION = 6;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -73,7 +74,7 @@ export type Backup = {
     confirmedBy: string;
     createdAt: string;
   }[];
-  /** Results of running test cases. `attachmentId` is the evidence, one of `attachments`. */
+  /** Results of running test cases. `attachmentId` is the one evidence image of a file older than version 6; null since. */
   verificationResults: {
     id: string;
     itemId: string;
@@ -86,6 +87,16 @@ export type Backup = {
     recordedBy: string;
     runId: string | null;
     defectUrl: string | null;
+    createdAt: string;
+  }[];
+  /** Evidence files: of a result, or of a run and optionally one of its steps. */
+  resultAttachments: {
+    id: string;
+    resultId: string | null;
+    runId: string | null;
+    step: number | null;
+    attachmentId: string;
+    createdBy: string;
     createdAt: string;
   }[];
   testPlans: { id: string; name: string; createdBy: string; createdAt: string; deletedAt: string | null }[];
@@ -102,6 +113,7 @@ export type Backup = {
     planId: string;
     name: string;
     environment: string;
+    baselineId: string | null;
     createdBy: string;
     createdAt: string;
     closedBy: string | null;
@@ -145,6 +157,13 @@ export type Backup = {
     name: string | null;
   }[];
   baselineLinks: { baselineId: string; linkId: string; suspect: boolean | null }[];
+  /** The verification status each baseline froze. */
+  baselineVerification: {
+    baselineId: string;
+    itemId: string;
+    status: "not_covered" | "not_run" | "passing" | "failing";
+    outOfDate: boolean;
+  }[];
   reviews: {
     id: string;
     baselineId: string;
@@ -169,8 +188,8 @@ export type Backup = {
     digest: string;
     signedAt: string;
   }[];
-  /** `data` is the file's bytes in base64. */
-  attachments: { id: string; createdBy: string; createdAt: string; data: string }[];
+  /** `data` is the file's bytes in base64. `name` is what the file was called when it was uploaded. */
+  attachments: { id: string; name: string | null; createdBy: string; createdAt: string; data: string }[];
   auditEvents: {
     id: string;
     at: string;
@@ -203,11 +222,16 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["verificationResults", "attachmentId", "attachments"],
   ["verificationResults", "recordedBy", "users"],
   ["verificationResults", "runId", "testRuns"],
+  ["resultAttachments", "resultId", "verificationResults"],
+  ["resultAttachments", "runId", "testRuns"],
+  ["resultAttachments", "attachmentId", "attachments"],
+  ["resultAttachments", "createdBy", "users"],
   ["testPlans", "createdBy", "users"],
   ["testPlanCases", "planId", "testPlans"],
   ["testPlanCases", "itemId", "nodes"],
   ["testCycles", "planId", "testPlans"],
   ["testCycles", "createdBy", "users"],
+  ["testCycles", "baselineId", "baselines"],
   ["testCycles", "closedBy", "users"],
   ["testRuns", "cycleId", "testCycles"],
   ["testRuns", "itemId", "nodes"],
@@ -237,6 +261,8 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["baselineEntries", "parentId", "nodes"],
   ["baselineLinks", "baselineId", "baselines"],
   ["baselineLinks", "linkId", "links"],
+  ["baselineVerification", "baselineId", "baselines"],
+  ["baselineVerification", "itemId", "nodes"],
   ["attachments", "createdBy", "users"],
   ["auditEvents", "actorUserId", "users"],
 ];
@@ -295,6 +321,10 @@ export function backupError(backup: Backup): string | null {
 
   if (!backup.verificationResults.every((result) => isItem(result.itemId))) {
     return "The backup has a verification result on something that is not an item";
+  }
+
+  if (!backup.resultAttachments.every((file) => (file.resultId === null) !== (file.runId === null))) {
+    return "The backup has an evidence file that belongs to both a result and a run, or to neither";
   }
 
   const revisions = new Map(backup.itemRevisions.map((revision) => [revision.id, revision.itemId]));

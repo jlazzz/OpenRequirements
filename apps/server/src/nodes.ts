@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { docError, docToText, emptyDoc, formatUid, type RichNode, textToDoc } from "@app/shared";
 import { and, desc, eq, ilike, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
@@ -684,6 +685,144 @@ export function nodeRoutes({ app, db, requireUser, audit, access }: AppContext) 
         }
         await audit(tx, req.user?.id ?? null, `${node.kind}.move`, node.kind, nodeId);
         return { ok: true };
+      });
+
+      if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
+      return result;
+    },
+  );
+
+  // Bulk: deletes, moves or changes field values of many items of one set in one request, all or none.
+  app.post(
+    "/api/sets/:setId/bulk",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("setId"),
+        body: {
+          type: "object",
+          required: ["action", "itemIds"],
+          additionalProperties: false,
+          properties: {
+            action: { enum: ["delete", "move", "edit"] },
+            // shortcut: 500 items per request, each written and audited on its own, batch the writes when larger selections are needed
+            itemIds: { type: "array", minItems: 1, maxItems: 500, items: { type: "string", format: "uuid" } },
+            // Move: the destination folder, or null for directly under the set.
+            parentId: nullableId,
+            // Edit: field id to new value. Only these fields change; null clears one.
+            attributes: { type: "object", minProperties: 1 },
+            changeReason: { type: "string", maxLength: 500 },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { setId } = req.params as { setId: string };
+      if (!(await access(req, reply, { setId }, "editor"))) return reply;
+      const body = req.body as {
+        action: "delete" | "move" | "edit";
+        itemIds: string[];
+        parentId?: string | null;
+        attributes?: Record<string, unknown>;
+        changeReason?: string;
+      };
+      const userId = req.user?.id as string;
+      const ids = new Set(body.itemIds);
+
+      const result = await db.transaction(async (tx) => {
+        // The set is locked, as for every move, delete and create in it.
+        const [set] = await tx.select().from(sets).where(eq(sets.id, setId)).for("update");
+        if (!set) return { error: [404, "Set not found"] } as const;
+        const live = await tx
+          .select({
+            id: nodes.id,
+            parentId: nodes.parentId,
+            kind: nodes.kind,
+            uid: nodes.uid,
+            position: nodes.position,
+          })
+          .from(nodes)
+          .where(and(eq(nodes.setId, setId), isNull(nodes.deletedAt)))
+          .orderBy(nodes.position);
+        // In the order they have in the set, whatever order they were sent in.
+        const items = live.filter((n) => ids.has(n.id) && n.kind === "item");
+        if (items.length !== ids.size)
+          return { error: [400, "Every selected item must be an item of this set"] } as const;
+        const itemIds = items.map((item) => item.id);
+
+        if (body.action === "delete") {
+          await tx.update(nodes).set({ deletedAt: new Date() }).where(inArray(nodes.id, itemIds));
+          for (const id of itemIds) await audit(tx, userId, "item.delete", "item", id);
+          return { changed: items.length };
+        }
+
+        if (body.action === "move") {
+          if (body.parentId === undefined) return { error: [400, "Say where to move the items: parentId"] } as const;
+          const parentId = body.parentId;
+          if (parentId && live.find((n) => n.id === parentId)?.kind !== "folder") {
+            return { error: [400, "Destination must be a folder in the same set"] } as const;
+          }
+          // Items already there stay where they are. The others go last, keeping their order.
+          const moving = items.filter((item) => item.parentId !== parentId);
+          const last = Math.max(0, ...live.filter((n) => n.parentId === parentId).map((n) => n.position));
+          for (const [index, item] of moving.entries()) {
+            await tx
+              .update(nodes)
+              .set({ parentId, position: last + index + 1 })
+              .where(eq(nodes.id, item.id));
+            await audit(tx, userId, "item.move", "item", item.id);
+          }
+          return { changed: moving.length };
+        }
+
+        const patch = body.attributes;
+        if (!patch) return { error: [400, "Say which fields to change: attributes"] } as const;
+        // A draft is edits from a version this request is about to replace: it could not be saved afterwards.
+        const drafts = await tx
+          .select({ itemId: itemDrafts.itemId })
+          .from(itemDrafts)
+          .where(and(inArray(itemDrafts.itemId, itemIds), eq(itemDrafts.authorId, userId)));
+        if (drafts.length > 0) {
+          const uids = drafts.map((d) => items.find((item) => item.id === d.itemId)?.uid).join(", ");
+          return { error: [409, `You have unsaved drafts of ${uids}. Save or discard them first.`] } as const;
+        }
+        const fields = await fieldsOf(tx, set.itemTypeId);
+        const statusField = statusFieldOf(fields)?.id;
+        const current = await tx
+          .selectDistinctOn([itemRevisions.itemId], {
+            itemId: itemRevisions.itemId,
+            number: itemRevisions.number,
+            name: itemRevisions.name,
+            description: itemRevisions.description,
+            attributes: itemRevisions.attributes,
+          })
+          .from(itemRevisions)
+          .where(inArray(itemRevisions.itemId, itemIds))
+          .orderBy(itemRevisions.itemId, desc(itemRevisions.number));
+        let changed = 0;
+        for (const now of current) {
+          const uid = items.find((item) => item.id === now.itemId)?.uid ?? "";
+          const checked = checkAttributes(fields, { ...now.attributes, ...patch });
+          if ("error" in checked) return { error: [400, `${uid}: ${checked.error}`] } as const;
+          // An item that already has these values gets no new version.
+          if (isDeepStrictEqual(checked.attributes, now.attributes)) continue;
+          const next = { name: now.name, description: now.description, attributes: checked.attributes };
+          await tx.insert(itemRevisions).values({
+            itemId: now.itemId,
+            number: now.number + 1,
+            ...next,
+            statusOnly: onlyStatusChanged(now, next, statusField),
+            authorId: userId,
+            changeReason: body.changeReason?.trim() || null,
+          });
+          await tx
+            .update(nodes)
+            .set({ searchText: searchTextOf(uid, now.name, now.description, checked.attributes) })
+            .where(eq(nodes.id, now.itemId));
+          await audit(tx, userId, "item.revise", "item", now.itemId);
+          changed += 1;
+        }
+        return { changed };
       });
 
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });

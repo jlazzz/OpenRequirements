@@ -19,11 +19,11 @@ const attachmentsDir = mkdtempSync(join(tmpdir(), "attachments-"));
 const admin = { email: "Admin@Example.com", name: "Admin", password: "a long password" };
 
 beforeAll(async () => {
-  app = await buildApp(db, { loginAttemptsPerMinute: 1000, attachmentsDir });
+  app = await buildApp(db, { loginAttemptsPerMinute: 1000, attachmentsDir, maxAttachmentMb: 5 });
 });
 beforeEach(async () => {
   await db.execute(
-    sql`truncate users, sessions, api_tokens, verification_results, step_results, test_runs, test_cycles, test_plan_cases, test_plans, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, reviews, review_participants, review_marks, signatures, audit_events cascade`,
+    sql`truncate users, sessions, api_tokens, result_attachments, baseline_verification, verification_results, step_results, test_runs, test_cycles, test_plan_cases, test_plans, projects, item_types, attribute_definitions, sets, nodes, item_revisions, item_drafts, link_types, links, attachments, comments, project_members, invitations, baselines, baseline_entries, baseline_links, reviews, review_participants, review_marks, signatures, audit_events cascade`,
   );
 });
 afterAll(async () => {
@@ -1131,7 +1131,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   const ver = (await detail()).sets[2].id;
   const testCase = (await add(ver, { kind: "item", name: "Measure supply" })).json().node.id;
   const evidence = src.split("/").pop();
-  await post(`/api/items/${testCase}/results`, { outcome: "fail", note: "4.2 V", attachmentId: evidence }, cookie);
+  await post(`/api/items/${testCase}/results`, { outcome: "fail", note: "4.2 V", attachmentIds: [evidence] }, cookie);
   // The relationship goes suspect, is frozen suspect in a baseline, then is confirmed.
   await post(
     `/api/items/${need}/revisions`,
@@ -1170,7 +1170,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 5, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 6, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1210,8 +1210,9 @@ test("a backup restores as a new project with history, relationships, comments, 
   const newTest = tree.nodes.find((n: { uid: string }) => n.uid === "VER-001").id;
   const [result] = (await get(`/api/items/${newTest}/results`, cookie)).json().results;
   expect(result).toMatchObject({ outcome: "fail", note: "4.2 V", revision: 1, recordedBy: "Admin" });
-  expect(result.attachmentId).not.toBe(evidence);
-  expect((await get(`/api/attachments/${result.attachmentId}`, cookie)).statusCode).toBe(200);
+  expect(result.attachments).toHaveLength(1);
+  expect(result.attachments[0].id).not.toBe(evidence);
+  expect((await get(`/api/attachments/${result.attachments[0].id}`, cookie)).statusCode).toBe(200);
   const newReq = tree.nodes.find((n: { uid: string }) => n.uid === "SYS-001");
   expect(newReq.id).not.toBe(req);
   expect(tree.nodes.find((n: { name: string }) => n.name === "Power").id).toBe(newReq.parentId);
@@ -1263,10 +1264,18 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(actions).toEqual(expect.arrayContaining(["project.restore", "item.revise", "baseline.create"]));
 
   // A version 1 file, from before suspect links, still restores: nothing confirmed, nothing recorded on its baselines.
-  const { linkRevisions: _, ...old } = backup;
+  // Its results name their one evidence image themselves, as files did before version 6.
+  const { linkRevisions: _, resultAttachments, ...old } = backup;
+  const evidenceOf = new Map(
+    resultAttachments.map((a: { resultId: string; attachmentId: string }) => [a.resultId, a.attachmentId]),
+  );
   const v1 = {
     ...old,
     version: 1,
+    verificationResults: backup.verificationResults.map((r: { id: string }) => ({
+      ...r,
+      attachmentId: evidenceOf.get(r.id) ?? null,
+    })),
     itemTypes: backup.itemTypes.map(({ id, name }: { id: string; name: string }) => ({ id, name })),
     baselineLinks: backup.baselineLinks.map((l: { baselineId: string; linkId: string }) => ({
       baselineId: l.baselineId,
@@ -1287,6 +1296,10 @@ test("a backup restores as a new project with history, relationships, comments, 
   // A file from before item types had a role still knows its test cases: by the type's name, as the tool did then.
   const fromV1Sets = (await get(`/api/projects/${fromV1.id}`, cookie)).json().sets;
   expect(fromV1Sets.map((s: { isTest: boolean }) => s.isTest)).toEqual([false, false, true]);
+  const v1Test = (await get(`/api/projects/${fromV1.id}`, cookie))
+    .json()
+    .nodes.find((n: { uid: string }) => n.uid === "VER-001").id;
+  expect((await get(`/api/items/${v1Test}/results`, cookie)).json().results[0].attachments).toHaveLength(1);
 
   // The unknown person got an account that cannot sign in, is mentioned in the copy, and can take it over by invitation.
   const members = (await get(`/api/projects/${copy.id}/members`, cookie)).json().members;
@@ -1320,7 +1333,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 6 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 7 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
@@ -1348,7 +1361,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
           id: "00000000-0000-4000-8000-000000000002",
           createdBy: b.users[0]?.id,
           createdAt: new Date().toISOString(),
-          data: Buffer.from("<script>").toString("base64"),
+          data: Buffer.from("MZ\u0090\u0000\u0003").toString("base64"),
         }),
       )
     ).statusCode,
@@ -1586,9 +1599,9 @@ test("a result is refused when it is not on a test case, names a missing version
   expect((await record(t1, { outcome: "maybe" })).statusCode).toBe(400);
   expect((await record(t1, { outcome: "pass", revision: 2 })).statusCode).toBe(400);
   expect((await record(t1, { outcome: "pass", runAt: "2999-01-01T00:00:00Z" })).statusCode).toBe(400);
-  expect((await record(t1, { outcome: "pass", attachmentId: "00000000-0000-4000-8000-000000000000" })).statusCode).toBe(
-    400,
-  );
+  expect(
+    (await record(t1, { outcome: "pass", attachmentIds: ["00000000-0000-4000-8000-000000000000"] })).statusCode,
+  ).toBe(400);
   expect((await record(t1, { outcome: "pass" }, reviewer.cookie)).statusCode).toBe(403);
   expect((await record(t1, { outcome: "pass" }, editor.cookie)).statusCode).toBe(201);
   expect((await get(`/api/items/${t1}/results`, viewer.cookie)).json().results).toHaveLength(1);
@@ -2420,4 +2433,251 @@ test("a baseline exports to ReqIF and imports into another project as the same c
   expect(first.relations).toHaveLength(2);
   expect(shape(xmlAgain)).toEqual(first);
   expect(Buffer.from([...again].find(([name]) => name.startsWith("files/"))?.[1] as Uint8Array).equals(png)).toBe(true);
+});
+
+test("evidence files of several kinds are attached to results, to runs and their steps, and to a CI report", async () => {
+  const { cookie: owner, projectId, t1, t2, record } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const tester = await person("Tess Tester", "reviewer");
+  const upload = (payload: Buffer | string, name: string, as = owner, type = "application/octet-stream") =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/attachments?name=${encodeURIComponent(name)}`,
+      payload,
+      headers: { cookie: as, "content-type": type },
+    });
+
+  // What a file is, is decided from its bytes. A tester with the Reviewer role may upload; a viewer may not.
+  const pdf = await upload("%PDF-1.7 report", "C:\\bench\\Report 1.pdf");
+  expect(pdf.statusCode).toBe(201);
+  expect(pdf.json()).toMatchObject({ name: "Report 1.pdf", contentType: "application/pdf" });
+  const log = await upload("12:00 pump stopped\n", "bench.log", tester.cookie, "text/plain");
+  expect(log.json()).toMatchObject({ name: "bench.log", contentType: "text/plain" });
+  expect((await upload("a,b\n1,2\n", "data.csv")).json().contentType).toBe("text/csv");
+  expect((await upload(Buffer.from([0x50, 0x4b, 3, 4, 0, 0]), "logs.zip")).json().contentType).toBe("application/zip");
+  expect((await upload(Buffer.from("MZ\u0090\u0000\u0003"), "tool.exe")).statusCode).toBe(400);
+  expect((await upload("x", "note.txt", viewer.cookie)).statusCode).toBe(403);
+  // Something that says it is an image must be one, because images are shown in rich text.
+  expect((await upload("%PDF-1.7", "x.png", owner, "image/png")).statusCode).toBe(400);
+
+  // Anything that is not an image is only ever a download, under its own name, and is never sniffed or run.
+  const served = await get(pdf.json().src, viewer.cookie);
+  expect(served.headers["content-type"]).toBe("application/pdf");
+  expect(served.headers["content-disposition"]).toBe('attachment; filename="Report 1.pdf"');
+  expect(served.headers["x-content-type-options"]).toBe("nosniff");
+  expect(served.body).toBe("%PDF-1.7 report");
+  const page = await upload("<script>alert(1)</script>", "page.html");
+  expect((await get(page.json().src, owner)).headers["content-type"]).toContain("text/plain");
+
+  // A result takes many files.
+  const recorded = await record(t2, { outcome: "pass", attachmentIds: [pdf.json().id, log.json().id] });
+  expect(recorded.statusCode).toBe(201);
+  expect((await get(`/api/items/${t2}/results`, owner)).json().results[0].attachments).toEqual([
+    { id: pdf.json().id, name: "Report 1.pdf", contentType: "application/pdf", step: null },
+    { id: log.json().id, name: "bench.log", contentType: "text/plain", step: null },
+  ]);
+
+  // A run gathers evidence while it is executed, on a step or on the whole test.
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, owner)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [t1] }, owner);
+  const cycleId = (await post(`/api/test-plans/${planId}/cycles`, { name: "Round 1" }, owner)).json().id;
+  const runId = (await get(`/api/test-cycles/${cycleId}`, owner)).json().runs[0].id;
+  const attach = (body: object, as: string) => post(`/api/test-runs/${runId}/attachments`, body, as);
+  // Not assigned to the tester yet.
+  expect((await attach({ attachmentId: log.json().id }, tester.cookie)).statusCode).toBe(403);
+  await post(`/api/test-cycles/${cycleId}/assign`, { runIds: [runId], assigneeId: tester.id }, owner);
+  expect((await attach({ attachmentId: log.json().id, step: 1 }, tester.cookie)).statusCode).toBe(201);
+  expect((await attach({ attachmentId: pdf.json().id }, tester.cookie)).statusCode).toBe(201);
+  expect((await attach({ attachmentId: pdf.json().id, step: 2 }, tester.cookie)).statusCode).toBe(400);
+  expect((await attach({ attachmentId: planId }, tester.cookie)).statusCode).toBe(400);
+  expect((await attach({ attachmentId: pdf.json().id }, viewer.cookie)).statusCode).toBe(403);
+  expect((await get(`/api/test-runs/${runId}`, viewer.cookie)).json().run.attachments).toEqual([
+    expect.objectContaining({ id: log.json().id, name: "bench.log", step: 1, by: "Tess Tester" }),
+    expect.objectContaining({ id: pdf.json().id, name: "Report 1.pdf", step: null }),
+  ]);
+  await post(`/api/test-runs/${runId}/steps`, { steps: [1], outcome: "pass" }, tester.cookie);
+  await post(`/api/test-runs/${runId}/finish`, {}, tester.cookie);
+  expect((await attach({ attachmentId: pdf.json().id }, tester.cookie)).statusCode).toBe(409);
+  // The run's evidence is the evidence of the result it recorded.
+  expect((await get(`/api/items/${t1}/results`, owner)).json().results[0].attachments).toEqual([
+    expect.objectContaining({ id: log.json().id, step: 1 }),
+    expect.objectContaining({ id: pdf.json().id, step: null }),
+  ]);
+  expect(await auditActions()).toContain("run.evidence");
+
+  // A CI job uploads its log, then names it with the report: every result of the report carries it.
+  const junit = (query: string) =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/verification-results/junit${query}`,
+      payload: '<testsuite><testcase name="VER-002 alarm"/></testsuite>',
+      headers: { cookie: owner, "content-type": "application/xml" },
+    });
+  expect((await junit(`?attachmentId=${planId}`)).statusCode).toBe(400);
+  expect((await junit(`?attachmentId=${log.json().id}`)).statusCode).toBe(201);
+  expect((await get(`/api/items/${t2}/results`, owner)).json().results[0]).toMatchObject({
+    source: "junit",
+    attachments: [{ id: log.json().id, name: "bench.log" }],
+  });
+});
+
+test("a baseline freezes verification status, and a cycle that names it shows up in its review", async () => {
+  const { cookie, projectId, req, bare, t1, t2, record } = await projectWithTests();
+  await record(t1, { outcome: "pass" });
+  await record(t2, { outcome: "pass" });
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "Release 1.0" }, cookie)).json().id;
+  // The status moves on after the baseline.
+  await record(t1, { outcome: "fail" });
+  const frozen = (await get(`/api/baselines/${baselineId}`, cookie)).json();
+  expect(frozen.verification).toEqual({
+    [req]: { status: "passing", outOfDate: false },
+    [bare]: { status: "not_covered", outOfDate: false },
+  });
+  expect((await get(`/api/projects/${projectId}/verification`, cookie)).json().requirements[req].status).toBe(
+    "failing",
+  );
+
+  // A cycle may name the baseline it verifies, of its own project only.
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, cookie)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [t1, t2] }, cookie);
+  const start = (body: object) => post(`/api/test-plans/${planId}/cycles`, body, cookie);
+  expect((await start({ name: "X", baselineId: planId })).statusCode).toBe(400);
+  const cycleId = (await start({ name: "Release run", baselineId })).json().id;
+  expect((await get(`/api/test-cycles/${cycleId}`, cookie)).json().cycle).toMatchObject({
+    baselineId,
+    baseline: "Release 1.0",
+  });
+  const [run] = (await get(`/api/test-cycles/${cycleId}`, cookie)).json().runs;
+  await post(`/api/test-runs/${run.id}/steps`, { steps: [1], outcome: "pass" }, cookie);
+
+  // A review of that baseline lists the cycle: the evidence its approvers sign for.
+  const me = (await get("/api/session", cookie)).json().user.id;
+  const reviewId = (
+    await post(`/api/projects/${projectId}/reviews`, { name: "Release review", baselineId, approvers: [me] }, cookie)
+  ).json().id;
+  expect((await get(`/api/reviews/${reviewId}`, cookie)).json().cycles).toEqual([
+    { id: cycleId, name: "Release run", closedAt: null, runs: { passed: 1, not_started: 1 } },
+  ]);
+});
+
+test("reports: cycles of a plan side by side, the requirement verification report, and flaky tests", async () => {
+  const { cookie, projectId, req, bare, t1, t2, record } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, cookie)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [t1, t2] }, cookie);
+  const runCycle = async (name: string, outcomes: Record<string, string>) => {
+    const cycleId = (await post(`/api/test-plans/${planId}/cycles`, { name }, cookie)).json().id;
+    for (const run of (await get(`/api/test-cycles/${cycleId}`, cookie)).json().runs) {
+      const outcome = outcomes[run.itemId];
+      if (!outcome) continue;
+      await post(`/api/test-runs/${run.id}/steps`, { steps: [1], outcome }, cookie);
+      await post(`/api/test-runs/${run.id}/finish`, {}, cookie);
+    }
+    return cycleId as string;
+  };
+  const first = await runCycle("Round 1", { [t1]: "fail", [t2]: "pass" });
+  const second = await runCycle("Round 2", { [t1]: "pass" });
+
+  // Plan history: what each test case reached in each cycle, oldest cycle first.
+  const history = (await get(`/api/test-plans/${planId}/history`, viewer.cookie)).json();
+  expect(history.cycles.map((c: { id: string }) => c.id)).toEqual([first, second]);
+  expect(history.tests).toEqual([
+    { itemId: t1, uid: "VER-001", name: "Occlusion test", states: { [first]: "failed", [second]: "passed" } },
+    { itemId: t2, uid: "VER-002", name: "Alarm test", states: { [first]: "passed", [second]: "not_started" } },
+  ]);
+
+  // The verification report adds, to each test's latest result, who recorded it, in which cycle, and its evidence.
+  const report = (await get(`/api/projects/${projectId}/reports/verification`, viewer.cookie)).json();
+  expect(report.requirements[req]).toMatchObject({ status: "passing" });
+  expect(report.requirements[bare]).toMatchObject({ status: "not_covered", tests: [] });
+  expect(report.tests[t1]).toMatchObject({
+    outcome: "pass",
+    recordedBy: "Admin",
+    source: "run",
+    cycleId: second,
+    cycle: "Round 2",
+    evidence: [],
+  });
+  expect(report.tests[t2]).toMatchObject({ outcome: "pass", cycle: "Round 1" });
+
+  // Flaky: t1 went fail, pass and now fails again; t2 only ever passed.
+  await record(t1, { outcome: "fail" });
+  await record(t2, { outcome: "pass" });
+  expect((await get(`/api/projects/${projectId}/reports/flaky`, viewer.cookie)).json().tests).toEqual([
+    { itemId: t1, outcomes: ["fail", "pass", "fail"] },
+  ]);
+});
+
+test("many items of a set are edited, moved or deleted in one request, all or none", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const reviewer = await person("Rob Reviewer", "reviewer");
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const item = async (setId: string, name: string) => (await add(setId, { kind: "item", name })).json().node.id;
+  const [a, b, c] = [await item(sys.id, "A"), await item(sys.id, "B"), await item(sys.id, "C")];
+  const elsewhere = await item(un.id, "Need");
+  const fields = (await get(`/api/items/${a}`, cookie)).json().fields as { id: string; name: string }[];
+  const status = fields.find((f) => f.name === "Status")?.id as string;
+  const bulk = (body: object, as = cookie) => post(`/api/sets/${sys.id}/bulk`, body, as);
+  const current = async (id: string) => (await get(`/api/items/${id}`, cookie)).json().item;
+
+  expect(
+    (await bulk({ action: "edit", itemIds: [a], attributes: { [status]: "Approved" } }, reviewer.cookie)).statusCode,
+  ).toBe(403);
+  // A folder, or an item of another set, is not an item of this set: nothing is changed.
+  expect((await bulk({ action: "delete", itemIds: [a, folder] })).statusCode).toBe(400);
+  expect((await bulk({ action: "delete", itemIds: [a, elsewhere] })).statusCode).toBe(400);
+  expect((await detail()).nodes).toHaveLength(5);
+
+  // Edit: only the named field changes, each item gets a new version, and a bad value changes nothing at all.
+  await post(
+    `/api/items/${b}/revisions`,
+    { baseRevision: 1, name: "B", description: textToDoc("Keep me"), attributes: { [status]: "Approved" } },
+    cookie,
+  );
+  expect(
+    (await bulk({ action: "edit", itemIds: [a, b, c], attributes: { [status]: "No such state" } })).statusCode,
+  ).toBe(400);
+  expect((await current(a)).revision).toBe(1);
+  const edited = await bulk({
+    action: "edit",
+    itemIds: [a, b, c],
+    attributes: { [status]: "Approved" },
+    changeReason: "Review 3",
+  });
+  // B already had the value, so it gets no new version.
+  expect(edited.json()).toEqual({ changed: 2 });
+  expect(await current(a)).toMatchObject({ revision: 2, name: "A", attributes: { [status]: "Approved" } });
+  expect(await current(b)).toMatchObject({ revision: 2, description: textToDoc("Keep me") });
+  const [latest] = (await get(`/api/items/${c}/revisions`, cookie)).json().revisions;
+  expect(latest).toMatchObject({ number: 2, changeReason: "Review 3", author: "Admin" });
+  // A draft of the person's own would be left behind unsaveable, so the edit is refused until it is dealt with.
+  await send("PUT", `/api/items/${a}/draft`, cookie, {
+    baseRevision: 2,
+    name: "A2",
+    description: textToDoc(""),
+    attributes: {},
+  });
+  const blocked = await bulk({ action: "edit", itemIds: [a, c], attributes: { [status]: null } });
+  expect(blocked.statusCode).toBe(409);
+  expect(blocked.json().error).toContain("SYS-001");
+  await send("DELETE", `/api/items/${a}/draft`, cookie);
+  expect((await bulk({ action: "edit", itemIds: [a], attributes: { [status]: null } })).json()).toEqual({ changed: 1 });
+  expect((await current(a)).attributes).toEqual({});
+
+  // Move: into a folder of the same set, after what is there, in set order.
+  expect((await bulk({ action: "move", itemIds: [a] })).statusCode).toBe(400);
+  expect((await bulk({ action: "move", itemIds: [a], parentId: a })).statusCode).toBe(400);
+  expect((await bulk({ action: "move", itemIds: [c, a], parentId: folder })).json()).toEqual({ changed: 2 });
+  const inFolder = (await detail()).nodes.filter((n: { parentId: string }) => n.parentId === folder);
+  expect(inFolder.map((n: { name: string }) => n.name)).toEqual(["A", "C"]);
+  expect((await bulk({ action: "move", itemIds: [a, b], parentId: null })).json()).toEqual({ changed: 1 });
+
+  // Delete: soft, so the items are in Deleted items and their UIDs stay used.
+  expect((await bulk({ action: "delete", itemIds: [a, b] })).json()).toEqual({ changed: 2 });
+  expect((await detail()).nodes.map((n: { name: string }) => n.name).sort()).toEqual(["C", "Need", "Power"]);
+  const trash = (await get(`/api/projects/${(await detail()).project.id}/trash`, cookie)).json().deleted;
+  expect(trash.map((n: { uid: string }) => n.uid).sort()).toEqual(["SYS-001", "SYS-002"]);
+  expect((await bulk({ action: "delete", itemIds: [a] })).statusCode).toBe(400);
+  expect((await add(sys.id, { kind: "item", name: "Next" })).json().node.uid).toBe("SYS-004");
+  expect(await auditActions()).toEqual(expect.arrayContaining(["item.delete", "item.move", "item.revise"]));
 });
