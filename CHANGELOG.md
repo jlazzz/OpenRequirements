@@ -13,4 +13,6 @@ How to write an entry:
 
 ### Added
 
+- Reviews: add or remove a participant while a review is open, opening a review sets Status to "In review", and the home page lists your open reviews. Migration 0021 (forward-only) adds columns to `review_participants`; backup format version 10.
+
 - Numbered releases: the version is shown at `/api/version` and in the account dialog; a version tag builds, signs and publishes the image.

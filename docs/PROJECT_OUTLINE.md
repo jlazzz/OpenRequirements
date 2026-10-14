@@ -209,7 +209,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 
 - [ ] Immutable, exportable audit trail (who changed what, when, why). Tamper-evident hash chain with an admin verify route built ([ADR 0020](adr/0020-part-11-hardening-audit-chain.md)); anchoring outside the database and export are not
 - [ ] Mandatory change reasons (configurable per project)
-- [x] Review and approval workflows (draft → in review → approved), with configurable approvers
+- [x] Review and approval workflows (draft → in review → approved), with configurable approvers; participants can be added and removed while a review is open, opening sets Status to In review, and the home page lists "My reviews" ([ADR 0023](adr/0023-review-participants-and-in-review.md))
 - [x] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records). Those three are built, and so are password expiry, account lockout and the inactivity timeout, each off unless set ([ADR 0010](adr/0010-reviews-approvals-and-signatures.md), [ADR 0020](adr/0020-part-11-hardening-audit-chain.md))
 - [x] Verification tracking: lightweight test case items, verification results, and status per requirement
 - [x] Import test results from CI (JUnit XML) and link them to requirements automatically

@@ -1,6 +1,17 @@
 import { textToDoc } from "@app/shared";
-import { expect, test } from "vitest";
-import { closedState, itemOutcome, type Mark, onlyStatusChanged, type Signed, signatureDigest } from "./review.ts";
+import { describe, expect, it, test } from "vitest";
+import {
+  addParticipantError,
+  closedState,
+  itemOutcome,
+  type Mark,
+  onlyStatusChanged,
+  opensAsInReview,
+  removeParticipantError,
+  type Signed,
+  signatureDigest,
+  stillReviewed,
+} from "./review.ts";
 
 test("an item is approved only when every approver approved it, and one rejection rejects it", () => {
   expect(itemOutcome(["approved", "approved"])).toBe("approved");
@@ -58,4 +69,31 @@ test("a version that only changes Status is told apart from one that changes con
   ).toBe(false);
   // An item type with no Status field: only an identical version counts.
   expect(onlyStatusChanged(before, approved, undefined)).toBe(false);
+});
+
+describe("participants", () => {
+  const a = { userId: "a", role: "approver" as const, signed: false };
+  const b = { userId: "b", role: "reviewer" as const, signed: false };
+  it("refuses a second addition of the same person", () => {
+    expect(addParticipantError([a], "a")).not.toBeNull();
+    expect(addParticipantError([a], "b")).toBeNull();
+  });
+  it("keeps a signer and the last participant", () => {
+    expect(removeParticipantError([a, b], "b")).toBeNull();
+    expect(removeParticipantError([{ ...a, signed: true }, b], "a")).not.toBeNull();
+    expect(removeParticipantError([a], "a")).not.toBeNull();
+    expect(removeParticipantError([a], "x")).not.toBeNull();
+  });
+  it("a status-only version leaves an item as reviewed", () => {
+    expect(stillReviewed([])).toBe(true);
+    expect(stillReviewed([{ statusOnly: true }])).toBe(true);
+    expect(stillReviewed([{ statusOnly: true }, { statusOnly: false }])).toBe(false);
+  });
+  it("opens as In review only from other statuses with that option", () => {
+    expect(opensAsInReview("Draft", ["Draft", "In review"])).toBe(true);
+    expect(opensAsInReview(undefined, ["In review"])).toBe(true);
+    expect(opensAsInReview("Approved", ["In review", "Approved"])).toBe(false);
+    expect(opensAsInReview("In review", ["In review"])).toBe(false);
+    expect(opensAsInReview("Draft", ["Draft"])).toBe(false);
+  });
 });

@@ -221,7 +221,7 @@ test("a backup keeps removed values and roles; an older file gets the verifying 
   });
   await call("PATCH", `/api/fields/${priority.id}`, owner, { options: ["High", "Medium"] });
   const backup = (await get(`/api/projects/${projectId}/backup`, owner)).json();
-  expect(backup.version).toBe(9);
+  expect(backup.version).toBe(10);
 
   const restored = await call("POST", "/api/projects/restore", owner, backup);
   expect(restored.statusCode).toBe(201);

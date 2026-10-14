@@ -8,7 +8,22 @@ A review is held on a baseline, so what people review cannot change while they r
 2. Open **Reviews** and fill in **New review**: a name, the baseline, reviewers and approvers.
 3. Choose **Start review**.
 
-Reviewers and approvers must have the project role Reviewer or higher. They cannot be changed afterwards.
+Reviewers and approvers must have the project role Reviewer or higher.
+
+Starting the review sets **Status** to **In review** on each item that has that option, as a new version that only changes Status. Items already Approved, and items edited after the baseline, are left alone.
+
+## Change who takes part (Editor or Admin)
+
+While the review is open, the people table has **Remove** on each row and **Add a person** under it.
+
+- A removed person's marks and comments stay, but their marks stop counting and they can no longer mark or sign.
+- An approver who has signed cannot be removed: their signature stands. The last person cannot be removed.
+- Adding a person who was removed gives them a fresh start.
+- A closed review cannot be changed.
+
+## My reviews
+
+The home page lists every open review you take part in, in all projects, with your part.
 
 ## Review (reviewers and approvers)
 

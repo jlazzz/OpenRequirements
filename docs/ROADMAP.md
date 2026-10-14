@@ -32,7 +32,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | I | J5 slice 8 | Section home pages | Opus | J5 slices 2 and 7 | |  |
 | I | T7 slice 1 | Rich text in steps | Opus | none | | built, merged 2026-10-14 |
 | I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | running |
-| I | J1 slice 1 | Review participants and scope | Sonnet | none | DB |  |
+| I | J1 slice 1 | Review participants and scope | Sonnet | none | DB | built 2026-10-14 ([ADR 0023](adr/0023-review-participants-and-in-review.md)) |
 | I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | |  |
 | I | J1 slice 3 | Part 11 hardening | Opus | none | DB | built, merged 2026-10-14 |
 | I | T6 | CI runs | Sonnet | none | DB | running |

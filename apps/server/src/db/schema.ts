@@ -1,4 +1,5 @@
 import type { RichNode } from "@app/shared";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
@@ -11,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -655,10 +657,14 @@ export const reviews = pgTable("reviews", {
   statusSet: boolean().notNull().default(false),
 });
 
-/** Who takes part in a review. An approver can do everything a reviewer can. Fixed when the review is created. */
+/**
+ * Who takes part in a review. An approver can do everything a reviewer can. A row is added when someone joins and
+ * only `removedAt` and `removedBy` ever change, once, when they are taken out. Taking part again is a new row.
+ */
 export const reviewParticipants = pgTable(
   "review_participants",
   {
+    id: uuid().primaryKey().defaultRandom(),
     reviewId: uuid()
       .notNull()
       .references(() => reviews.id),
@@ -666,8 +672,12 @@ export const reviewParticipants = pgTable(
       .notNull()
       .references(() => users.id),
     role: text().$type<"reviewer" | "approver">().notNull(),
+    addedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    addedBy: uuid().references(() => users.id),
+    removedAt: timestamp({ withTimezone: true }),
+    removedBy: uuid().references(() => users.id),
   },
-  (t) => [primaryKey({ columns: [t.reviewId, t.userId] })],
+  (t) => [uniqueIndex().on(t.reviewId, t.userId).where(sql`${t.removedAt} is null`)],
 );
 
 /** Append-only. What a participant recorded on an item of a review; their latest row per item is the one that counts. */

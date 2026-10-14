@@ -3104,7 +3104,7 @@
                       6,
                       7,
                       8,
-                      9
+                      10
                     ]
                   },
                   "exportedAt": {
@@ -4325,6 +4325,10 @@
                       ],
                       "additionalProperties": false,
                       "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
                         "reviewId": {
                           "type": "string",
                           "format": "uuid"
@@ -4338,6 +4342,31 @@
                             "reviewer",
                             "approver"
                           ]
+                        },
+                        "addedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "addedBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uuid"
+                        },
+                        "removedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "removedBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uuid"
                         }
                       }
                     },
@@ -4817,6 +4846,88 @@
         }
       }
     },
+    "/api/reviews/{reviewId}/participants": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "parameters": [
+          {
+            "name": "reviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userId",
+                  "role"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "role": {
+                    "enum": [
+                      "reviewer",
+                      "approver"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/reviews/{reviewId}/participants/{userId}": {
+      "delete": {
+        "tags": [
+          "reviews"
+        ],
+        "parameters": [
+          {
+            "name": "reviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/reviews/{reviewId}/sign": {
       "post": {
         "tags": [
@@ -4851,6 +4962,18 @@
             }
           }
         },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/reviews/mine": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
         "responses": {
           "default": {
             "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
