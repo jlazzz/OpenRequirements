@@ -214,9 +214,11 @@ test("sets export to ReqIF and import back through the guessed mapping as the sa
       {
         kind: "folder",
         name: "Power",
+        externalId: "_1",
         children: [
           {
             ref: "_2",
+            externalId: "_2",
             kind: "item",
             name: "Supply voltage",
             description: rich,
@@ -231,8 +233,8 @@ test("sets export to ReqIF and import back through the guessed mapping as the sa
           },
         ],
       },
-      { ref: "_3", kind: "item", name: "Max current", attributes: {} },
-      { ref: "_4", kind: "item", name: "Orphan", attributes: {} },
+      { ref: "_3", externalId: "_3", kind: "item", name: "Max current", attributes: {} },
+      { ref: "_4", externalId: "_4", kind: "item", name: "Orphan", attributes: {} },
     ],
   });
 });
@@ -329,6 +331,7 @@ test("a module in DOORS style maps headings to folders, names items by their tex
   expect(intro?.children?.[1]?.children).toEqual([
     {
       ref: "o3",
+      externalId: "o3",
       kind: "item",
       name: "Timing",
       attributes: {},
@@ -336,13 +339,20 @@ test("a module in DOORS style maps headings to folders, names items by their tex
     },
     {
       ref: "o4",
+      externalId: "o4",
       kind: "item",
       name: "Shutdown takes 2 s.",
       attributes: {},
       description: { type: "doc", content: [p(text("Shutdown takes 2 s."))] },
     },
   ]);
-  expect(mapped.body.sets[0]?.nodes[1]).toEqual({ ref: "o5", kind: "item", name: "Untitled", attributes: {} });
+  expect(mapped.body.sets[0]?.nodes[1]).toEqual({
+    ref: "o5",
+    externalId: "o5",
+    kind: "item",
+    name: "Untitled",
+    attributes: {},
+  });
   // The source is the downstream item unless the mapping says otherwise.
   expect(mapped.body.links).toEqual([{ typeId: "lt", upstream: "o2", downstream: "o4" }]);
   expect(mapped).toMatchObject({ items: 4, folders: 2 });

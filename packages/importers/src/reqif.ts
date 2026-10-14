@@ -12,7 +12,7 @@ import {
   type XmlNode,
 } from "@app/reqif";
 import { docToText, type RichNode, type Step, stepsToText, textToDoc } from "@app/shared";
-import { coerce, type ImportField, type Target } from "./mapping.ts";
+import { coerce, type ImportField, type ImportNode, nameFromText, type Target, type TreeImport } from "./mapping.ts";
 
 const x = (name: string, attrs: Record<string, string> = {}, children: XmlNode[] = []): XmlElement => ({
   name,
@@ -553,20 +553,9 @@ export function guessReqifMapping(
   };
 }
 
-/** A folder or item to create. `ref` names an item so that a relationship in the same request can point at it. */
-export type ImportNode = {
-  ref?: string;
-  kind: "folder" | "item";
-  name: string;
-  description?: RichNode;
-  attributes?: Record<string, unknown>;
-  children?: ImportNode[];
-};
-/** The body of `POST /api/projects/:projectId/import`. */
-export type TreeImport = {
-  sets: { setId: string; nodes: ImportNode[] }[];
-  links: { typeId: string; upstream: string; downstream: string }[];
-};
+// This tool writes an object's identifier as "_" and the node's id, so a file it exported finds its own nodes again.
+const OWN_ID = /^_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const externalIdOf = (id: string) => OWN_ID.exec(id)?.[1] ?? id.slice(0, 200);
 
 const MAX_NAME = 200;
 const MAX_TEXT = 10_000;
@@ -631,9 +620,7 @@ export function mapReqif(
           } else attributes[target] = result.value;
         }
       }
-      // Requirements often have no heading of their own: the start of the text names them.
-      const firstLine = description ? (docToText(description).trim().split("\n")[0] ?? "") : "";
-      const fallback = firstLine.length > 100 ? `${firstLine.slice(0, 99)}…` : firstLine;
+      const fallback = description ? nameFromText(docToText(description)) : "";
       return { name: (name || fallback || object.name || "Untitled").slice(0, MAX_NAME), description, attributes };
     };
 
@@ -648,15 +635,21 @@ export function mapReqif(
         items++;
         const item: ImportNode = { kind: "item", name, attributes };
         if (description) item.description = description;
-        // An object listed twice becomes two items; relationships go to the first.
-        if (!placed.has(object.id)) item.ref = object.id;
+        // An object listed twice becomes two items; relationships and a later import go to the first.
+        if (!placed.has(object.id)) {
+          item.ref = object.id;
+          item.externalId = externalIdOf(object.id);
+        }
         placed.add(object.id);
         return item;
       };
       if (node.children.length === 0) return [asItem()];
       folders++;
       const first = description ? [asItem()] : [];
-      return [{ kind: "folder", name, children: [...first, ...node.children.flatMap(convert)] }];
+      const folder: ImportNode = { kind: "folder", name, children: [...first, ...node.children.flatMap(convert)] };
+      // The folder's own text, if any, became an item that holds the object's id.
+      if (!description && !placed.has(object.id)) folder.externalId = externalIdOf(object.id);
+      return [folder];
     };
     bySet.set(set.id, [...(bySet.get(set.id) ?? []), ...spec.children.flatMap(convert)]);
   }

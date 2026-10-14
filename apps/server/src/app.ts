@@ -21,7 +21,7 @@ import { nodeRoutes } from "./nodes.ts";
 import { notificationRoutes } from "./notifications.ts";
 import { projectRoutes } from "./projects.ts";
 import { recoveryRoutes } from "./recovery.ts";
-import { reqifRoutes } from "./reqif.ts";
+import { exportRoutes } from "./export.ts";
 import { reviewRoutes } from "./reviews.ts";
 import { testPlanRoutes } from "./testplans.ts";
 import { testRunRoutes } from "./testruns.ts";
@@ -397,7 +397,7 @@ export async function buildApp(
   attachmentRoutes(context, attachmentsDir, maxAttachmentBytes);
   backupRoutes(context, attachmentsDir, maxAttachmentBytes);
   importRoutes(context);
-  reqifRoutes(context, attachmentsDir);
+  exportRoutes(context, attachmentsDir);
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

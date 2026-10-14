@@ -1,3 +1,4 @@
+import { textToDoc } from "@app/shared";
 import { expect, test } from "vitest";
 import { parseCsv, toCsv } from "./csv.ts";
 import { guessTargets, mapRows } from "./mapping.ts";
@@ -38,18 +39,20 @@ const fields = [
 ];
 
 test("column headers are matched to the name, the description and fields of the same name", () => {
-  expect(guessTargets(["Title", " STATUS ", "Text", "Owner", "Name"], fields)).toEqual([
+  expect(guessTargets(["Title", " STATUS ", "Text", "Owner", "Name", "ID", "Folder"], fields)).toEqual([
     "name",
     "f-status",
     "description",
     "",
     "",
+    "uid",
+    "folder",
   ]);
 });
 
 test("rows become items with typed field values; bad cells are reported by spreadsheet row", () => {
   const targets = ["name", "description", "f-status", "f-weight", "f-safety", "f-due", "f-tags", "f-note", ""];
-  const { items, errors } = mapRows(
+  const { nodes, items, errors } = mapRows(
     [
       ["Supply", "5 V DC", "approved", "1.5", "Yes", "2026-10-13T00:00:00.000Z", "blue; Red", "n/a", "ignored"],
       ["Bare", "", "", "", "", "", "", "", ""],
@@ -59,10 +62,12 @@ test("rows become items with typed field values; bad cells are reported by sprea
     targets,
     fields,
   );
-  expect(items.slice(0, 2)).toEqual([
+  expect(items).toBe(3);
+  expect(nodes.slice(0, 2)).toEqual([
     {
+      kind: "item",
       name: "Supply",
-      description: "5 V DC",
+      description: textToDoc("5 V DC"),
       attributes: {
         "f-status": "Approved",
         "f-weight": 1.5,
@@ -72,7 +77,7 @@ test("rows become items with typed field values; bad cells are reported by sprea
         "f-note": "n/a",
       },
     },
-    { name: "Bare", description: "", attributes: {} },
+    { kind: "item", name: "Bare" },
   ]);
   expect(errors.map((e) => e.slice(0, 13))).toEqual([
     "Row 4: the na",
@@ -83,4 +88,48 @@ test("rows become items with typed field values; bad cells are reported by sprea
     'Row 5: Tags "',
   ]);
   expect(mapRows([["x"]], [""], fields).errors).toEqual(["Choose the column that holds the item name."]);
+});
+
+test("a Folder column builds folders, reusing existing ones; a UID column names the item to update", () => {
+  const existing = [
+    { id: "f1", parentId: null, name: "Power" },
+    { id: "f2", parentId: "f1", name: "Supply" },
+    { id: "f3", parentId: null, name: "Supply" },
+  ];
+  const { nodes, errors } = mapRows(
+    [
+      ["SYS-001", "Power / Supply", "Voltage"],
+      ["", "Power/ Supply /New", "Current"],
+      ["", "", "Loose"],
+      ["", "Other", "Elsewhere"],
+      ["", " Power ", "Direct"],
+    ],
+    ["uid", "folder", "name"],
+    [],
+    existing,
+  );
+  expect(errors).toEqual([]);
+  expect(nodes).toEqual([
+    {
+      kind: "folder",
+      name: "Power",
+      id: "f1",
+      children: [
+        {
+          kind: "folder",
+          name: "Supply",
+          id: "f2",
+          children: [
+            { kind: "item", uid: "SYS-001", name: "Voltage" },
+            { kind: "folder", name: "New", children: [{ kind: "item", name: "Current" }] },
+          ],
+        },
+        { kind: "item", name: "Direct" },
+      ],
+    },
+    { kind: "item", name: "Loose" },
+    { kind: "folder", name: "Other", children: [{ kind: "item", name: "Elsewhere" }] },
+  ]);
+  // Paths start at the folder imported into.
+  expect(mapRows([["Supply", "X"]], ["folder", "name"], [], existing, "f1").nodes[0]).toMatchObject({ id: "f2" });
 });

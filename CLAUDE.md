@@ -92,7 +92,7 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/reqif.ts, src/notifications.ts, src/recovery.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/export.ts, src/notifications.ts, src/recovery.ts   Feature route files: one per feature, taking `AppContext`
     src/mail.ts     Email outbox, the mail loop, and `notify()`, which writes notifications in the caller's transaction
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions

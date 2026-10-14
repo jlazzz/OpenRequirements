@@ -179,6 +179,8 @@ export const nodes = pgTable(
     name: text(),
     // Items only, e.g. SYS-042. Never reused.
     uid: text(),
+    // The identifier the node had in the file it was imported from (a ReqIF identifier), so a re-import updates it.
+    externalId: text(),
     // Order among siblings.
     position: integer().notNull(),
     // Items only: UID, current name, description text and field values, for search. Derived from the latest revision.

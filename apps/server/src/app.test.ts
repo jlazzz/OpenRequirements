@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { guessReqifMapping, mapReqif, summarizeReqif } from "@app/importers";
+import { guessReqifMapping, mapReqif, readDocx, summarizeReqif } from "@app/importers";
 import { parseReqif, type ReqifAttribute, type ReqifNode, type ReqifValue, unzip, writeXml } from "@app/reqif";
 import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
@@ -1061,43 +1061,133 @@ test("a baseline freezes items, folders and relationships; later changes do not 
   expect(await auditActions()).toContain("baseline.create");
 });
 
-test("a spreadsheet import creates all its items with UIDs, field values and one audit event, or nothing", async () => {
-  const { cookie, sys, add } = await projectWithSets();
-  await add(sys.id, { kind: "item", name: "Existing" });
-  const folder = (await add(sys.id, { kind: "folder", name: "Imported" })).json().node.id;
-  const { fields } = (await get(`/api/sets/${sys.id}/items`, cookie)).json();
-  const status = fields.find((f: { name: string }) => f.name === "Status").id;
-  const bring = (body: object, as = cookie) => post(`/api/sets/${sys.id}/import`, body, as);
-
-  const bad = await bring({ items: [{ name: "Fine" }, { name: "Broken", attributes: { [status]: "Bogus" } }] });
-  expect(bad.statusCode).toBe(400);
-  expect(bad.json().error).toContain("Item 2 (Broken)");
-  expect((await bring({ items: [] })).statusCode).toBe(400);
-  expect((await bring({ items: [{ name: "A" }], parentId: sys.id })).statusCode).toBe(400);
-  expect((await bring({ items: [{ name: "A" }] }, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(
-    403,
+test("an import updates the items it names by UID, id or external id, and a dry run writes nothing", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const fields = (await get(`/api/sets/${sys.id}/items`, cookie)).json().fields as { id: string; name: string }[];
+  const status = fields.find((f) => f.name === "Status")?.id as string;
+  const rationale = fields.find((f) => f.name === "Rationale")?.id as string;
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const kept = (await add(sys.id, { kind: "item", name: "Kept", parentId: folder })).json().node.id;
+  const edited = (await add(sys.id, { kind: "item", name: "Edited" })).json().node.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
+  await post("/api/links", { upstreamId: need, downstreamId: edited, typeId }, cookie);
+  await post(
+    `/api/items/${edited}/revisions`,
+    { baseRevision: 1, name: "Edited", description: textToDoc("old"), attributes: { [rationale]: "Why" } },
+    cookie,
   );
+  const run = (body: object, as = cookie) => post(`/api/projects/${projectId}/import`, body, as);
+  const body = {
+    sets: [
+      {
+        setId: sys.id,
+        nodes: [
+          {
+            kind: "folder",
+            id: folder,
+            name: "Power",
+            children: [
+              { kind: "item", uid: "SYS-001", name: "Kept", ref: "kept" },
+              { kind: "item", name: "New one", externalId: "REQ-9", ref: "new" },
+            ],
+          },
+          // The description and the fields the import leaves out stay as they are.
+          { kind: "item", uid: "SYS-002", name: "Edited again", attributes: { [status]: "Approved" }, ref: "edited" },
+        ],
+      },
+      { setId: un.id, nodes: [{ kind: "item", id: need, name: "Need", ref: "need" }] },
+    ],
+    links: [
+      { typeId, upstream: "need", downstream: "edited" },
+      { typeId, upstream: "kept", downstream: "new" },
+    ],
+  };
 
-  const done = await bring({
-    parentId: folder,
+  const bad: [object, string][] = [
+    [{ sets: [{ setId: sys.id, nodes: [{ kind: "item", uid: "SYS-404", name: "X" }] }] }, "SYS-404 is not in this set"],
+    [{ sets: [{ setId: sys.id, nodes: [{ kind: "item", id: folder, name: "X" }] }] }, "matches a folder"],
+    [{ sets: [{ setId: un.id, nodes: [{ kind: "item", id: edited, name: "X" }] }] }, "not in this set"],
+    [
+      {
+        sets: [
+          {
+            setId: sys.id,
+            nodes: [
+              { kind: "item", uid: "SYS-001", name: "X" },
+              { kind: "item", id: kept, name: "Y" },
+            ],
+          },
+        ],
+      },
+      "names it twice",
+    ],
+    [
+      {
+        sets: [
+          { setId: sys.id, nodes: [{ kind: "item", uid: "SYS-001", name: "X", attributes: { [status]: "Nope" } }] },
+        ],
+      },
+      "Status must be",
+    ],
+  ];
+  for (const [payload, message] of bad) {
+    const res = await run(payload);
+    expect(res.statusCode, message).toBe(400);
+    expect(res.json().error, message).toContain(message);
+  }
+
+  const before = (await auditActions()).length;
+  const preview = await run({ ...body, dryRun: true });
+  expect(preview.statusCode).toBe(200);
+  expect(preview.json()).toEqual({
+    created: { items: 1, folders: 0, links: 1 },
+    changed: 1,
+    unchanged: 2,
     items: [
-      { name: " Supply voltage ", description: "5 V DC\nfrom USB", attributes: { [status]: "Approved" } },
-      { name: "Max current" },
+      { uid: "SYS-001", name: "Kept", status: "unchanged" },
+      { uid: "SYS-003", name: "New one", status: "added" },
+      { uid: "SYS-002", name: "Edited again", status: "changed" },
+      { uid: "UN-001", name: "Need", status: "unchanged" },
     ],
   });
-  expect(done.statusCode).toBe(201);
-  // The failed import used up no UIDs.
-  expect(done.json()).toEqual({ created: 2, firstUid: "SYS-002", lastUid: "SYS-003" });
+  expect((await auditActions()).length).toBe(before);
+  expect((await detail()).nodes).toHaveLength(4);
+  expect((await run(body, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(403);
 
-  const list = (await get(`/api/sets/${sys.id}/items`, cookie)).json().items;
-  expect(list.find((i: { uid: string }) => i.uid === "SYS-002")).toMatchObject({
-    name: "Supply voltage",
-    description: textToDoc("5 V DC\nfrom USB"),
-    attributes: { [status]: "Approved" },
-    revision: 1,
+  // The importer's own draft of an item the import would change must be saved or discarded first.
+  await send("PUT", `/api/items/${edited}/draft`, cookie, {
+    baseRevision: 2,
+    name: "Draft",
+    description: textToDoc(""),
+    attributes: {},
   });
-  expect((await add(sys.id, { kind: "item", name: "Next" })).json().node.uid).toBe("SYS-004");
-  expect((await auditActions()).filter((a) => a === "item.import")).toHaveLength(1);
+  expect((await run(body)).statusCode).toBe(409);
+  await send("DELETE", `/api/items/${edited}/draft`, cookie);
+
+  const done = await run(body);
+  expect(done.statusCode).toBe(201);
+  expect(done.json()).toMatchObject({ created: { items: 1, folders: 0, links: 1 }, changed: 1, unchanged: 2 });
+  const item = (await get(`/api/items/${edited}`, cookie)).json().item;
+  expect(item).toMatchObject({
+    name: "Edited again",
+    revision: 3,
+    description: textToDoc("old"),
+    attributes: { [rationale]: "Why", [status]: "Approved" },
+  });
+  // The existing relationship is now suspect; it was not added again.
+  const all = (await get(`/api/projects/${projectId}/links`, cookie)).json().links;
+  expect(all).toHaveLength(2);
+  expect(all.find((l: { downstreamId: string }) => l.downstreamId === edited).changed.downstream).toBe(true);
+  const events = (await db.select().from(auditEvents)).filter((e) => e.action === "item.import");
+  expect(events.map((e) => e.data?.label)).toEqual(["1 item added, 1 item changed in System Requirements"]);
+
+  // A second run of the same file changes nothing: the new item is found by its external id.
+  const again = (await run(body)).json();
+  expect(again).toMatchObject({ created: { items: 0, folders: 0, links: 0 }, changed: 0, unchanged: 4 });
+  expect((await detail()).nodes).toHaveLength(5);
+  expect((await db.select().from(auditEvents)).filter((e) => e.action === "item.import")).toHaveLength(1);
 });
 
 test("a backup restores as a new project with history, relationships, comments, baselines and images", async () => {
@@ -2220,7 +2310,7 @@ test("a structured import creates folders, items and relationships with one audi
 
   const res = await run(body);
   expect(res.statusCode).toBe(201);
-  expect(res.json()).toEqual({ created: { items: 4, folders: 2, links: 2 } });
+  expect(res.json()).toMatchObject({ created: { items: 4, folders: 2, links: 2 }, changed: 0, unchanged: 0 });
   const tree = (await detail()).nodes as { id: string; parentId: string | null; name: string; uid: string | null }[];
   const named = (name: string) => tree.find((n) => n.name === name);
   // UIDs follow the order of the file and continue after what the set already held.
@@ -2381,7 +2471,7 @@ test("a baseline exports to ReqIF and imports into another project as the same c
   const mapped = mapReqif(file, mapping, targets, (data) => uploaded.get(data) ?? null);
   expect(mapped.warnings).toEqual([]);
   const imported = await post(`/api/projects/${second}/import`, mapped.body, cookie);
-  expect(imported.json()).toEqual({ created: { items: 3, folders: 1, links: 2 } });
+  expect(imported.json()).toMatchObject({ created: { items: 3, folders: 1, links: 2 } });
 
   const secondBaseline = (await post(`/api/projects/${second}/baselines`, { name: "Design review 1.0" }, cookie)).json()
     .id;
@@ -2433,6 +2523,106 @@ test("a baseline exports to ReqIF and imports into another project as the same c
   expect(first.relations).toHaveLength(2);
   expect(shape(xmlAgain)).toEqual(first);
   expect(Buffer.from([...again].find(([name]) => name.startsWith("files/"))?.[1] as Uint8Array).equals(png)).toBe(true);
+
+  // The same file again changes nothing: each item is found by the identifier it was imported with.
+  const twice = (await post(`/api/projects/${second}/import`, mapped.body, cookie)).json();
+  expect(twice).toMatchObject({ created: { items: 0, folders: 0, links: 0 }, changed: 0, unchanged: 3 });
+  // A file this project exported comes back to its own items, and an edit in the file becomes a new version.
+  const own = parseReqif((await get(`/api/sets/${sys.id}/reqif`, cookie)).body);
+  const ownMapping = guessReqifMapping(
+    summarizeReqif(own),
+    [{ ...sys, name: "System Requirements", fields: sysFields }],
+    [],
+  );
+  // The images are already stored here: files/<attachment id>.png.
+  const back = mapReqif(own, ownMapping, [{ ...sys, name: "System Requirements", fields: sysFields }], (data) =>
+    data.startsWith("files/") ? `/api/attachments/${data.slice(6, 42)}` : null,
+  );
+  const top = back.body.sets[0]?.nodes.find((n) => n.kind === "item");
+  if (top) top.name = "Edited in DOORS";
+  const returned = (await post(`/api/projects/${projectId}/import`, back.body, cookie)).json();
+  expect(returned).toMatchObject({ created: { items: 0, folders: 0 }, changed: 1 });
+  expect(returned.items.find((i: { status: string }) => i.status === "changed")).toMatchObject({
+    uid: "SYS-003",
+    name: "Edited in DOORS",
+  });
+});
+
+test("a set and a baseline export to Word with folders as headings, items, fields and images", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const png = Buffer.alloc(33);
+  png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  png.writeUInt32BE(200, 16);
+  png.writeUInt32BE(100, 20);
+  const { src } = (
+    await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/attachments`,
+      payload: png,
+      headers: { cookie, "content-type": "image/png" },
+    })
+  ).json();
+  const fields = (await get(`/api/sets/${sys.id}/items`, cookie)).json().fields as { id: string; name: string }[];
+  const status = fields.find((f) => f.name === "Status")?.id as string;
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const item = (await add(sys.id, { kind: "item", name: "Supply voltage", parentId: folder })).json().node.id;
+  await post(
+    `/api/items/${item}/revisions`,
+    {
+      baseRevision: 1,
+      name: "Supply voltage",
+      description: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "5 V" }] },
+          { type: "image", attrs: { src } },
+        ],
+      },
+      attributes: { [status]: "Approved" },
+    },
+    cookie,
+  );
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "Release 1" }, cookie)).json().id;
+  await post(
+    `/api/items/${item}/revisions`,
+    { baseRevision: 2, name: "Renamed later", description: { type: "doc" }, attributes: {} },
+    cookie,
+  );
+
+  const read = async (url: string) => {
+    const res = await get(url, (await person(`Vera ${url.length}`, "viewer")).cookie);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    const files = await unzip(res.rawPayload);
+    const { blocks } = readDocx(files, (path) => (files.has(path) ? src : null));
+    return {
+      disposition: res.headers["content-disposition"],
+      files,
+      blocks,
+      xml: new TextDecoder().decode(files.get("word/document.xml")),
+    };
+  };
+  const current = await read(`/api/sets/${sys.id}/docx`);
+  expect(current.disposition).toBe('attachment; filename="System_Requirements.docx"');
+  expect(current.blocks.map((b) => (b.kind === "content" ? b.node.type : `${b.kind} ${b.text}`))).toEqual([
+    "heading Power",
+    "title SYS-001 Renamed later",
+  ]);
+  expect(current.xml).toContain("Current version, exported");
+
+  const frozen = await read(`/api/baselines/${baselineId}/docx`);
+  expect(frozen.disposition).toBe('attachment; filename="Release_1.docx"');
+  // The baseline as it was frozen. Only System Requirements has items, so there is no heading per set.
+  expect(frozen.blocks.map((b) => (b.kind === "content" ? b.node.type : `${b.kind} ${b.text}`))).toEqual([
+    "heading Power",
+    "title SYS-001 Supply voltage",
+    "paragraph",
+    "image",
+  ]);
+  expect(frozen.files.has("word/media/image1.png")).toBe(true);
+  expect(frozen.xml).toContain("Approved");
+  expect(frozen.xml).toContain("Baseline of ");
 });
 
 test("evidence files of several kinds are attached to results, to runs and their steps, and to a CI report", async () => {
