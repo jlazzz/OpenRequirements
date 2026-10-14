@@ -25,7 +25,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 ## Decisions needed from the owner
 
 1. **Edit conflicts (J3):** merge screen with "keep mine / take theirs" per field. Recommended. The alternative is locking an item while someone edits it.
-2. **Test terms (T2):** Plan, Cycle, Run, as in Jama. Recommended. The alternative is Plan and Run only, as in TestRail.
+2. **Test terms (T2):** decided 2026-10-13: Plan, Cycle, Run, as in Jama.
 3. **Signing with SSO (H):** an SSO user signs by logging in again at the identity provider. The alternative is a separate signing PIN.
 4. **New dependencies:** `docx`, `mammoth`, `fast-xml-parser`, `fflate` (zip), `nodemailer`, `openid-client`, `@fastify/swagger`, `@fastify/helmet`. Each replaces far more than a few lines.
 
@@ -153,7 +153,6 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 2. **Test cycles and runs.** Tables `test_cycles` and `test_runs`. Starting a cycle makes one run per plan case and freezes the test case's current version. Options at start: all cases, one group, or only those that failed or were blocked in the last cycle. Assign runs one by one or in bulk. A cycle is closed for good, like a review.
 3. **Run rule and results.** Pure module `domain/testrun.ts`: a run's state from its latest step results. Any fail gives failed. Otherwise any blocked gives blocked. Every step passed gives passed. Some steps done gives in progress. None gives not started. Finishing a run writes the verification result at the frozen version, so a test case edited mid-cycle is out of date by the existing rule. JUnit import takes an optional cycle and fills its runs. ADR 0012 records the model.
 
-**Owner decision:** number 2 in the list above.
 
 ## T3. Manual execution screen
 

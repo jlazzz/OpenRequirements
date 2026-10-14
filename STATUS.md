@@ -38,6 +38,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **Bundle D (test steps, plans, cycles, runs, execution screen): approved by the owner, not started.** Terms decided: Plan, Cycle, Run.
 - **ReqIF import and export: built, waiting for the owner's test. Word import starts after that feedback.**
 - Reviews and approvals: built, waiting for the owner's test.
 - Verification tracking: built, waiting for the owner's test.
@@ -83,7 +84,7 @@ Known gaps left for later milestones or owner decision:
 ## Open decisions
 
 - Project name
-- Four roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): edit conflicts, test terms, signing with SSO, new dependencies
+- Three roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): edit conflicts, signing with SSO, new dependencies
 - Three design details in [docs/DESIGN.md](docs/DESIGN.md) section 11
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance
