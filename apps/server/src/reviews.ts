@@ -151,7 +151,28 @@ export function reviewRoutes({
         )
         .where(eq(reviews.projectId, projectId))
         .orderBy(desc(reviews.createdAt));
-      return { reviews: rows };
+      // Progress per review: items marked by anyone, items every approver approved, and whether it waits for this person.
+      // shortcut: loads each review whole, count in SQL when a project has hundreds of reviews
+      const userId = req.user?.id as string;
+      const withProgress = await Promise.all(
+        rows.map(async (row) => {
+          const loaded = await loadReview(db, row.id);
+          if (!loaded) return { ...row, total: 0, reviewed: 0, approved: 0, waiting: false };
+          const { items, marks, markOf, approvers, signed } = loaded;
+          const marked = new Set(marks.filter((m) => m.mark !== "cleared").map((m) => m.itemId));
+          const approved = items.filter(
+            (item) => itemOutcome(approvers.map((a) => markOf(item.id, a.userId))) === "approved",
+          ).length;
+          const mineDone = items.filter((item) => markOf(item.id, userId) && markOf(item.id, userId) !== "cleared");
+          const waiting =
+            row.state === "open" &&
+            (row.myRole === "approver"
+              ? !signed.some((s) => s.userId === userId)
+              : row.myRole === "reviewer" && mineDone.length < items.length);
+          return { ...row, total: items.length, reviewed: marked.size, approved, waiting };
+        }),
+      );
+      return { reviews: withProgress };
     },
   );
 

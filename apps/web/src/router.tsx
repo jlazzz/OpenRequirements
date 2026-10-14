@@ -16,7 +16,7 @@ import { SearchPage } from "./SearchPage.tsx";
 import { FolderPage, SetPage } from "./SetView.tsx";
 import { SuspectPage } from "./SuspectPage.tsx";
 import { ActivityPage, MembersPage } from "./TeamPages.tsx";
-import { TestCyclePage, TestPlanPage, TestPlansPage, TestRunPage } from "./TestPages.tsx";
+import { TestCyclePage, TestPlanPage, TestPlansPage, TestRunPage, TestRunsPage } from "./TestPages.tsx";
 import { TrashPage } from "./TrashPage.tsx";
 import { TypesPage } from "./TypesPage.tsx";
 import { InvitePage, ResetPasswordPage, UsersPage } from "./UsersPage.tsx";
@@ -73,7 +73,15 @@ const projectChildren = [
   createRoute({ ...inProject, path: "trash", component: TrashPage }),
   createRoute({ ...inProject, path: "suspect", component: SuspectPage }),
   createRoute({ ...inProject, path: "baselines", component: BaselinesPage }),
-  createRoute({ ...inProject, path: "baselines/$baselineId", component: BaselinePage }),
+  createRoute({
+    ...inProject,
+    path: "baselines/$baselineId",
+    component: BaselinePage,
+    // The baseline to compare with, so a comparison picked on the Baselines page can be shared as a link.
+    validateSearch: (search): { with?: string } => ({
+      with: typeof search.with === "string" ? search.with : undefined,
+    }),
+  }),
   createRoute({ ...inProject, path: "import", component: ReqifImportPage }),
   createRoute({ ...inProject, path: "reviews", component: ReviewsPage }),
   createRoute({ ...inProject, path: "reviews/$reviewId", component: ReviewPage }),
@@ -81,6 +89,7 @@ const projectChildren = [
   createRoute({ ...inProject, path: "test-plans/$testPlanId", component: TestPlanPage }),
   createRoute({ ...inProject, path: "cycles/$testCycleId", component: TestCyclePage }),
   createRoute({ ...inProject, path: "runs/$testRunId", component: TestRunPage }),
+  createRoute({ ...inProject, path: "test-runs", component: TestRunsPage }),
   createRoute({ ...inProject, path: "reports", component: ReportsPage }),
   createRoute({ ...inProject, path: "ci-runs", component: CiRunsPage }),
   createRoute({ ...inProject, path: "ci-runs/$ciRunId", component: CiRunPage }),

@@ -31,5 +31,10 @@ The button left of your name in the top bar switches between light and dark. Unt
 ## Folders and the side bar
 
 - A set or folder in List view shows its **sub-folders** above its items, each with the number of items inside. Click one to open it.
-- In the explorer's lower part, **Baselines**, **Reviews**, **Test plans**, **Test runs** and **Reports** open and close like folders. They list the newest baselines, open reviews, each plan with its open cycles under it, your runs then open cycles, and the reports. At most 10 are listed; "All …" opens the full page.
+- In the explorer's lower part, **Baselines**, **Reviews**, **Test plans**, **Test runs** and **Reports** open and close like folders. They list the newest baselines, open reviews, each plan with its open cycles under it, your runs then open cycles, and the reports. At most 10 are listed; "All …" opens the full page. Each section's heading opens its own page:
+
+- **Baselines:** items, reviews and test cycles on each baseline. Tick two and choose **Compare ticked baselines**.
+- **Reviews:** tabs **Waiting for me**, **Open** and **Closed**; each row shows items reviewed and approved.
+- **Test plans:** each plan's newest cycle as a progress bar, and **Start cycle**.
+- **Test runs:** runs in open cycles, yours first.
 - What is open stays open in this browser.

@@ -189,6 +189,29 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
     };
   });
 
+  // Runs in the project's open cycles, for the Test runs page: who they are assigned to, and which plan and cycle.
+  app.get(
+    "/api/projects/:projectId/test-runs",
+    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    async (req, reply) => {
+      const { projectId } = req.params as { projectId: string };
+      if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
+      const open = and(eq(testPlans.projectId, projectId), isNull(testCycles.closedAt), isNull(testPlans.deletedAt));
+      const cycles = await db
+        .select({ id: testCycles.id, name: testCycles.name, planId: testPlans.id, plan: testPlans.name })
+        .from(testCycles)
+        .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+        .where(open)
+        .orderBy(desc(testCycles.createdAt));
+      const plan = new Map(cycles.map((cycle) => [cycle.id, cycle]));
+      const runs = await loadRuns(db, open);
+      return {
+        cycles,
+        runs: runs.map((run) => ({ ...runSummary(run), plan: plan.get(run.cycleId)?.plan ?? "" })),
+      };
+    },
+  );
+
   // One cycle with its runs. The runs carry their state and progress, not the text of their steps.
   app.get(
     "/api/test-cycles/:testCycleId",

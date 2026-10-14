@@ -2838,6 +2838,29 @@
         }
       }
     },
+    "/api/projects/{projectId}/test-runs": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/trash": {
       "get": {
         "tags": [

@@ -12,6 +12,7 @@ import {
   PasswordInput,
   Stack,
   Table,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -53,6 +54,8 @@ type ReviewRow = {
   /** The signed-in user's part in the review, if they have one. */
   myRole: Part | null;
 };
+/** A row of the list: with how far the review has got, and whether it waits for the signed-in person. */
+type ReviewListRow = ReviewRow & { total: number; reviewed: number; approved: number; waiting: boolean };
 type Signature = { meaning: "approval" | "rejection"; signerName: string; signedAt: string; valid: boolean };
 type ReviewDetail = {
   review: ReviewRow & { closedBy: string | null; statusSet: boolean };
@@ -84,7 +87,7 @@ export function ReviewsPage() {
   const queryKey = ["projects", projectId, "reviews"];
   const list = useQuery({
     queryKey,
-    queryFn: () => api<{ reviews: ReviewRow[] }>(`projects/${projectId}/reviews`),
+    queryFn: () => api<{ reviews: ReviewListRow[] }>(`projects/${projectId}/reviews`),
     enabled: Boolean(project),
   });
   const editor = canEdit(project?.role);
@@ -100,6 +103,7 @@ export function ReviewsPage() {
   });
   const [reviewers, setReviewers] = useState<string[]>([]);
   const [approvers, setApprovers] = useState<string[]>([]);
+  const [picked, setPicked] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: (body: object) => api(`projects/${projectId}/reviews`, body),
     onSuccess: () => {
@@ -114,6 +118,13 @@ export function ReviewsPage() {
   for (const admin of people.data?.instanceAdmins ?? []) able.set(admin.userId, admin.name);
   for (const member of people.data?.members ?? []) if (member.role !== "viewer") able.set(member.userId, member.name);
   const choices = [...able].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  const all = list.data?.reviews ?? [];
+  const waiting = all.filter((review) => review.waiting);
+  // Opens on what needs this person; when nothing does, on the open reviews.
+  const tab = picked ?? (waiting.length > 0 ? "waiting" : "open");
+  const shown = all.filter((review) =>
+    tab === "waiting" ? review.waiting : tab === "open" ? review.state === "open" : review.state !== "open",
+  );
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -142,6 +153,16 @@ export function ReviewsPage() {
       )}
       {list.data?.reviews.length === 0 && <Text c="dimmed">No reviews yet.</Text>}
       {list.data && list.data.reviews.length > 0 && (
+        <Tabs value={tab} onChange={setPicked}>
+          <Tabs.List>
+            <Tabs.Tab value="waiting">Waiting for me ({waiting.length})</Tabs.Tab>
+            <Tabs.Tab value="open">Open ({all.filter((r) => r.state === "open").length})</Tabs.Tab>
+            <Tabs.Tab value="closed">Closed ({all.filter((r) => r.state !== "open").length})</Tabs.Tab>
+          </Tabs.List>
+        </Tabs>
+      )}
+      {list.data && list.data.reviews.length > 0 && shown.length === 0 && <Text c="dimmed">Nothing here.</Text>}
+      {shown.length > 0 && (
         <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Reviews">
           <Table.Thead>
             <Table.Tr>
@@ -149,12 +170,13 @@ export function ReviewsPage() {
               <Table.Th>State</Table.Th>
               <Table.Th>Baseline</Table.Th>
               <Table.Th>Your part</Table.Th>
+              <Table.Th>Progress</Table.Th>
               <Table.Th>Created</Table.Th>
               <Table.Th>By</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {list.data.reviews.map((review) => (
+            {shown.map((review) => (
               <Table.Tr key={review.id}>
                 <Table.Td>
                   <RouterAnchor
@@ -170,6 +192,11 @@ export function ReviewsPage() {
                 </Table.Td>
                 <Table.Td>{review.baseline}</Table.Td>
                 <Table.Td>{review.myRole === "approver" ? "Approver" : review.myRole ? "Reviewer" : ""}</Table.Td>
+                <Table.Td>
+                  <Text size="sm">
+                    {review.reviewed} of {review.total} reviewed, {review.approved} approved
+                  </Text>
+                </Table.Td>
                 <Table.Td>{when(review.createdAt)}</Table.Td>
                 <Table.Td>{review.author}</Table.Td>
               </Table.Tr>

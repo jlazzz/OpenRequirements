@@ -3,6 +3,7 @@ import {
   Alert,
   Badge,
   Button,
+  Checkbox,
   Divider,
   Group,
   Modal,
@@ -16,7 +17,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import {
   type Attributes,
@@ -38,6 +39,11 @@ import { useVerification, VerificationBadge } from "./Verification.tsx";
 import { RevisionDiff } from "./Versions.tsx";
 
 type Baseline = { id: string; name: string; setId: string | null; createdAt: string; author: string };
+type BaselineRow = Baseline & {
+  items: number;
+  reviews: { id: string; name: string; state: string }[];
+  cycles: { id: string; name: string; closedAt: string | null }[];
+};
 /** A folder or item as the baseline froze it. Items carry the revision that was current then. */
 type Entry = TreeNode & { revision: number | null; description: RichNode | null; attributes: Attributes | null };
 /** `suspect` is null when the baseline was made before suspect links were recorded. */
@@ -57,9 +63,13 @@ export function BaselinesPage() {
   const queryKey = ["projects", projectId, "baselines"];
   const list = useQuery({
     queryKey,
-    queryFn: () => api<{ baselines: Baseline[] }>(`projects/${projectId}/baselines`),
+    queryFn: () => api<{ baselines: BaselineRow[] }>(`projects/${projectId}/baselines`),
     enabled: Boolean(project),
   });
+  const navigate = useNavigate();
+  const [ticked, setTicked] = useState<string[]>([]);
+  const tick = (id: string, on: boolean) =>
+    setTicked((current) => (on ? [...current, id].slice(-2) : current.filter((x) => x !== id)));
   const create = useMutation({
     mutationFn: (body: { name: string; setId?: string }) => api(`projects/${projectId}/baselines`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
@@ -97,8 +107,12 @@ export function BaselinesPage() {
         <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Baselines">
           <Table.Thead>
             <Table.Tr>
+              <Table.Th w={30} />
               <Table.Th>Name</Table.Th>
               <Table.Th>Covers</Table.Th>
+              <Table.Th>Items</Table.Th>
+              <Table.Th>Reviews</Table.Th>
+              <Table.Th>Test cycles</Table.Th>
               <Table.Th>Created</Table.Th>
               <Table.Th>By</Table.Th>
             </Table.Tr>
@@ -106,6 +120,13 @@ export function BaselinesPage() {
           <Table.Tbody>
             {list.data.baselines.map((baseline) => (
               <Table.Tr key={baseline.id}>
+                <Table.Td>
+                  <Checkbox
+                    aria-label={`Compare ${baseline.name}`}
+                    checked={ticked.includes(baseline.id)}
+                    onChange={(e) => tick(baseline.id, e.currentTarget.checked)}
+                  />
+                </Table.Td>
                 <Table.Td>
                   <RouterAnchor
                     to="/projects/$projectId/baselines/$baselineId"
@@ -116,12 +137,71 @@ export function BaselinesPage() {
                   </RouterAnchor>
                 </Table.Td>
                 <Table.Td>{scope(baseline.setId)}</Table.Td>
+                <Table.Td>{baseline.items}</Table.Td>
+                <Table.Td>
+                  <Stack gap={2}>
+                    {baseline.reviews.map((review) => (
+                      <Group key={review.id} gap="xs" wrap="nowrap">
+                        <RouterAnchor
+                          to="/projects/$projectId/reviews/$reviewId"
+                          params={{ projectId, reviewId: review.id }}
+                          size="sm"
+                        >
+                          {review.name}
+                        </RouterAnchor>
+                        <Text size="xs" c="dimmed">
+                          {review.state}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                </Table.Td>
+                <Table.Td>
+                  <Stack gap={2}>
+                    {baseline.cycles.map((cycle) => (
+                      <Group key={cycle.id} gap="xs" wrap="nowrap">
+                        <RouterAnchor
+                          to="/projects/$projectId/cycles/$testCycleId"
+                          params={{ projectId, testCycleId: cycle.id }}
+                          size="sm"
+                        >
+                          {cycle.name}
+                        </RouterAnchor>
+                        <Text size="xs" c="dimmed">
+                          {cycle.closedAt ? "closed" : "open"}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                </Table.Td>
                 <Table.Td>{new Date(baseline.createdAt).toLocaleString()}</Table.Td>
                 <Table.Td>{baseline.author}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
+      )}
+      {list.data && list.data.baselines.length > 1 && (
+        <Group>
+          <Button
+            variant="default"
+            disabled={ticked.length !== 2}
+            onClick={() => {
+              const [from, other] = ticked;
+              if (from && other)
+                void navigate({
+                  to: "/projects/$projectId/baselines/$baselineId",
+                  params: { projectId, baselineId: from },
+                  search: { with: other },
+                });
+            }}
+          >
+            Compare ticked baselines
+          </Button>
+          <Text size="sm" c="dimmed">
+            Tick two baselines to see what differs between them.
+          </Text>
+        </Group>
       )}
       {canEdit(project.role) && (
         <form onSubmit={onSubmit}>
@@ -175,7 +255,8 @@ const state = (v: { status: string; outOfDate: boolean }) =>
 
 /** Another baseline of the project picked from a list, and what differs between it and this one. */
 function CompareWith({ projectId, baselineId }: { projectId: string; baselineId: string }) {
-  const [other, setOther] = useState("");
+  const search = useSearch({ from: "/projects/$projectId/baselines/$baselineId" });
+  const [other, setOther] = useState(search.with ?? "");
   const list = useQuery({
     queryKey: ["projects", projectId, "baselines"],
     queryFn: () => api<{ baselines: Baseline[] }>(`projects/${projectId}/baselines`),

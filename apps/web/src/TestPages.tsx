@@ -44,6 +44,7 @@ import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
 import { RichView } from "./RichView.tsx";
+import { useSession } from "./Root.tsx";
 import { EvidenceLinks } from "./Verification.tsx";
 
 type Counts = Record<RunState, number>;
@@ -55,6 +56,7 @@ type PlanRow = {
   cases: number;
   cycles: number;
   openCycles: number;
+  latestCycle: { id: string; name: string; closedAt: string | null; runs: Counts } | null;
 };
 type PlanDetail = {
   plan: { id: string; name: string; createdAt: string; author: string };
@@ -388,8 +390,10 @@ export function TestPlansPage() {
               <Table.Th>Name</Table.Th>
               <Table.Th>Test cases</Table.Th>
               <Table.Th>Cycles</Table.Th>
+              <Table.Th>Latest cycle</Table.Th>
               <Table.Th>Created</Table.Th>
               <Table.Th>By</Table.Th>
+              <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -409,8 +413,37 @@ export function TestPlansPage() {
                   {plan.cycles}
                   {plan.openCycles > 0 && ` (${plan.openCycles} open)`}
                 </Table.Td>
+                <Table.Td>
+                  {plan.latestCycle ? (
+                    <Stack gap={2}>
+                      <RouterAnchor
+                        to="/projects/$projectId/cycles/$testCycleId"
+                        params={{ projectId, testCycleId: plan.latestCycle.id }}
+                        size="sm"
+                      >
+                        {plan.latestCycle.name}
+                      </RouterAnchor>
+                      <RunProgress counts={plan.latestCycle.runs} />
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      No cycle yet
+                    </Text>
+                  )}
+                </Table.Td>
                 <Table.Td>{when(plan.createdAt)}</Table.Td>
                 <Table.Td>{plan.author}</Table.Td>
+                <Table.Td>
+                  {canEdit(project.role) && (
+                    <RouterAnchor
+                      to="/projects/$projectId/test-plans/$testPlanId"
+                      params={{ projectId, testPlanId: plan.id }}
+                      size="sm"
+                    >
+                      Start cycle
+                    </RouterAnchor>
+                  )}
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -432,6 +465,131 @@ export function TestPlansPage() {
             </Button>
           </Group>
         </form>
+      )}
+    </Stack>
+  );
+}
+
+/** Runs in the project's open cycles, mine first, filtered by cycle, assignee and state. Each opens the execution screen. */
+export function TestRunsPage() {
+  const project = useProject().data;
+  const projectId = project?.project.id ?? "";
+  const me = useSession().data?.user?.id;
+  const list = useQuery({
+    queryKey: ["projects", projectId, "test-runs"],
+    queryFn: () =>
+      api<{
+        cycles: { id: string; name: string; plan: string }[];
+        runs: (RunSummary & { plan: string })[];
+      }>(`projects/${projectId}/test-runs`),
+    enabled: Boolean(project),
+  });
+  const [cycle, setCycle] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [state, setState] = useState("");
+  if (!project) return null;
+  const all = list.data?.runs ?? [];
+  const people = [...new Map(all.filter((r) => r.assigneeId).map((r) => [r.assigneeId, r.assignee])).entries()];
+  const shown = all
+    .filter(
+      (run) =>
+        (!cycle || run.cycleId === cycle) &&
+        (!assignee || (assignee === "none" ? !run.assigneeId : run.assigneeId === assignee)) &&
+        (!state || run.state === state),
+    )
+    .sort((a, b) => Number(b.assigneeId === me) - Number(a.assigneeId === me));
+
+  return (
+    <Stack gap="md" maw={1000}>
+      <div>
+        <Title order={1} size="h2">
+          Test runs
+        </Title>
+        <Text c="dimmed" size="sm">
+          Runs in open test cycles. Yours come first.
+        </Text>
+      </div>
+      {list.isError && (
+        <Alert color="red" role="alert">
+          {list.error.message}
+        </Alert>
+      )}
+      <Group>
+        <NativeSelect
+          label="Cycle"
+          value={cycle}
+          onChange={(e) => setCycle(e.currentTarget.value)}
+          data={[
+            { value: "", label: "All" },
+            ...(list.data?.cycles ?? []).map((c) => ({ value: c.id, label: `${c.plan}: ${c.name}` })),
+          ]}
+        />
+        <NativeSelect
+          label="Assigned to"
+          value={assignee}
+          onChange={(e) => setAssignee(e.currentTarget.value)}
+          data={[
+            { value: "", label: "Anyone" },
+            { value: "none", label: "Nobody" },
+            ...people.map(([id, name]) => ({ value: String(id), label: String(name) })),
+          ]}
+        />
+        <NativeSelect
+          label="State"
+          value={state}
+          onChange={(e) => setState(e.currentTarget.value)}
+          data={[{ value: "", label: "Any" }, ...STATES.map((value) => ({ value, label: RUN_STATE[value].label }))]}
+        />
+      </Group>
+      {list.data && shown.length === 0 && (
+        <Text c="dimmed">{all.length === 0 ? "No runs in open cycles." : "No run matches."}</Text>
+      )}
+      {shown.length > 0 && (
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test runs">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Test case</Table.Th>
+              <Table.Th>Cycle</Table.Th>
+              <Table.Th>Assigned to</Table.Th>
+              <Table.Th>State</Table.Th>
+              <Table.Th>Steps</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {shown.map((run) => (
+              <Table.Tr key={run.id}>
+                <Table.Td>
+                  <RouterAnchor
+                    to="/projects/$projectId/runs/$testRunId"
+                    params={{ projectId, testRunId: run.id }}
+                    size="sm"
+                  >
+                    {run.uid}
+                  </RouterAnchor>{" "}
+                  {run.name}
+                </Table.Td>
+                <Table.Td>
+                  <RouterAnchor
+                    to="/projects/$projectId/cycles/$testCycleId"
+                    params={{ projectId, testCycleId: run.cycleId }}
+                    size="sm"
+                  >
+                    {run.plan}: {run.cycle}
+                  </RouterAnchor>
+                </Table.Td>
+                <Table.Td c={run.assignee ? undefined : "dimmed"}>
+                  {run.assigneeId === me ? "You" : (run.assignee ?? "Nobody")}
+                </Table.Td>
+                <Table.Td>
+                  <RunStateBadge state={run.state} />
+                </Table.Td>
+                <Table.Td>
+                  {run.done} of {run.total}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
       )}
     </Stack>
   );
