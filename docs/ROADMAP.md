@@ -1,9 +1,9 @@
 # Roadmap plans
 
-Written 2026-10-13. Fifteen plans in three tracks:
+Written 2026-10-13. Sixteen plans in three tracks:
 
 - **Track J:** close the gap to Jama Connect (J1 to J5).
-- **Track T:** full test planning and execution (T1 to T5), allowed by [ADR 0011](adr/0011-test-planning-and-execution-in-scope.md).
+- **Track T:** full test planning and execution (T1 to T6), allowed by [ADR 0011](adr/0011-test-planning-and-execution-in-scope.md).
 - **Track A:** adoption by companies with serious requirements (A1 to A5), added 2026-10-14, after bundle I.
 
 Each plan lists what exists, the slices to build in order, the data model, and the decisions the owner must make. One slice is one working session: domain module and tests first, then API, then screen. Every slice keeps the hard rules in `CLAUDE.md`: soft delete, append-only history, audit on every write, a permission test per route.
@@ -19,7 +19,7 @@ Estimates are in sessions and are rough.
 | F | J3: HTTPS, edit conflicts, notifications, hardening | 5 | Two browsers edit one item; an email arrives for a mention |
 | G | J2: Word export, import upgrades, Word import, ReqIF | 7 | Export a spec to Word, re-import a ReqIF file |
 | H | J4: OpenAPI, webhooks, external references, OIDC | 6 | A webhook fires on a save; log in through an identity provider |
-| I | J1, J5: review gaps, editable types, compare, dashboard, child items | 8 | Add a field to an item type; compare two baselines |
+| I | J1, J5, T6: review gaps, editable types, compare, dashboard, child items, CI runs | 9 | Add a field to an item type; compare two baselines; open one CI upload and see its results |
 | J | A3, A5: release and security basics, documentation site, in-app help | 5 | Install a numbered release from its signed image; open help from a screen |
 | K | A2: compliance evidence | 4 | Download the validation pack of a release; break the audit chain and see it reported |
 | L | A1: migration | 4 | Import a real DOORS or Jama export into a new project without setting it up first |
@@ -204,6 +204,19 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 Charts use Mantine `Progress` with sections. No chart library.
 
 **Later:** signing a closed cycle with the review signature, test environments as a managed list, automated test scheduling.
+
+## T6. CI runs
+
+Added 2026-10-14, for bundle I. Automated tests run on every push and do not fit cycles: nobody plans them, and a cycle per build would bury the manual ones.
+
+**Exists:** the JUnit route records one result per matched test case (`source: "junit"`), optionally finishes runs in a cycle (`?testCycleId=`) and attaches a CI log (`?attachmentId=`). The answer lists unmatched test names, but nothing keeps them. Results of one upload are spread across test cases: there is no way to open "build #812" and see what it did.
+
+**Slices (1 session):**
+
+1. **One row per upload.** Table `ci_runs`: project, pipeline name, branch, commit, build URL, time, counts (passed, failed, skipped, unmatched), the unmatched test names, the uploading user. Append-only. `verification_results.ci_run_id` points at it. The JUnit route takes `pipeline`, `branch`, `commit` and `buildUrl` as optional query parameters and makes the row in the same transaction. Backup format bumps.
+2. **"CI runs" page in the project.** List of uploads, newest first, with counts as a Mantine `Progress`, filterable by pipeline and branch. Opening one shows each reported test: its test case, outcome, the requirements it verifies, and the unmatched names. Linked from a result's "source" on the test case.
+
+**Later:** pass-rate trend per pipeline. A branch rule, so only results from the main branch set the verification status and feature-branch runs show but do not count.
 
 ---
 
