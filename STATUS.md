@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J5 slice 8, section home pages: Baselines list items, reviews and test cycles per baseline and compare two ticked baselines (`/baselines/:id?with=`); Reviews has tabs Waiting for me / Open / Closed with items reviewed and approved; Test plans show each plan's newest cycle as a progress bar and "Start cycle"; new Test runs page at `/projects/:id/test-runs` (runs in open cycles, mine first, filters) with the side bar heading pointing at it. List routes gained fields; one new route `GET /api/projects/:projectId/test-runs`; no migration. Checked in a browser on the Kestrel-EO demo. Home-screen question in DESIGN.md settled. "Start cycle" opens the plan page, where the form is; no Reports page redesign (2026-10-14)
 - CI upload to the tool: `ci.yml` writes `junit.xml` and runs `scripts/ci/upload-results.ts` (JUnit with the `// @req` UID put in front of each test name, labelled with commit, branch and run URL; then the `@req` scanner) when the secrets `REQ_URL` and `REQ_TOKEN` exist, not on fork PRs. Tried against a scratch server with a real token; the workflow itself has never run on GitHub, and a local instance is unreachable from GitHub runners. Only tests with a `@req` tag match (2026-10-14)
 - A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
@@ -63,6 +64,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J5 slice 8 (section home pages): built, waiting for the owner's test.** Checkpoint: tick two baselines and compare; open Reviews, Test plans and Test runs from the side bar.
 - **J5 slice 7 (folders, side bar): built, waiting for the owner's test.** Checkpoint: open a folder that has sub-folders; open Test plans in the side bar.
 - **J1 slice 1 (review participants, In review status, My reviews): built, waiting for the owner's test.** Checkpoint: open a review, add and remove a person, see items go In review.
 - **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.

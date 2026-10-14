@@ -45,7 +45,7 @@ The cycle makes one run per test case. Each run keeps the version the test case 
 1. On the cycle page, tick the runs.
 2. Pick a person under **Assign the selected to** and choose **Assign**.
 
-Your open runs are listed under **My test runs** on the home page.
+Your open runs are listed under **My test runs** on the home page. **Test runs** in the side bar opens a page with every run in the project's open cycles, yours first, filtered by cycle, assignee and state.
 
 ## Execute a run
 

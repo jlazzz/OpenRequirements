@@ -1063,6 +1063,39 @@ test("someone outside a project is refused on every route that names something i
   }
 });
 
+test("section pages: baselines list their contents, reviews their progress, plans their latest cycle, runs list per project", async () => {
+  const { cookie, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const item = (await add(sys.id, { kind: "item", name: "Voltage" })).json().node.id;
+  const testCase = (await add((await detail()).sets[2].id, { kind: "item", name: "T" })).json().node.id;
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "B" }, cookie)).json().id;
+  const me = (await get("/api/session", cookie)).json().user.id;
+  const reviewId = (
+    await post(`/api/projects/${projectId}/reviews`, { name: "R", baselineId, approvers: [me] }, cookie)
+  ).json().id;
+  const planId = (await post(`/api/projects/${projectId}/test-plans`, { name: "Plan" }, cookie)).json().id;
+  await post(`/api/test-plans/${planId}/cases`, { itemIds: [testCase] }, cookie);
+  const cycleId = (await post(`/api/test-plans/${planId}/cycles`, { name: "C1", baselineId }, cookie)).json().id;
+
+  const [baseline] = (await get(`/api/projects/${projectId}/baselines`, cookie)).json().baselines;
+  expect(baseline.items).toBe(2);
+  expect(baseline.reviews).toMatchObject([{ id: reviewId, state: "open" }]);
+  expect(baseline.cycles).toMatchObject([{ id: cycleId, closedAt: null }]);
+
+  const [review] = (await get(`/api/projects/${projectId}/reviews`, cookie)).json().reviews;
+  expect(review).toMatchObject({ total: 2, reviewed: 0, approved: 0, waiting: true });
+  await post(`/api/reviews/${reviewId}/marks`, { itemIds: [item], mark: "approved" }, cookie);
+  const [marked] = (await get(`/api/projects/${projectId}/reviews`, cookie)).json().reviews;
+  expect(marked).toMatchObject({ reviewed: 1, approved: 1 });
+
+  const [plan] = (await get(`/api/projects/${projectId}/test-plans`, cookie)).json().plans;
+  expect(plan.latestCycle).toMatchObject({ id: cycleId, runs: { not_started: 1 } });
+
+  const runs = (await get(`/api/projects/${projectId}/test-runs`, cookie)).json();
+  expect(runs.cycles).toMatchObject([{ id: cycleId, plan: "Plan" }]);
+  expect(runs.runs).toMatchObject([{ cycleId, plan: "Plan", state: "not_started" }]);
+});
+
 test("comments record mentions and appear in the activity stream; drafts do not", async () => {
   const { cookie: owner, detail, sys, add } = await projectWithSets();
   const projectId = (await detail()).project.id;

@@ -234,12 +234,11 @@ export function SideBarSections({
           />
         )}
       </Section>
-      {/* shortcut: no page of its own until J5 slice 8; the heading opens Test plans, where cycles are listed */}
-      <Section id="test-runs" label="Test runs" to="/projects/$projectId/test-plans" {...section}>
+      <Section id="test-runs" label="Test runs" to="/projects/$projectId/test-runs" {...section}>
         {() => (
           <Rows
             projectId={projectId}
-            to="/projects/$projectId/test-plans"
+            to="/projects/$projectId/test-runs"
             all="All test runs"
             empty={runs.isPending || plans.isPending ? "Loading…" : "Nothing open."}
             rows={[...myRuns, ...cycleRows()]}

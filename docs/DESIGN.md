@@ -179,4 +179,4 @@ Within a milestone, build the domain logic and its tests first, then the API, th
 
 ## 11. Still open
 
-- Home screen after login: project list or a project dashboard.
+- ~~Home screen after login~~ Settled (J5 slices 3 and 8): the project list after sign-in; a project opens on a per-set dashboard; Baselines, Reviews, Test plans, Test runs and Reports each have a section page that answers "what needs me" first.

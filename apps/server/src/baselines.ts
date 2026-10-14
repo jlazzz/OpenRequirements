@@ -9,7 +9,9 @@ import {
   itemRevisions,
   links,
   nodes,
+  reviews,
   sets,
+  testCycles,
   users,
 } from "./db/schema.ts";
 import { liveLinks } from "./links.ts";
@@ -38,7 +40,42 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
         .innerJoin(users, eq(users.id, baselines.createdBy))
         .where(eq(baselines.projectId, projectId))
         .orderBy(desc(baselines.createdAt));
-      return { baselines: rows };
+      const ids = rows.map((row) => row.id);
+      const counts = ids.length
+        ? await db
+            .select({ baselineId: baselineEntries.baselineId, items: sql<number>`count(*)::int` })
+            .from(baselineEntries)
+            .innerJoin(nodes, eq(nodes.id, baselineEntries.nodeId))
+            .where(and(inArray(baselineEntries.baselineId, ids), eq(nodes.kind, "item")))
+            .groupBy(baselineEntries.baselineId)
+        : [];
+      const reviewRows = ids.length
+        ? await db
+            .select({ id: reviews.id, name: reviews.name, state: reviews.state, baselineId: reviews.baselineId })
+            .from(reviews)
+            .where(inArray(reviews.baselineId, ids))
+            .orderBy(reviews.createdAt)
+        : [];
+      const cycleRows = ids.length
+        ? await db
+            .select({
+              id: testCycles.id,
+              name: testCycles.name,
+              closedAt: testCycles.closedAt,
+              baselineId: testCycles.baselineId,
+            })
+            .from(testCycles)
+            .where(inArray(testCycles.baselineId, ids))
+            .orderBy(testCycles.createdAt)
+        : [];
+      return {
+        baselines: rows.map((row) => ({
+          ...row,
+          items: counts.find((c) => c.baselineId === row.id)?.items ?? 0,
+          reviews: reviewRows.filter((r) => r.baselineId === row.id),
+          cycles: cycleRows.filter((c) => c.baselineId === row.id),
+        })),
+      };
     },
   );
 

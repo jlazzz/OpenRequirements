@@ -65,7 +65,32 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
         .innerJoin(users, eq(users.id, testPlans.createdBy))
         .where(and(eq(testPlans.projectId, projectId), isNull(testPlans.deletedAt)))
         .orderBy(desc(testPlans.createdAt));
-      return { plans };
+      // The newest cycle of each plan, with how its runs stand, for the progress bar on the section page.
+      // shortcut: loads every run of the project, count in SQL when a project has tens of thousands of runs
+      const cycles = await db
+        .select({
+          id: testCycles.id,
+          planId: testCycles.planId,
+          name: testCycles.name,
+          closedAt: testCycles.closedAt,
+        })
+        .from(testCycles)
+        .innerJoin(testPlans, eq(testPlans.id, testCycles.planId))
+        .where(and(eq(testPlans.projectId, projectId), isNull(testPlans.deletedAt)))
+        .orderBy(desc(testCycles.createdAt));
+      const runs = await loadRuns(db, and(eq(testPlans.projectId, projectId), isNull(testPlans.deletedAt)));
+      return {
+        plans: plans.map((plan) => {
+          const latest = cycles.find((cycle) => cycle.planId === plan.id);
+          if (!latest) return { ...plan, latestCycle: null };
+          const states = Object.fromEntries(RUN_STATES.map((state) => [state, 0])) as Record<RunState, number>;
+          for (const run of runs) if (run.cycleId === latest.id) states[run.state] += 1;
+          return {
+            ...plan,
+            latestCycle: { id: latest.id, name: latest.name, closedAt: latest.closedAt, runs: states },
+          };
+        }),
+      };
     },
   );
 
