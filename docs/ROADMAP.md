@@ -27,7 +27,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 1. **Edit conflicts (J3):** decided 2026-10-14: merge screen with "keep mine / take theirs" per field.
 2. **Test terms (T2):** decided 2026-10-13: Plan, Cycle, Run, as in Jama.
 3. **Signing with SSO (H):** an SSO user signs by logging in again at the identity provider. The alternative is a separate signing PIN.
-4. **New dependencies:** `docx`, `mammoth`, `fast-xml-parser`, `fflate` (zip), `nodemailer`, `openid-client`, `@fastify/swagger`, `@fastify/helmet`. Each replaces far more than a few lines.
+4. **New dependencies:** `openid-client`, `@fastify/swagger`. `nodemailer` was added in F; `@fastify/helmet` was not needed (ADR 0014). `docx`, `mammoth`, `fast-xml-parser` and `fflate` were not needed: Word and ReqIF are read and written by hand (ADR 0011, ADR 0015).
 
 ---
 
@@ -47,7 +47,9 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 ## J2. Document export and import
 
-**Exists:** CSV import with column mapping, `.xlsx` read in the browser, CSV export, browser print to PDF from Reading view, JSON backup. `packages/reqif` is empty.
+**Built 2026-10-14 as bundle G** ([ADR 0015](adr/0015-word-export-import-and-reimport.md)): slices 1 to 6. Slice 7 waits for vendor sample files. Word export options (fields, UID position, cover) were left out.
+
+**Existed before:** CSV import with column mapping, `.xlsx` read in the browser, CSV export, browser print to PDF from Reading view, JSON backup.
 
 **Slices (7 sessions):**
 

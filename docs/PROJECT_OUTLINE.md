@@ -195,8 +195,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Coverage reports (e.g. requirements with no verifying test, orphan items)
 - [x] Impact analysis view (what's downstream of this item)
 - [ ] ReqIF import/export (round-trip tested against sample files from DOORS/Polarion). Built and round-trip tested against its own files on 2026-10-13; vendor samples still needed.
-- [ ] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step
-- [ ] Spec export to PDF and Word with configurable templates
+- [x] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step ([ADR 0015](adr/0015-word-export-import-and-reimport.md), 2026-10-14)
+- [ ] Spec export to PDF and Word with configurable templates. Word export and a printed PDF with cover and page numbers built 2026-10-14; templates are not configurable yet
 - [x] Activity feed and notifications (in-app, email) ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
 - [ ] Public REST API (OpenAPI documented) and API tokens
 

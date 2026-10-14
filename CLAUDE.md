@@ -73,6 +73,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | CI results | JUnit XML read by a hand-written scanner in `packages/importers`, no XML library ([ADR 0009](docs/adr/0009-verification-tracking.md)) | in use |
 | ReqIF | Read and written by `packages/reqif`: hand-written XML parser and zip on the platform's `CompressionStream`, no library. The browser parses the file; the server gets JSON ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)) | in use |
 | Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
+| Word | `.docx` written on the server and read in the browser by `packages/importers/src/docx.ts`, by hand on the zip and XML code of `packages/reqif`, no library ([ADR 0015](docs/adr/0015-word-export-import-and-reimport.md)) | in use |
 | File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images, PDF, text, CSV and zip, type checked by content in `domain/filetype.ts`; only images are ever shown, the rest is a download. Limit `MAX_ATTACHMENT_MB`, default 25. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml`. HTTPS by a Caddy service under the Compose profile `https`, set by `DOMAIN` ([ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md)) | in use |
 | Email | `nodemailer` over `SMTP_URL`, sent from the `outbox` table by a loop in the server process; nothing is sent without it | in use |
@@ -111,7 +112,7 @@ apps/
 packages/
   shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths, three-way merge of item edits
   reqif/            ReqIF parser/serializer with its XML and zip readers. Standalone: imports nothing from the repo or npm, runs in Node and the browser
-  importers/        CSV reading and writing, mapping spreadsheet rows to items, reading JUnit XML reports, and mapping between ReqIF and sets, items and rich text
+  importers/        CSV reading and writing, mapping spreadsheet rows to folders and items, reading JUnit XML reports, mapping between ReqIF and sets, items and rich text, and writing and reading Word (.docx)
 docs/
   PROJECT_OUTLINE.md
   adr/              Architecture Decision Records
@@ -178,7 +179,7 @@ Use these terms exactly, in code, API and UI.
 ```
 User ─< ProjectMember >─ Project   (role; no Organization level yet: one instance is one organization)
 Invitation                         (email, token hash, expiry; accepted once)
-Project ─< Set ─< Node (tree: folder | item)
+Project ─< Set ─< Node (tree: folder | item; external id from an import)
 Project ─< ItemType                (from the project template; a set has exactly one)
 Item ─< Draft                      (one per author; private until committed)
 Item ─< ItemRevision               (append-only: body, attributes JSONB, author, timestamp, change reason, status-only flag)
@@ -218,7 +219,8 @@ User ─< PasswordReset               (token hash, expiry, used at; made by the 
 - **Bulk item actions:** `POST /api/sets/:setId/bulk` deletes, moves or sets a field on up to 500 items of one set, all or none, with one audit event and (for edits) one new version per item.
 - **Test runs:** step results are append-only and a run's state is computed. Finishing a run appends an ordinary verification result at the version the cycle froze, so the status rule has one source. A Reviewer executes runs assigned to them, an Editor any run ([ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md)).
 - **Reviews:** held on a baseline. Marks are append-only; the state is worked out once, at closing, and stored. An approver signs once with their password. A version that only changes Status is flagged when saved and is skipped by the suspect and verification rules ([ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md)).
-- **ReqIF:** export of a set or baseline; import maps specifications, attributes and relation types onto existing sets, fields and relationship types, and only adds items. Structured imports go through `POST /api/projects/:projectId/import` ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)).
+- **ReqIF:** export of a set or baseline; import maps specifications, attributes and relation types onto existing sets, fields and relationship types ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)).
+- **Import:** every import (spreadsheet, Word, ReqIF) goes through `POST /api/projects/:projectId/import`. A node it names by `id`, `uid` or `externalId` (kept in `nodes.external_id`) is reused or gets a new version when it differs; `dryRun` previews. Word is exported per set or baseline ([ADR 0015](docs/adr/0015-word-export-import-and-reimport.md)).
 - **Trace and impact:** computed from live links on every request, never stored. A path never passes through an item twice ([ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md)).
 - **Ordering:** set trees use fractional indexing or ordered lists, so reordering does not rewrite every row.
 - **Permissions:** per project: Viewer reads, Reviewer also comments, Editor also changes items and relationships, Admin also manages members. An instance administrator (`users.is_admin`) is Admin in every project, manages accounts and creates projects. Set-level overrides come later.

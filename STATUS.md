@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Bundle G built: Word export of a set or baseline (cover, headings, items, field tables, images, page numbers), printed Reading view with cover, running header and page numbers, Word import with paragraph or heading mode and a review step (skip, merge), imports that update items by UID, id or ReqIF identifier with a preview, Folder and UID columns in spreadsheets and in the CSV export, ReqIF re-import without duplicates, [ADR 0015](docs/adr/0015-word-export-import-and-reimport.md), [user guide](docs/user-guide/word-and-spreadsheets.md). No new dependency. Checked in a browser on a scratch instance: CSV re-import, Word re-import of an export, skip and merge, printed PDF (2026-10-14)
 - Bundle F built: HTTPS by Caddy and security headers, merge screen for edit conflicts and "also editing", in-app notifications (mention, review invitation, run assigned, relationship become suspect), email by outbox with per-person choice of each/digest/never, forgot password and admin reset links, emailed invitations, [ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md), [user guide](docs/user-guide/working-together.md), [install guide](docs/user-guide/install.md) updated. Also fixed: Sign out left the screen showing the signed-out user. Checked in a browser on a scratch instance (2026-10-14)
 - Bundle E built: evidence files (PDF, text, logs, CSV, zip; many per result, per run and per step; drop, paste, button; a log with a JUnit report), verification status frozen in baselines, a cycle names the baseline it verifies and shows in its review, reports (cycle summary, plan history, requirement verification, flaky tests, CSV each), backup format version 6 with files streamed out, [ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md), [user guide](docs/user-guide/evidence-and-reports.md). Also, asked by the owner: bulk set field, move and delete in List view, and dark mode ([user guide](docs/user-guide/bulk-actions.md)). Checked in a browser on a scratch instance (2026-10-13)
 - Bundle D built: test steps on test cases, test plans with groups, cycles with frozen versions, runs with step-by-step execution and keyboard, "My test runs", defect link on a failed run, JUnit into a cycle, backup format version 5, [ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md), [user guide](docs/user-guide/test-plans.md). Checkpoint test done in a browser: plan, cycle, run, requirement turned Passing (2026-10-13)
@@ -41,10 +42,11 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundle F (HTTPS, edit conflicts, notifications, email, account recovery): built, waiting for the owner's test.** Checkpoint: two browsers edit one item; an email arrives for a mention. Bundle G does not start before that feedback.
+- **Bundle G (Word, import upgrades, ReqIF re-import): built, waiting for the owner's test.** Checkpoint: export a spec to Word, re-import a ReqIF file. Bundle H does not start before that feedback. Started at the owner's request before their test of bundle F.
+- Bundle F (HTTPS, edit conflicts, notifications, email, account recovery): built, waiting for the owner's test. Checkpoint: two browsers edit one item; an email arrives for a mention.
 - Bundle E (evidence files, frozen status, reports) plus bulk item actions and dark mode: built, waiting for the owner's test. Checkpoint: attach a PDF to a step, compare two cycles.
 - Bundle D (test steps, plans, cycles, runs, execution screen): built and checked in a browser, waiting for the owner's own test.
-- **ReqIF import and export: built, waiting for the owner's test. Word import starts after that feedback.**
+- ReqIF import and export: built, waiting for the owner's test.
 - Reviews and approvals: built, waiting for the owner's test.
 - Verification tracking: built, waiting for the owner's test.
 - Trace view and impact analysis: built, waiting for the owner's test.
@@ -60,14 +62,13 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 2. Playwright end-to-end tests
 3. Dogfood: write this project's own requirements spec and import it
 
-After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: G (Word and ReqIF), H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
-
-Before item 1: Word import (headings become folders, paragraphs become items, with a review step). It reuses the zip and XML readers and the structured import route.
+After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
 
 Known gaps left for later milestones or owner decision:
 
 - Test plans: a closed cycle is not signed. Reports export CSV only, no Word. The defect link is a plain URL. Cases in a plan cannot be reordered by hand. Not checked in a browser: the version compare of steps, regrouping and removing plan cases, "only what failed" cycles, closing a cycle, a Reviewer executing an assigned run. All are covered by server tests except the compare.
-- ReqIF: not tested with real files from DOORS, DOORS Next or Polarion, nor imported into them; the owner is looking for samples. Import only adds items, so a re-import duplicates. It cannot create sets, item types or fields. Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
+- ReqIF: not tested with real files from DOORS, DOORS Next or Polarion, nor imported into them; the owner is looking for samples. It cannot create sets, item types or fields.
+- Word: the export was not opened in Microsoft Word or LibreOffice (only read back by the importer and macOS). Import not tried with a real Word file; one from macOS `textutil` has no heading styles, so its headings came in as items. Export has no options (fields, UID position, cover). Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.
@@ -83,15 +84,15 @@ Known gaps left for later milestones or owner decision:
 - Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. The relationship type is found by the name "Verified by". Tokens do not expire and show no "last used" date.
 - Reviews: participants cannot be changed after creation, a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: no password expiry, lockout or inactivity timeout, and the audit log is not tamper-evident. Opening a review does not set Status to "In review".
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
-- Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
-- Export is CSV only (Excel opens it). No .xlsx export.
+- Import updates items but never moves them, and an empty cell cannot clear a field. At most 5,000 folders and items per file. A folder name with "/" cannot be given in the Folder column.
+- List export is CSV only (Excel opens it). No .xlsx export.
 - Backup download streams its files; restore still reads the whole file in memory, at most 256 MB.
 - Not checked in a browser: image upload through the editor, inserting an equation, the Trace view's "Export CSV" button, printing a review, evidence upload on a result, and the Access tokens section of the account dialog. All but the CSV button are covered by server tests.
 
 ## Open decisions
 
 - Project name
-- Two roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): signing with SSO, new dependencies (`nodemailer` added for bundle F)
+- Two roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): signing with SSO, new dependencies (`nodemailer` added for bundle F, none for G)
 - One design detail in [docs/DESIGN.md](docs/DESIGN.md) section 11: the home screen
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance
