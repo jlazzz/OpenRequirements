@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@app/importers": "*",
+    "@app/reqif": "*",
     "@app/shared": "*",
     "@mantine/core": "^9.7.2",
     "@mantine/hooks": "^9.7.2",

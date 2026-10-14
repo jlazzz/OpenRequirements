@@ -42,6 +42,7 @@ import { RouterAnchor } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
+import { ReqifExport } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
 import { TraceView } from "./TraceView.tsx";
@@ -110,6 +111,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
               { value: "trace", label: "Trace" },
             ]}
           />
+          {!folder && <ReqifExport path={`sets/${set.id}/reqif`} />}
           {editor && folder && <NodeActions data={data} node={folder} />}
           {editor && (
             <Button variant="default" onClick={() => setAdding("folder")}>

@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- ReqIF import and export built: standalone `packages/reqif` (XML, zip, ReqIF model), export of a set or baseline as .reqif or .reqifz, import page with mapping and review, structured import route, round-trip test, [ADR 0011](docs/adr/0011-reqif-import-and-export.md), [user guide](docs/user-guide/reqif.md) (2026-10-13)
 - Roadmap planned: ten plans in two tracks in [docs/ROADMAP.md](docs/ROADMAP.md). Test planning and execution brought into scope, [ADR 0011](docs/adr/0011-test-planning-and-execution-in-scope.md) (2026-10-13)
 - Reviews and approvals built: review from a baseline, reviewers and approvers, marks and comments per item, electronic signature with password, permanent closing, Status = Approved with no suspect or out-of-date side effects, backup format version 4, [ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md), [user guide](docs/user-guide/reviews.md) (2026-10-13)
 - Verification tracking built: pure status rule, append-only results on test cases, status in List view, matrix, Trace view and item page, JUnit import from CI, personal access tokens, backup format version 3, [ADR 0009](docs/adr/0009-verification-tracking.md), [user guide](docs/user-guide/verification.md) (2026-10-13)
@@ -37,7 +38,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Reviews and approvals: built, waiting for the owner's test.**
+- **ReqIF import and export: built, waiting for the owner's test. Word import starts after that feedback.**
+- Reviews and approvals: built, waiting for the owner's test.
 - Verification tracking: built, waiting for the owner's test.
 - Trace view and impact analysis: built, waiting for the owner's test.
 - Suspect links: built, waiting for the owner's test.
@@ -56,7 +58,11 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: D (test steps, plans, cycles, runs, execution), E (evidence files, frozen status, reports), F (HTTPS, edit conflicts, notifications), G (Word and ReqIF), H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
 
+Before item 1: Word import (headings become folders, paragraphs become items, with a review step). It reuses the zip and XML readers and the structured import route.
+
 Known gaps left for later milestones or owner decision:
+
+- ReqIF: not tested with real files from DOORS, DOORS Next or Polarion, nor imported into them; the owner is looking for samples. Import only adds items, so a re-import duplicates. It cannot create sets, item types or fields. Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.

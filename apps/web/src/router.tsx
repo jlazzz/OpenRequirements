@@ -5,6 +5,7 @@ import { ItemPage } from "./ItemPage.tsx";
 import { MatrixPage } from "./MatrixPage.tsx";
 import { ProjectHome, ProjectPage } from "./ProjectPage.tsx";
 import { ProjectsPage } from "./ProjectsPage.tsx";
+import { ReqifImportPage } from "./Reqif.tsx";
 import { ReviewPage, ReviewsPage } from "./ReviewPages.tsx";
 import { Root } from "./Root.tsx";
 import { SearchPage } from "./SearchPage.tsx";
@@ -48,6 +49,7 @@ const projectChildren = [
   createRoute({ ...inProject, path: "suspect", component: SuspectPage }),
   createRoute({ ...inProject, path: "baselines", component: BaselinesPage }),
   createRoute({ ...inProject, path: "baselines/$baselineId", component: BaselinePage }),
+  createRoute({ ...inProject, path: "import", component: ReqifImportPage }),
   createRoute({ ...inProject, path: "reviews", component: ReviewsPage }),
   createRoute({ ...inProject, path: "reviews/$reviewId", component: ReviewPage }),
   createRoute({

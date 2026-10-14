@@ -182,6 +182,7 @@ const VERBS: Record<string, string> = {
   "review.close.rejected": "closed as rejected review",
   "review.close.closed": "closed without a decision review",
   "item.import": "imported",
+  "link.import": "imported",
   "result.pass": "recorded a pass on",
   "result.fail": "recorded a failure on",
   "result.blocked": "recorded a blocked run of",

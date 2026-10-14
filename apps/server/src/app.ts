@@ -13,10 +13,12 @@ import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
 import { apiTokens, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
+import { importRoutes } from "./import.ts";
 import { linkRoutes } from "./links.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
+import { reqifRoutes } from "./reqif.ts";
 import { reviewRoutes } from "./reviews.ts";
 import { traceRoutes } from "./trace.ts";
 import { verificationRoutes } from "./verification.ts";
@@ -353,6 +355,8 @@ export async function buildApp(
   const attachmentsDir = opts.attachmentsDir ?? "data/attachments";
   attachmentRoutes(context, attachmentsDir);
   backupRoutes(context, attachmentsDir);
+  importRoutes(context);
+  reqifRoutes(context, attachmentsDir);
 
   if (opts.webRoot && existsSync(opts.webRoot)) {
     await app.register(fastifyStatic, { root: opts.webRoot });

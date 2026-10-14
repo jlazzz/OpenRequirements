@@ -1,6 +1,8 @@
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { guessReqifMapping, mapReqif, summarizeReqif } from "@app/importers";
+import { parseReqif, type ReqifAttribute, type ReqifNode, type ReqifValue, unzip, writeXml } from "@app/reqif";
 import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -1821,4 +1823,308 @@ test("one rejected item rejects the review, and a rejected review writes nothing
   expect(review.outcomes).toEqual({ [good]: "approved", [bad]: "rejected" });
   expect(review.review.statusSet).toBe(false);
   expect((await get(`/api/items/${good}`, owner)).json().item.revision).toBe(1);
+});
+
+test("a structured import creates folders, items and relationships with one audit event per set, or nothing", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  await add(sys.id, { kind: "item", name: "Existing" });
+  const fields = (await get(`/api/sets/${sys.id}/items`, cookie)).json().fields as { id: string; name: string }[];
+  const status = fields.find((f) => f.name === "Status")?.id as string;
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[1].id;
+  const run = (body: object, as = cookie) => post(`/api/projects/${projectId}/import`, body, as);
+  const body = {
+    sets: [
+      {
+        setId: sys.id,
+        nodes: [
+          {
+            kind: "folder",
+            name: " Power ",
+            children: [
+              {
+                ref: "a",
+                kind: "item",
+                name: "Supply",
+                description: textToDoc("12 V"),
+                attributes: { [status]: "Draft" },
+              },
+              { kind: "folder", name: "Inner", children: [{ ref: "b", kind: "item", name: "Deep" }] },
+            ],
+          },
+          { kind: "item", name: "Loose" },
+        ],
+      },
+      { setId: un.id, nodes: [{ ref: "n", kind: "item", name: "Need" }] },
+    ],
+    links: [
+      { typeId, upstream: "n", downstream: "a" },
+      { typeId, upstream: "a", downstream: "b" },
+    ],
+  };
+
+  const before = (await auditActions()).length;
+  const item = { kind: "item", name: "X" };
+  const bad: [object, string][] = [
+    [{ sets: [{ setId: sys.id, nodes: [{ ...item, attributes: { [status]: "Nope" } }] }] }, "Status must be"],
+    [{ sets: [{ setId: sys.id, nodes: [{ ...item, children: [item] }] }] }, "cannot hold other items"],
+    [
+      { sets: [{ setId: sys.id, nodes: [{ ...item, description: { type: "doc", content: [{ type: "script" }] } }] }] },
+      "Unsupported",
+    ],
+    [
+      {
+        sets: [
+          {
+            setId: sys.id,
+            nodes: [
+              { ...item, ref: "x" },
+              { ...item, ref: "x" },
+            ],
+          },
+        ],
+      },
+      "used twice",
+    ],
+    [{ sets: [{ setId: sys.id, nodes: [{ kind: "folder", name: "F", ref: "x" }] }] }, "only a name"],
+    [
+      {
+        sets: [
+          { setId: sys.id, nodes: [item] },
+          { setId: sys.id, nodes: [item] },
+        ],
+      },
+      "listed twice",
+    ],
+    [{ sets: [{ setId: "00000000-0000-4000-8000-000000000000", nodes: [item] }] }, "Set not found"],
+    [{ sets: [{ setId: sys.id, parentId: "00000000-0000-4000-8000-000000000000", nodes: [item] }] }, "Parent must be"],
+    [{ ...body, links: [{ typeId, upstream: "n", downstream: "missing" }] }, "not in this import"],
+    [{ ...body, links: [{ typeId: sys.id, upstream: "n", downstream: "a" }] }, "Unknown relationship type"],
+    [{ ...body, links: [...body.links, { typeId, upstream: "a", downstream: "n" }] }, "linked once"],
+    [{ sets: [{ setId: sys.id, nodes: [{ kind: "item", name: " " }] }] }, "pattern"],
+  ];
+  for (const [payload, message] of bad) {
+    const res = await run(payload);
+    expect(res.statusCode, message).toBe(400);
+    expect(JSON.stringify(res.json()), message).toContain(message);
+  }
+  expect((await detail()).nodes).toHaveLength(1);
+  expect((await auditActions()).length).toBe(before);
+  expect((await run(body, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(403);
+
+  const res = await run(body);
+  expect(res.statusCode).toBe(201);
+  expect(res.json()).toEqual({ created: { items: 4, folders: 2, links: 2 } });
+  const tree = (await detail()).nodes as { id: string; parentId: string | null; name: string; uid: string | null }[];
+  const named = (name: string) => tree.find((n) => n.name === name);
+  // UIDs follow the order of the file and continue after what the set already held.
+  expect(
+    tree
+      .filter((n) => n.uid)
+      .map((n) => `${n.uid} ${n.name}`)
+      .sort(),
+  ).toEqual(["SYS-001 Existing", "SYS-002 Supply", "SYS-003 Deep", "SYS-004 Loose", "UN-001 Need"]);
+  expect(named("Supply")?.parentId).toBe(named("Power")?.id);
+  expect(named("Deep")?.parentId).toBe(named("Inner")?.id);
+  expect(named("Inner")?.parentId).toBe(named("Power")?.id);
+  expect(named("Loose")?.parentId).toBeNull();
+  const supply = (await get(`/api/items/${named("Supply")?.id}`, cookie)).json().item;
+  expect(supply).toMatchObject({ revision: 1, description: textToDoc("12 V"), attributes: { [status]: "Draft" } });
+  const made = (await get(`/api/projects/${projectId}/links`, cookie)).json().links;
+  expect(made).toHaveLength(2);
+  expect(made[0]).toMatchObject({
+    upstreamId: named("Need")?.id,
+    downstreamId: named("Supply")?.id,
+    changed: { upstream: false, downstream: false },
+  });
+  expect((await get(`/api/projects/${projectId}/search?q=12`, cookie)).json().ids).toEqual([named("Supply")?.id]);
+
+  const events = (await db.select().from(auditEvents)).filter((e) => e.action.endsWith(".import"));
+  expect(events.map((e) => [e.action, e.data?.label]).sort()).toEqual([
+    ["item.import", "1 item into User Needs"],
+    ["item.import", "3 items and 2 folders into System Requirements"],
+    ["link.import", "2 relationships"],
+  ]);
+  expect(events.every((e) => e.projectId === projectId)).toBe(true);
+});
+
+test("a baseline exports to ReqIF and imports into another project as the same content, images included", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("picture")]);
+  const upload = async (project: string, payload: Buffer | Uint8Array) =>
+    (
+      await app.inject({
+        method: "POST",
+        url: `/api/projects/${project}/attachments`,
+        payload: Buffer.from(payload),
+        headers: { cookie, "content-type": "image/png" },
+      })
+    ).json().src as string;
+  const fieldsOf = async (setId: string) =>
+    (await get(`/api/sets/${setId}/items`, cookie)).json().fields as {
+      id: string;
+      name: string;
+      type: string;
+      options: string[] | null;
+    }[];
+  const sysFields = await fieldsOf(sys.id);
+  const field = (name: string) => sysFields.find((f) => f.name === name)?.id as string;
+  const description = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "The pump " },
+          { type: "text", text: "shall", marks: [{ type: "bold" }] },
+          { type: "text", text: ' run at 5 < 6 & "quietly".' },
+        ],
+      },
+      {
+        type: "bulletList",
+        content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "one" }] }] }],
+      },
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "cell" }] }] },
+            ],
+          },
+        ],
+      },
+      { type: "image", attrs: { src: await upload(projectId, png), alt: "Diagram" } },
+      { type: "paragraph", content: [{ type: "inlineMath", attrs: { latex: "V = I \\cdot R" } }] },
+    ],
+  };
+  const save = (itemId: string, name: string, more: object) =>
+    post(
+      `/api/items/${itemId}/revisions`,
+      { baseRevision: 1, name, description: textToDoc(""), attributes: {}, ...more },
+      cookie,
+    );
+
+  const doomed = (await add(sys.id, { kind: "item", name: "Deleted before export" })).json().node.id;
+  const folder = (await add(sys.id, { kind: "folder", name: "Power" })).json().node.id;
+  const supply = (await add(sys.id, { kind: "item", name: "Supply voltage", parentId: folder })).json().node.id;
+  const current = (await add(sys.id, { kind: "item", name: "Max current" })).json().node.id;
+  const need = (await add(un.id, { kind: "item", name: "Portable" })).json().node.id;
+  expect(
+    (
+      await save(supply, "Supply voltage", {
+        description,
+        attributes: { [field("Status")]: "Approved", [field("Rationale")]: "Because" },
+      })
+    ).statusCode,
+  ).toBe(201);
+  expect((await send("DELETE", `/api/nodes/${doomed}`, cookie)).statusCode).toBe(200);
+  const linkTypes = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes as {
+    id: string;
+    name: string;
+  }[];
+  const derived = linkTypes.find((t) => t.name === "Derived from")?.id;
+  await post("/api/links", { upstreamId: need, downstreamId: supply, typeId: derived }, cookie);
+  await post("/api/links", { upstreamId: supply, downstreamId: current, typeId: linkTypes[0]?.id }, cookie);
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "Design review 1.0" }, cookie)).json()
+    .id;
+  // Changed after the baseline: the export must not show it.
+  await save(current, "Changed later", { baseRevision: 1 });
+
+  const exported = await get(`/api/baselines/${baselineId}/reqif?format=reqifz`, cookie);
+  expect(exported.statusCode).toBe(200);
+  expect(exported.headers["content-type"]).toBe("application/zip");
+  expect(exported.headers["content-disposition"]).toBe('attachment; filename="Design_review_1.0.reqifz"');
+  const archive = await unzip(exported.rawPayload);
+  const xml = new TextDecoder().decode(archive.get("Design_review_1.0.reqif"));
+  expect(xml).toContain("Max current");
+  expect(xml).not.toContain("Changed later");
+  expect(xml).not.toContain("Deleted before export");
+  const pictures = [...archive.keys()].filter((name) => name.startsWith("files/"));
+  expect(pictures).toHaveLength(1);
+  expect(Buffer.from(archive.get(pictures[0] as string) as Uint8Array).equals(png)).toBe(true);
+
+  // The plain file is the same text without the archive. A set exports its live items and the relationships inside it.
+  const plain = await get(`/api/baselines/${baselineId}/reqif`, cookie);
+  expect(plain.headers["content-type"]).toBe("application/xml");
+  expect(parseReqif(plain.body).objects).toHaveLength(parseReqif(xml).objects.length);
+  const ofSet = parseReqif((await get(`/api/sets/${sys.id}/reqif`, cookie)).body);
+  expect(ofSet.specifications.map((s) => s.name)).toEqual(["System Requirements"]);
+  expect(ofSet.objects.map((o) => o.name).sort()).toEqual(["Power", "SYS-002", "SYS-003"]);
+  expect(ofSet.relations).toHaveLength(1);
+  expect((await get(`/api/sets/${sys.id}/reqif?format=pdf`, cookie)).statusCode).toBe(400);
+  expect((await get(`/api/sets/${sys.id}/reqif`, (await person("Vera Viewer", "viewer")).cookie)).statusCode).toBe(200);
+
+  // Import into a second project, as the web app does: summarise, guess the mapping by name, upload images, post.
+  const second = (await post("/api/projects", { name: "Copy", templateId: "standard" }, cookie)).json().project.id;
+  const copy = async () => (await get(`/api/projects/${second}`, cookie)).json();
+  const targets = await Promise.all(
+    ((await copy()).sets as { id: string; name: string }[]).map(async (s) => ({ ...s, fields: await fieldsOf(s.id) })),
+  );
+  const file = parseReqif(xml);
+  const summary = summarizeReqif(file);
+  const mapping = guessReqifMapping(
+    summary,
+    targets,
+    (await get(`/api/projects/${second}/links`, cookie)).json().linkTypes,
+  );
+  const uploaded = new Map<string, string>();
+  for (const name of pictures) uploaded.set(name, await upload(second, archive.get(name) as Uint8Array));
+  const mapped = mapReqif(file, mapping, targets, (data) => uploaded.get(data) ?? null);
+  expect(mapped.warnings).toEqual([]);
+  const imported = await post(`/api/projects/${second}/import`, mapped.body, cookie);
+  expect(imported.json()).toEqual({ created: { items: 3, folders: 1, links: 2 } });
+
+  const secondBaseline = (await post(`/api/projects/${second}/baselines`, { name: "Design review 1.0" }, cookie)).json()
+    .id;
+  const again = await unzip((await get(`/api/baselines/${secondBaseline}/reqif?format=reqifz`, cookie)).rawPayload);
+  const xmlAgain = new TextDecoder().decode(again.get("Design_review_1.0.reqif"));
+
+  /** A file's content without what differs between two projects: ids, UIDs, image file names and times. */
+  const shape = (text: string) => {
+    const reqif = parseReqif(text);
+    const types = new Map(reqif.types.map((t) => [t.id, t]));
+    const objects = new Map(reqif.objects.map((o) => [o.id, o]));
+    const render = (attribute: ReqifAttribute, value: ReqifValue | undefined) =>
+      Array.isArray(value)
+        ? value.map((id) => attribute.values?.find((v) => v.id === id)?.name)
+        : typeof value === "object"
+          ? writeXml(value).replace(/files\/[0-9a-f-]+\./g, "files/IMAGE.")
+          : value;
+    const object = (id: string) => {
+      const found = objects.get(id);
+      const type = types.get(found?.typeId ?? "");
+      const values = (type?.attributes ?? [])
+        .filter((a) => a.name !== "ReqIF.ForeignID" && found?.values[a.id] !== undefined)
+        .map((a) => [a.name, render(a, found?.values[a.id])]);
+      return { type: type?.name, values: Object.fromEntries(values) };
+    };
+    const tree = (list: ReqifNode[]): object[] =>
+      list.map((n) => ({ ...object(n.objectId), children: tree(n.children) }));
+    return {
+      types: reqif.types.map((t) => ({
+        name: t.name,
+        kind: t.kind,
+        attributes: t.attributes.map((a) => ({
+          name: a.name,
+          kind: a.kind,
+          multi: a.multi,
+          values: a.values?.map((v) => v.name),
+        })),
+      })),
+      specifications: reqif.specifications.map((s) => ({ name: s.name, children: tree(s.children) })),
+      // Sorted: relationships imported together share a creation time, so their order in a file is not fixed.
+      relations: reqif.relations
+        .map((r) => JSON.stringify([types.get(r.typeId)?.name, object(r.sourceId), object(r.targetId)]))
+        .sort(),
+    };
+  };
+  const first = shape(xml);
+  expect(JSON.stringify(first)).toContain('<b>shall</b> run at 5 &lt; 6 &amp; \\"quietly\\".');
+  expect(JSON.stringify(first)).toContain('<object data=\\"files/IMAGE.png\\" type=\\"image/png\\">Diagram</object>');
+  expect(first.relations).toHaveLength(2);
+  expect(shape(xmlAgain)).toEqual(first);
+  expect(Buffer.from([...again].find(([name]) => name.startsWith("files/"))?.[1] as Uint8Array).equals(png)).toBe(true);
 });

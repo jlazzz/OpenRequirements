@@ -22,6 +22,7 @@ import { type Attributes, api, canEdit, formatValue, type Link, type SetItems, t
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
+import { ReqifExport } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
 import { RevisionDiff } from "./Versions.tsx";
@@ -213,11 +214,14 @@ export function BaselinePage() {
             {differences === 0 ? "nothing has changed since" : `${differences} items differ now`}
           </Text>
         </div>
-        <Switch
-          label="Only differences"
-          checked={differencesOnly}
-          onChange={(e) => setDifferencesOnly(e.currentTarget.checked)}
-        />
+        <Group>
+          <Switch
+            label="Only differences"
+            checked={differencesOnly}
+            onChange={(e) => setDifferencesOnly(e.currentTarget.checked)}
+          />
+          <ReqifExport path={`baselines/${baseline.id}/reqif`} />
+        </Group>
       </Group>
 
       {sections.map(({ set, changes, rows, total, statusField }) => (

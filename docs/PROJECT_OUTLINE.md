@@ -194,7 +194,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Suspect links: automatic flagging and a review queue
 - [x] Coverage reports (e.g. requirements with no verifying test, orphan items)
 - [x] Impact analysis view (what's downstream of this item)
-- [ ] ReqIF import/export (round-trip tested against sample files from DOORS/Polarion)
+- [ ] ReqIF import/export (round-trip tested against sample files from DOORS/Polarion). Built and round-trip tested against its own files on 2026-10-13; vendor samples still needed.
 - [ ] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step
 - [ ] Spec export to PDF and Word with configurable templates
 - [ ] Activity feed and notifications (in-app, email)

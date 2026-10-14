@@ -3,7 +3,7 @@ import { useLocalStorage } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { api, isSuspect, type ProjectDetail, type TreeNode } from "./api.ts";
+import { api, canEdit, isSuspect, type ProjectDetail, type TreeNode } from "./api.ts";
 import { RouterNavLink } from "./links.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { KindIcon, StatusDot } from "./Status.tsx";
@@ -220,6 +220,15 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
+        {canEdit(project.data?.role) && (
+          <RouterNavLink
+            to="/projects/$projectId/import"
+            params={{ projectId: info.id }}
+            label="Import ReqIF"
+            pl={26}
+            py={4}
+          />
+        )}
         <RouterNavLink
           to="/projects/$projectId/activity"
           params={{ projectId: info.id }}

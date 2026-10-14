@@ -25,7 +25,7 @@ const TRUE = new Set(["yes", "y", "true", "1", "x"]);
 const FALSE = new Set(["no", "n", "false", "0"]);
 
 /** Turns a cell's text into a value of the field's type, or says why it cannot. */
-function coerce(field: ImportField, text: string): { value: unknown } | { error: string } {
+export function coerce(field: ImportField, text: string): { value: unknown } | { error: string } {
   const option = (word: string) => field.options?.find((o) => o.toLowerCase() === word.trim().toLowerCase());
   switch (field.type) {
     case "number": {
