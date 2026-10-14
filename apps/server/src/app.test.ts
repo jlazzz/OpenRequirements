@@ -663,6 +663,69 @@ test("a new version of either end makes a relationship suspect until an editor c
   expect((await auditActions()).filter((a) => a === "link.confirm")).toHaveLength(3);
 });
 
+test("trace view, coverage and impact analysis follow relationships across sets and survive a loop", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const { project, sets } = await detail();
+  const ver = sets[2];
+  const make = async (setId: string, name: string) => (await add(setId, { kind: "item", name })).json().node.id;
+  const [n, r1, r2, r3, t1] = [
+    await make(un.id, "N"),
+    await make(sys.id, "R1"),
+    await make(sys.id, "R2"),
+    await make(sys.id, "R3"),
+    await make(ver.id, "T1"),
+  ];
+  const typeId = (await get(`/api/projects/${project.id}/links`, cookie)).json().linkTypes[0].id;
+  const link = async (upstreamId: string, downstreamId: string) =>
+    (await post("/api/links", { upstreamId, downstreamId, typeId }, cookie)).json().link.id as string;
+  const nr1 = await link(n, r1);
+  await link(n, r2);
+  await link(r1, t1);
+  type Node = { itemId: string; children: Node[]; stop?: string };
+  const show = (nodes: Node[]): unknown[] =>
+    nodes.map((x) => [x.itemId, ...(x.stop ? [x.stop] : []), ...(x.children.length ? [show(x.children)] : [])]);
+  const viewer = (await person("Vera Viewer", "viewer")).cookie;
+  const trace = async (setId: string, query = "") => (await get(`/api/sets/${setId}/trace${query}`, viewer)).json();
+  const row = (rows: { itemId: string }[], id: string) => rows.find((r) => r.itemId === id);
+
+  // Defaults: one level up, two down. The verification set is the target because its item type is a test case.
+  const requirements = await trace(sys.id);
+  expect(requirements.targetSetId).toBe(ver.id);
+  expect(requirements.coverage).toEqual({ items: 3, noDownstream: 2, reachTarget: 1 });
+  expect(row(requirements.rows, r1)).toMatchObject({
+    upstream: [{ itemId: n, linkId: nr1, children: [] }],
+    downstream: [{ itemId: t1 }],
+    reachesTarget: true,
+  });
+  expect(row(requirements.rows, r3)).toMatchObject({ upstream: [], downstream: [], reachesTarget: false });
+
+  // Coverage looks at any depth, whatever number of levels the columns show.
+  const needs = await trace(un.id, "?down=1");
+  expect(show(needs.rows[0].downstream)).toEqual([[r1], [r2]]);
+  expect(needs.coverage).toEqual({ items: 1, noDownstream: 0, reachTarget: 1 });
+  expect(show((await trace(un.id)).rows[0].downstream)).toEqual([[r1, [[t1]]], [r2]]);
+  expect((await trace(un.id, `?target=${sys.id}`)).coverage.reachTarget).toBe(1);
+  expect((await trace(sys.id, `?target=${sys.id}`)).coverage.reachTarget).toBe(0);
+
+  // A loop of relationships ends the branch instead of running forever.
+  await link(t1, n);
+  const impact = (await get(`/api/items/${n}/impact`, viewer)).json();
+  expect(show(impact.downstream)).toEqual([[r1, [[t1, [[n, "loop"]]]]], [r2]]);
+  expect(show(impact.upstream)).toEqual([[t1, [[r1, [[n, "loop"]]]]]]);
+  expect(show((await trace(un.id, "?down=4")).rows[0].downstream)).toEqual([[r1, [[t1, [[n, "loop"]]]]], [r2]]);
+
+  // A deleted item drops out of the trace, the coverage and the impact tree.
+  await send("DELETE", `/api/nodes/${t1}`, cookie);
+  expect((await trace(sys.id)).coverage).toEqual({ items: 3, noDownstream: 3, reachTarget: 0 });
+  expect(show((await get(`/api/items/${n}/impact`, viewer)).json().downstream)).toEqual([[r1], [r2]]);
+  expect((await get(`/api/items/${t1}/impact`, cookie)).statusCode).toBe(404);
+
+  expect((await get(`/api/sets/${sys.id}/trace?up=5`, cookie)).statusCode).toBe(400);
+  const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project;
+  const foreign = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0].id;
+  expect((await get(`/api/sets/${sys.id}/trace?target=${foreign}`, cookie)).statusCode).toBe(400);
+});
+
 test("an image can be uploaded, embedded in a description and read back; other files are refused", async () => {
   const { cookie, detail, sys, add } = await projectWithSets();
   const projectId = (await detail()).project.id;

@@ -84,6 +84,21 @@ export type LiveLink = Link & { confirmed: Ends<number>; current: Ends<number>; 
 export const isSuspect = (link: LiveLink) => link.changed.upstream || link.changed.downstream;
 export type ProjectLinks = { linkTypes: LinkType[]; links: LiveLink[] };
 
+/** An item related to another, reached over `linkId`. `stop` says why its own relations are not listed: a loop, or already shown. */
+export type TraceNode = { itemId: string; linkId: string; children: TraceNode[]; stop?: "loop" | "repeat" };
+export type SetTrace = {
+  /** The set whose items count as tests for coverage, if the project has one. */
+  targetSetId: string | null;
+  rows: {
+    itemId: string;
+    upstream: TraceNode[];
+    downstream: TraceNode[];
+    hasDownstream: boolean;
+    reachesTarget: boolean;
+  }[];
+};
+export type Impact = { upstream: TraceNode[]; downstream: TraceNode[] };
+
 /** Uploads an image to a project and returns the address to embed in rich text. */
 export async function uploadImage(projectId: string, file: File): Promise<string> {
   const res = await fetch(`/api/projects/${projectId}/attachments`, {

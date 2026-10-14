@@ -55,8 +55,7 @@ Project: Infusion Pump
 | **List view** | Table of items, selectable columns, sort and filter. Default. |
 | **Reading view** | Items one after another as continuous text, like a document. |
 | **Single item view** | One item with all fields, plus the side panel. |
-
-Trace view (upstream and downstream in columns) is not in Phase 1.
+| **Trace view** | One row per item, its upstream items in columns to the left and downstream items to the right. Built after Phase 1 scope was set ([ADR 0008](adr/0008-trace-view-and-impact-analysis.md)). |
 
 ## 3. Editing and versions
 
@@ -121,7 +120,7 @@ Moved **into** Phase 1 from Phase 2: invitations and roles, comments, activity s
 
 Added, not in the outline: item types and sets (Jama model), draft-and-commit editing, project templates, equations.
 
-Stays in Phase 2 or later: relationship rules, Trace view, admin UI for types and fields, email notifications, Word / PDF / ReqIF, HTTPS.
+Stays in Phase 2 or later: relationship rules, admin UI for types and fields, email notifications, Word / PDF / ReqIF, HTTPS.
 
 The outline estimated Phase 1 at 2–3 months of solo part-time work. With these additions, expect roughly double.
 

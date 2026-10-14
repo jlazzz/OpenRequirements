@@ -43,6 +43,7 @@ import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
+import { TraceView } from "./TraceView.tsx";
 
 export function SetPage() {
   const project = useProject();
@@ -97,11 +98,14 @@ function Container({ data, set, folder, title }: ContainerProps) {
           )}
           <SegmentedControl
             aria-label="View"
-            value={view === "reading" ? "reading" : "list"}
-            onChange={(value) => navigate({ to: ".", search: { view: value === "reading" ? "reading" : undefined } })}
+            value={view ?? "list"}
+            onChange={(value) =>
+              navigate({ to: ".", search: { view: value === "reading" || value === "trace" ? value : undefined } })
+            }
             data={[
               { value: "list", label: "List" },
               { value: "reading", label: "Reading" },
+              { value: "trace", label: "Trace" },
             ]}
           />
           {editor && folder && <NodeActions data={data} node={folder} />}
@@ -128,7 +132,10 @@ function Container({ data, set, folder, title }: ContainerProps) {
       {count > 0 && list.data && view === "reading" && (
         <ReadingView data={data} list={list.data} containerId={folder?.id ?? set.id} />
       )}
-      {count > 0 && list.data && view !== "reading" && (
+      {count > 0 && view === "trace" && (
+        <TraceView data={data} set={set} containerId={folder?.id ?? set.id} title={title} />
+      )}
+      {count > 0 && list.data && view === undefined && (
         <ListTable data={data} set={set} list={list.data} containerId={folder?.id ?? set.id} title={title} />
       )}
 

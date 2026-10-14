@@ -192,8 +192,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Concurrent-edit safety (optimistic locking, with conflict warnings)
 - [ ] Baselines: create, browse, compare any two baselines or a baseline vs. current
 - [x] Suspect links: automatic flagging and a review queue
-- [ ] Coverage reports (e.g. requirements with no verifying test, orphan items)
-- [ ] Impact analysis view (what's downstream of this item)
+- [x] Coverage reports (e.g. requirements with no verifying test, orphan items)
+- [x] Impact analysis view (what's downstream of this item)
 - [ ] ReqIF import/export (round-trip tested against sample files from DOORS/Polarion)
 - [ ] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step
 - [ ] Spec export to PDF and Word with configurable templates

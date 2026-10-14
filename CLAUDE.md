@@ -87,18 +87,19 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/backup.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/backup.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
     src/domain/roles.ts      Role ranking and @mention matching
     src/domain/suspect.ts    The suspect-link rule: which ends of a link changed since it was confirmed
+    src/domain/trace.ts      Walks relationships upstream or downstream as a tree, with loop and repeat guards
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
-  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare
+  shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths
   reqif/            ReqIF parser/serializer, standalone and reusable (empty)
   importers/        CSV reading and writing, and mapping spreadsheet rows to items
 docs/
@@ -179,6 +180,7 @@ AuditEvent                          (append-only log of every write; project id 
 - **Versioning:** append-only revision tables. The "current" state is the latest revision. Baselines reference revision IDs, so they cost nothing to create and can never drift.
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
+- **Trace and impact:** computed from live links on every request, never stored. A path never passes through an item twice ([ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md)).
 - **Ordering:** set trees use fractional indexing or ordered lists, so reordering does not rewrite every row.
 - **Permissions:** per project: Viewer reads, Reviewer also comments, Editor also changes items and relationships, Admin also manages members. An instance administrator (`users.is_admin`) is Admin in every project, manages accounts and creates projects. Set-level overrides come later.
 

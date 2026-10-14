@@ -162,6 +162,9 @@ export function Relationships({ data, itemId }: { data: ProjectDetail; itemId: s
       <Stack gap="sm">
         {section("upstream")}
         {section("downstream")}
+        <RouterAnchor to="/projects/$projectId/items/$nodeId/impact" params={{ projectId, nodeId: itemId }} size="sm">
+          Impact analysis
+        </RouterAnchor>
       </Stack>
       <Modal opened={adding !== null} onClose={() => setAdding(null)} title={`Add ${adding} relationship`}>
         {adding && links.data && (

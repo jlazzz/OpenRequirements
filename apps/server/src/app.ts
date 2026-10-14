@@ -17,6 +17,7 @@ import { linkRoutes } from "./links.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
+import { traceRoutes } from "./trace.ts";
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
@@ -251,6 +252,7 @@ export async function buildApp(
   projectRoutes(context);
   nodeRoutes(context);
   linkRoutes(context);
+  traceRoutes(context);
   memberRoutes(context);
   commentRoutes(context);
   baselineRoutes(context);

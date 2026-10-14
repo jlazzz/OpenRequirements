@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Trace view and impact analysis built: pure graph walk with loop guard, Trace view per set or folder with level pickers, coverage summary with a target set, impact trees on an item, CSV export of the trace, [ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md), [user guide](docs/user-guide/trace.md) (2026-10-13)
 - Suspect links built: pure flagging rule, link revisions for confirmations, markers in the Relationships panel, matrix and List view, "Suspect links" review page, suspect flag in baselines, backup format version 2, [ADR 0007](docs/adr/0007-suspect-links.md) (2026-10-13)
 - Owner feedback on the explorer and item state folded in: compact explorer with icons and collapsible folders, state colours in every multi-item view, print or save as PDF from Reading view (2026-10-13)
 - Example project "Infusion Pump (example)" added to the owner's local instance (2026-10-13)
@@ -33,7 +34,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Suspect links: built, waiting for the owner's test.**
+- **Trace view and impact analysis: built, waiting for the owner's test.**
+- Suspect links: built, waiting for the owner's test.
 - Finishing slice: built, waiting for the owner's test.
 - Bundle B (M4 + M5): the owner has not said in so many words that it was tested. Confirm.
 
@@ -56,11 +58,12 @@ Known gaps left for later milestones or owner decision:
 - Mentions do not notify anyone; they only show in the activity stream.
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
 - Suspect links: no notification when a link becomes suspect, no "suspect only" filter in List view, and baseline compare does not report suspect differences. The review page links to the changed item; its version compare is opened from there by hand.
+- Trace view: no filter by relationship type or state, no trace of a baseline, rows are not capped for very densely linked sets. Coverage is not shown on the project home page.
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
 - Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
 - Export is CSV only (Excel opens it). No .xlsx export.
 - Backup and restore hold the whole project in memory: fine for text, slow for hundreds of megabytes of images.
-- Not checked in a browser: image upload through the editor, and inserting an equation. Both are covered by server tests only.
+- Not checked in a browser: image upload through the editor, inserting an equation, and the Trace view's "Export CSV" button. The first two are covered by server tests only.
 
 ## Open decisions
 

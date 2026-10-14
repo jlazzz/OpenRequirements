@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { BaselinePage, BaselinesPage } from "./BaselinePages.tsx";
+import { ImpactPage } from "./ImpactPage.tsx";
 import { ItemPage } from "./ItemPage.tsx";
 import { MatrixPage } from "./MatrixPage.tsx";
 import { ProjectHome, ProjectPage } from "./ProjectPage.tsx";
@@ -22,15 +23,24 @@ const projectRoute = createRoute({
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: "users", component: UsersPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "invite/$token", component: InvitePage });
 const inProject = { getParentRoute: () => projectRoute };
-// List view is the default; ?view=reading shows the Reading view.
-const viewSearch = (search: Record<string, unknown>): { view?: "reading" } => ({
-  view: search.view === "reading" ? "reading" : undefined,
+const level = (value: unknown) =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4 ? value : undefined;
+// List view is the default; ?view=reading shows the Reading view and ?view=trace the Trace view.
+// The Trace view keeps its levels and coverage target in the URL, so a trace can be shared as a link.
+const viewSearch = (
+  search: Record<string, unknown>,
+): { view?: "reading" | "trace"; up?: number; down?: number; target?: string } => ({
+  view: search.view === "reading" || search.view === "trace" ? search.view : undefined,
+  up: level(search.up),
+  down: level(search.down),
+  target: typeof search.target === "string" ? search.target : undefined,
 });
 const projectChildren = [
   createRoute({ ...inProject, path: "/", component: ProjectHome }),
   createRoute({ ...inProject, path: "sets/$setId", component: SetPage, validateSearch: viewSearch }),
   createRoute({ ...inProject, path: "folders/$nodeId", component: FolderPage, validateSearch: viewSearch }),
   createRoute({ ...inProject, path: "items/$nodeId", component: ItemPage }),
+  createRoute({ ...inProject, path: "items/$nodeId/impact", component: ImpactPage }),
   createRoute({ ...inProject, path: "members", component: MembersPage }),
   createRoute({ ...inProject, path: "activity", component: ActivityPage }),
   createRoute({ ...inProject, path: "trash", component: TrashPage }),
