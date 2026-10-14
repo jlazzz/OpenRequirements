@@ -41,7 +41,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | J | A3 slice 3 | Measured budgets | Sonnet | none | | built 2026-10-14 (workflow not yet run) |
 | J | A5 slice 1 | Docs site | Sonnet | owner decision 4 | | built, merged 2026-10-14 |
 | J | A5 slice 2 | Help in the app | Sonnet | A5 slice 1, J5 slice 8 | |  |
-| K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB |  |
+| K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB | built 2026-10-14, ADR 0024 |
 | K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | built, merged 2026-10-14 |
 | K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | |  |
 | K | A2 slice 4 | Customer test scripts | Sonnet | none | |  |

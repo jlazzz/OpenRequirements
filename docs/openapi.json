@@ -124,6 +124,92 @@
         }
       }
     },
+    "/api/audit/anchors": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "audit"
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
+    "/api/audit/anchors/verify": {
+      "post": {
+        "tags": [
+          "audit"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "anchors"
+                ],
+                "properties": {
+                  "anchors": {
+                    "type": "array",
+                    "maxItems": 100000,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "seq",
+                        "hash",
+                        "at",
+                        "prevAnchorHash",
+                        "anchorHash"
+                      ],
+                      "properties": {
+                        "seq": {
+                          "type": "integer"
+                        },
+                        "hash": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string"
+                        },
+                        "prevAnchorHash": {
+                          "type": "string"
+                        },
+                        "anchorHash": {
+                          "type": "string"
+                        },
+                        "signature": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/audit/verify": {
       "get": {
         "tags": [

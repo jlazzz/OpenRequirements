@@ -743,6 +743,23 @@ export const auditEvents = pgTable("audit_events", {
   hash: text(),
 });
 
+/**
+ * Published heads of the audit chain (ADR 0024). Append-only: rows are never updated or deleted. Instance-wide, so
+ * not part of a project backup. `seq` and `hash` copy the chain row at that position; `signature` is an HMAC with
+ * ANCHOR_KEY when one is set.
+ */
+export const auditAnchors = pgTable("audit_anchors", {
+  id: uuid().primaryKey().defaultRandom(),
+  seq: bigint({ mode: "number" }).notNull().unique(),
+  hash: text().notNull(),
+  at: timestamp({ withTimezone: true }).notNull(),
+  prevAnchorHash: text().notNull(),
+  anchorHash: text().notNull(),
+  signature: text(),
+  // Null for the scheduled job.
+  createdBy: uuid().references(() => users.id),
+});
+
 /** Where a project's audit events are posted as JSON, signed with the secret. Soft-deleted. */
 export const webhooks = pgTable("webhooks", {
   id: uuid().primaryKey().defaultRandom(),

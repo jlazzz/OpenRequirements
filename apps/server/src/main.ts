@@ -1,4 +1,5 @@
 import { buildApp } from "./app.ts";
+import { createAnchor, lastAnchorAt } from "./auditlog.ts";
 import { createDb, runMigrations } from "./db/client.ts";
 import { smtpMailer, startMailLoop } from "./mail.ts";
 import { refreshReferences } from "./references.ts";
@@ -41,8 +42,13 @@ const security = {
   idleMinutes: num(env.SESSION_IDLE_MINUTES),
 };
 
+// Audit chain anchors (ADR 0024). The key signs them; the file gets a copy of each, ideally on another volume.
+const anchor = { key: env.ANCHOR_KEY || undefined, file: env.ANCHOR_FILE || undefined };
+const anchorHours = env.ANCHOR_INTERVAL_HOURS === undefined ? 24 : num(env.ANCHOR_INTERVAL_HOURS);
+
 const app = await buildApp(db, {
   security,
+  anchor,
   mail,
   oidc,
   outbound,
@@ -68,4 +74,14 @@ startLoop(
   (error) => app.log.error(error, "reading references failed"),
   60_000,
 );
+if (anchorHours > 0) {
+  startLoop(
+    async () => {
+      const last = await lastAnchorAt(db);
+      if (!last || Date.now() - last.getTime() >= anchorHours * 3_600_000) await createAnchor(db, anchor, null);
+    },
+    (error) => app.log.error(error, "anchoring the audit log failed"),
+    10 * 60_000,
+  );
+}
 await app.listen({ host: process.env.HOST ?? "0.0.0.0", port: Number(process.env.PORT ?? 3000) });

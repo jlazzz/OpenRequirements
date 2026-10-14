@@ -29,7 +29,21 @@ type AuditCheck = {
   lastSeq: number;
   unchained: number;
   firstBroken: { seq: number; id: string; reason: "sequence" | "link" | "content" } | null;
+  anchors: {
+    checked: number;
+    signed: boolean;
+    firstBad: { seq: number; reason: "anchor_chain" | "signature" | "truncated" | "rewritten" } | null;
+  };
 };
+
+type Anchor = { seq: number; at: string };
+
+const ANCHOR_BAD = {
+  anchor_chain: "the saved anchors do not follow from each other: one was changed or removed",
+  signature: "the anchor is not signed with this instance's key",
+  truncated: "the newest events were deleted",
+  rewritten: "the history before it was rewritten",
+} as const;
 
 const BROKEN = {
   content: "its content does not match its hash: the row was changed",
@@ -41,6 +55,20 @@ const BROKEN = {
 function AuditVerify() {
   const check = useMutation({ mutationFn: () => api<AuditCheck>("audit/verify") });
   const result = check.data;
+  const queryClient = useQueryClient();
+  const anchor = useMutation({
+    mutationFn: () => api<{ created: boolean; anchor: Anchor | null }>("audit/anchors", {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["audit-anchors"] }),
+  });
+  const download = async () => {
+    const { anchors } = await api<{ anchors: Anchor[] }>("audit/anchors");
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ anchors }, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "audit-anchors.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   return (
     <section>
       <Title order={2} size="h4" mb="xs">
@@ -52,6 +80,22 @@ function AuditVerify() {
       <Button variant="default" loading={check.isPending} onClick={() => check.mutate()}>
         Verify audit log
       </Button>
+      <Group mt="xs" gap="xs">
+        <Button variant="default" size="xs" loading={anchor.isPending} onClick={() => anchor.mutate()}>
+          Anchor now
+        </Button>
+        <Button variant="default" size="xs" onClick={download}>
+          Download anchors
+        </Button>
+      </Group>
+      <Text size="xs" c="dimmed" mt={4}>
+        An anchor saves the log's latest hash. Keep the download somewhere else: it exposes a rewritten history.
+      </Text>
+      {anchor.data && (
+        <Text size="xs" mt={4}>
+          {anchor.data.anchor ? `Anchored at event ${anchor.data.anchor.seq}.` : "Nothing new to anchor."}
+        </Text>
+      )}
       {check.isError && (
         <Alert color="red" role="alert" mt="xs">
           {check.error.message}
@@ -61,7 +105,11 @@ function AuditVerify() {
         <Alert color={result.ok ? "green" : "red"} role="status" mt="xs">
           {result.ok
             ? `Intact: ${result.checked} events checked.`
-            : `Broken at event ${result.firstBroken?.seq}: ${result.firstBroken ? BROKEN[result.firstBroken.reason] : ""}.`}
+            : result.firstBroken
+              ? `Broken at event ${result.firstBroken.seq}: ${BROKEN[result.firstBroken.reason]}.`
+              : result.anchors.firstBad &&
+                `Anchor at event ${result.anchors.firstBad.seq}: ${ANCHOR_BAD[result.anchors.firstBad.reason]}.`}
+          {result.ok && ` ${result.anchors.checked} anchors match${result.anchors.signed ? " and are signed" : ""}.`}
           {result.unchained > 0 &&
             ` ${result.unchained} older events were written before the chain and are not covered.`}
         </Alert>
