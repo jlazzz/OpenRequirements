@@ -1,14 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (CI upload)
-Last updated: 2026-10-14 (A3 slice 3)
-Last updated: 2026-10-14 (A3 slice 1)
-Last updated: 2026-10-14 (J5 slice 7)
-Last updated: 2026-10-14 (J1 slice 1)
-Last updated: 2026-10-14 (A2 slice 2)
-Last updated: 2026-10-14 (bundle I, T7 slice 2)
-Last updated: 2026-10-14 (bundle I, T6 slice 1 and 2)
-Last updated: 2026-10-14 (bundle I, J1 slice 3)
+Last updated: 2026-10-14 (wave 4 merged)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 

@@ -1,0 +1,78 @@
+name: Deploy to home server
+
+# Deploys development to a server on a Tailscale network, then runs the tests and
+# uploads the JUnit report to that server's CI runs page. Nothing is exposed publicly.
+# Secrets live in the `home-server` environment, limited to the development branch.
+on:
+  push:
+    branches: [development]
+
+concurrency: deploy-home
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: home-server
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 3s --health-retries 20
+    env:
+      # Tailscale name of the server (MagicDNS) and the folder holding the checkout on it.
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_DIR: ${{ secrets.SERVER_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new "$SERVER_USER@$SERVER_HOST" \
+            "cd '$SERVER_DIR' && git fetch origin && git checkout development && git reset --hard origin/development && npm run up"
+
+      - name: Wait for the app
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS "http://$SERVER_HOST:3000/api/version" && exit 0
+            sleep 2
+          done
+          echo "App did not answer" >&2
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Test
+        run: npx vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml
+
+      - name: Upload results
+        if: always()
+        env:
+          REQ_TOKEN: ${{ secrets.REQ_TOKEN }}
+          REQ_PROJECT_ID: ${{ secrets.REQ_PROJECT_ID }}
+        run: |
+          # Only development triggers this job, so the values need no URL encoding.
+          build="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curl -fsS -X POST \
+            "http://$SERVER_HOST:3000/api/projects/$REQ_PROJECT_ID/verification-results/junit?pipeline=deploy-home&branch=${GITHUB_REF_NAME}&commit=${GITHUB_SHA}&buildUrl=${build}" \
+            -H "Authorization: Bearer $REQ_TOKEN" \
+            -H "Content-Type: application/xml" \
+            --data-binary @junit.xml
