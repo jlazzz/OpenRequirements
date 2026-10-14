@@ -282,6 +282,29 @@
         }
       }
     },
+    "/api/ci-runs/{ciRunId}": {
+      "get": {
+        "tags": [
+          "ci-runs"
+        ],
+        "parameters": [
+          {
+            "name": "ciRunId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/comments/{commentId}": {
       "delete": {
         "tags": [
@@ -1886,6 +1909,45 @@
         }
       }
     },
+    "/api/projects/{projectId}/ci-runs": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pipeline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/code-references": {
       "put": {
         "tags": [
@@ -2877,6 +2939,42 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "pipeline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "branch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "commit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "buildUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2000
+            }
           }
         ],
         "responses": {
@@ -3005,7 +3103,8 @@
                       5,
                       6,
                       7,
-                      8
+                      8,
+                      9
                     ]
                   },
                   "exportedAt": {
@@ -3591,6 +3690,90 @@
                           ],
                           "maxLength": 2000,
                           "default": null
+                        },
+                        "ciRunId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uuid",
+                          "default": null
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "default": []
+                  },
+                  "ciRuns": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "pipeline",
+                        "branch",
+                        "commit",
+                        "buildUrl",
+                        "passed",
+                        "failed",
+                        "skipped",
+                        "unmatched",
+                        "unmatchedNames",
+                        "createdBy",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "pipeline": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "branch": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "commit": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "buildUrl": {
+                          "type": "string",
+                          "maxLength": 2000
+                        },
+                        "passed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "skipped": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unmatched": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unmatchedNames": {
+                          "type": "array",
+                          "maxItems": 200,
+                          "items": {
+                            "type": "string",
+                            "maxLength": 2000
+                          }
+                        },
+                        "createdBy": {
+                          "type": "string",
+                          "format": "uuid"
                         },
                         "createdAt": {
                           "type": "string",

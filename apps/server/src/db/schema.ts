@@ -332,6 +332,34 @@ export const attachments = pgTable("attachments", {
   createdAt: createdAt(),
 });
 
+/** Append-only. One upload of a CI report: where it came from and what it did. Results point back at it. */
+export const ciRuns = pgTable(
+  "ci_runs",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id),
+    // Empty strings when the uploader named none.
+    pipeline: text().notNull().default(""),
+    branch: text().notNull().default(""),
+    commit: text().notNull().default(""),
+    buildUrl: text().notNull().default(""),
+    // Results recorded by outcome, reported tests that were skipped, and reported tests that named no test case.
+    passed: integer().notNull(),
+    failed: integer().notNull(),
+    skipped: integer().notNull(),
+    unmatched: integer().notNull(),
+    // The first 200 unmatched names.
+    unmatchedNames: jsonb().$type<string[]>().notNull(),
+    createdBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.projectId, t.createdAt)],
+);
+
 /** Append-only. The outcome of running one test case once. A mistake is corrected by recording another result. */
 export const verificationResults = pgTable(
   "verification_results",
@@ -358,6 +386,8 @@ export const verificationResults = pgTable(
     runId: uuid().references((): AnyPgColumn => testRuns.id),
     // Where the defect of a failed run is tracked, in an external tool.
     defectUrl: text(),
+    // Set when the result came from a CI upload.
+    ciRunId: uuid().references(() => ciRuns.id),
     createdAt: createdAt(),
   },
   // The latest result of an item is looked up on every status request.
