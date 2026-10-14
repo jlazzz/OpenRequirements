@@ -139,3 +139,36 @@ export function download(filename: string, content: Blob) {
   link.click();
   URL.revokeObjectURL(link.href);
 }
+
+export type Outcome = "pass" | "fail" | "blocked";
+export type VerificationStatus = "not_covered" | "not_run" | "passing" | "failing";
+/** A requirement's status, worked out by the server from the latest result of each test linked to it by "Verified by". */
+export type RequirementVerification = {
+  status: VerificationStatus;
+  /** At least one result was ignored because the test case or the requirement changed after it. */
+  outOfDate: boolean;
+  tests: { itemId: string; outcome: Outcome | null; outOfDate: boolean }[];
+};
+/** The latest result of a test case. Out of date when the test case has a newer version than the one that was run. */
+export type LastResult = { outcome: Outcome; revision: number; recordedAt: string; outOfDate: boolean };
+export type Verification = {
+  /** Keyed by item id: every item that is not a test case. */
+  requirements: Record<string, RequirementVerification>;
+  /** Keyed by item id: every test case that has a result. */
+  tests: Record<string, LastResult>;
+};
+export type Result = {
+  id: string;
+  outcome: Outcome;
+  /** The version of the test case that was run. */
+  revision: number;
+  runAt: string;
+  note: string;
+  attachmentId: string | null;
+  source: "manual" | "junit";
+  recordedBy: string;
+  recordedAt: string;
+  outOfDate: boolean;
+};
+/** As on the server: item types have no "is a test" flag, so a type whose name contains "test" holds test cases. */
+export const isTestSet = (set: ProjectSet | undefined) => set !== undefined && /test/i.test(set.itemType);

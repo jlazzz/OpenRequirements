@@ -7,6 +7,7 @@ import {
   api,
   download,
   isSuspect,
+  isTestSet,
   type ProjectDetail,
   type ProjectSet,
   type SetTrace,
@@ -17,6 +18,7 @@ import { RouterAnchor } from "./links.tsx";
 import { itemsWithin } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { StatusBadge } from "./Status.tsx";
+import { OutcomeBadge, STATUSES, statusText, useVerification, VerificationBadge } from "./Verification.tsx";
 
 type Props = { data: ProjectDetail; set: ProjectSet; containerId: string; title: string };
 const LEVELS = ["0", "1", "2", "3", "4"];
@@ -37,6 +39,8 @@ export function TraceView({ data, set, containerId, title }: Props) {
       api<SetTrace>(`sets/${set.id}/trace?up=${up}&down=${down}${search.target ? `&target=${search.target}` : ""}`),
   });
   const links = useLinks(projectId);
+  const verification = useVerification(projectId).data;
+  const testSets = new Set(data.sets.filter(isTestSet).map((s) => s.id));
   const go = (change: { up?: number; down?: number; target?: string }) =>
     navigate({ to: ".", search: { view: "trace", up, down, target: search.target, ...change } });
 
@@ -59,6 +63,10 @@ export function TraceView({ data, set, containerId, title }: Props) {
   const target = data.sets.find((s) => s.id === trace.data?.targetSetId);
   const uncovered = blocks.filter((b) => !b.row.hasDownstream).length;
   const reaching = blocks.filter((b) => b.row.reachesTarget).length;
+  const statusOf = (item: TreeNode) => verification?.requirements[item.id];
+  const verified = STATUSES.map(
+    ({ value, label }) => `${blocks.filter((b) => statusOf(b.item)?.status === value).length} ${label.toLowerCase()}`,
+  ).join(", ");
 
   const label = (node: TraceNode | undefined) => {
     const item = node && nodeOf.get(node.itemId);
@@ -71,6 +79,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
         "ID",
         "Name",
         "State",
+        ...(testSets.has(set.id) ? [] : ["Verification"]),
         ...downLevels.map((l) => `Downstream ${l + 1}`),
       ],
       ...blocks.flatMap((b) =>
@@ -79,6 +88,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
           b.item.uid ?? "",
           b.item.name,
           b.item.status ?? "",
+          ...(testSets.has(set.id) ? [] : [statusText(statusOf(b.item))]),
           ...downLevels.map((l) => label(b.downstream[i]?.[l])),
         ]),
       ),
@@ -86,7 +96,9 @@ export function TraceView({ data, set, containerId, title }: Props) {
     download(`${title} trace.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
   };
 
-  const itemCell = (item: TreeNode) => (
+  // A test case shows its latest result. Other items show their status; "Not covered" only on the traced items themselves,
+  // where it is the point, and not on every related user need.
+  const itemCell = (item: TreeNode, traced = false) => (
     <Group gap={6} wrap="nowrap" align="flex-start">
       <Text size="sm" style={{ flex: 1, minWidth: 0 }}>
         <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: item.id }} inherit>
@@ -95,6 +107,11 @@ export function TraceView({ data, set, containerId, title }: Props) {
         {item.name}
       </Text>
       <StatusBadge status={item.status} />
+      {testSets.has(item.setId) ? (
+        <OutcomeBadge result={verification?.tests[item.id]} />
+      ) : (
+        (traced || statusOf(item)?.status !== "not_covered") && <VerificationBadge entry={statusOf(item)} />
+      )}
     </Group>
   );
   /** The cells of one level column for one block: a related item spans the rows of everything beyond it. */
@@ -165,6 +182,11 @@ export function TraceView({ data, set, containerId, title }: Props) {
             {uncovered} of {blocks.length} have no downstream relationship.
             {target && target.id !== set.id && ` ${reaching} of ${blocks.length} reach an item in ${target.name}.`}
           </Text>
+          {verification && !testSets.has(set.id) && (
+            <Text size="sm" c="dimmed">
+              Verification: {verified}.
+            </Text>
+          )}
           <Table.ScrollContainer minWidth={(up + down + 1) * 240}>
             <Table withTableBorder withColumnBorders bg="white" aria-label={`Trace of ${title}`}>
               <Table.Thead>
@@ -192,7 +214,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
                       {upLevels.map((l) => levelCell(upstream, l, i, `u${l}`))}
                       {i === 0 && (
                         <Table.Th scope="row" rowSpan={b.height} fw={400} bg="gray.0">
-                          {itemCell(b.item)}
+                          {itemCell(b.item, true)}
                         </Table.Th>
                       )}
                       {downLevels.map((l) => levelCell(downstream, l, i, `d${l}`))}

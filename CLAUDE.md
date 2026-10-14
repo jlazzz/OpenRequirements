@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Open-source, self-hostable requirements management (RM) tool. RM only, not ALM: no task tracking, bug tracking or full test management.
+Open-source, self-hostable requirements management (RM) tool. RM only, not ALM: no task tracking or bug tracking. One exception, made on purpose ([ADR 0009](docs/adr/0009-verification-tracking.md)): verification results are stored and give each requirement a status. Test run planning and step-by-step test execution are still out of scope.
 
 Full plan and phase checklists: [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md). This file is drawn from its sections 4, 5 and 11.
 
@@ -48,7 +48,7 @@ Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
 - **Domain logic first.** Build versioning, baselines and suspect links as pure, tested modules in `apps/server/src/domain/` before wiring up any API or UI. No database or HTTP imports in that folder.
 - **Record decisions.** When a session makes a significant decision, write an ADR in `docs/adr/` as `NNNN-short-title.md`.
 - **Update the status.** At the end of every session that changes the project, update `STATUS.md`: move finished work to Done with the date, set In progress and Next, and bump "Last updated". Tick the matching checklist items in `docs/PROJECT_OUTLINE.md`.
-- **Stay in scope.** If a feature looks like ALM, integrate with an external tool instead of building it.
+- **Stay in scope.** If a feature looks like ALM, integrate with an external tool instead of building it. Storing test results is in scope; planning or executing test runs is not ([ADR 0009](docs/adr/0009-verification-tracking.md)).
 - **Boring tech.** Proven, well-documented components that are easy to self-host. Do not add a dependency for a few lines.
 
 ## Stack
@@ -67,7 +67,8 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Backend | Fastify on Node 24+, run as TypeScript with no build step ([ADR 0002](docs/adr/0002-backend-fastify-native-typescript.md)) | in use |
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
-| Auth | Local accounts, scrypt hashes, session cookie; OIDC/SAML/LDAP later | in use |
+| Auth | Local accounts, scrypt hashes, session cookie; personal access tokens (`Authorization: Bearer`) for CI; OIDC/SAML/LDAP later | in use |
+| CI results | JUnit XML read by a hand-written scanner in `packages/importers`, no XML library ([ADR 0009](docs/adr/0009-verification-tracking.md)) | in use |
 | Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
 | File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images only, type checked by content. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml` | in use |
@@ -87,12 +88,13 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/backup.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/backup.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
     src/domain/roles.ts      Role ranking and @mention matching
     src/domain/suspect.ts    The suspect-link rule: which ends of a link changed since it was confirmed
+    src/domain/verification.ts  The verification status rule: a requirement's status from its tests' latest results, and what is out of date
     src/domain/trace.ts      Walks relationships upstream or downstream as a tree, with loop and repeat guards
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/db/         Drizzle schema and client
@@ -101,7 +103,7 @@ apps/
 packages/
   shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths
   reqif/            ReqIF parser/serializer, standalone and reusable (empty)
-  importers/        CSV reading and writing, and mapping spreadsheet rows to items
+  importers/        CSV reading and writing, mapping spreadsheet rows to items, and reading JUnit XML reports
 docs/
   PROJECT_OUTLINE.md
   adr/              Architecture Decision Records
@@ -150,6 +152,9 @@ Use these terms exactly, in code, API and UI.
 | **Suspect link** | A link flagged for review because the item on either end changed since the link was last confirmed |
 | **Traceability matrix** | A cross-reference view of links between two sets |
 | **Coverage** | Which items have, or lack, downstream links (e.g. untested requirements) |
+| **Verification result** | The outcome of running a test case once: pass, fail or blocked, against one version of the test case. Append-only. Called "result" in the UI. |
+| **Verification status** | Computed per requirement from the latest result of each test linked by "Verified by": not covered, not run, passing, failing |
+| **Out of date** | A result that no longer counts, because the test case or the requirement has a newer version |
 | **External reference** | A link to something outside the tool (Jira issue, Git commit, CI test result) |
 
 ## Core data model (sketch)
@@ -167,6 +172,8 @@ Link                               (upstream item, downstream item, type, revisi
 Link ─< LinkRevision               (append-only: one per confirmation of a suspect link, with the revisions of both ends confirmed against)
 Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
 Baseline ─< BaselineLink               (ids of the links that were live, and whether each was suspect)
+Item ─< VerificationResult         (test cases only; append-only: outcome, test case revision, run date, note, evidence attachment, source)
+User ─< ApiToken                   (hash only; revoked, never removed)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted)
 Project ─< Attachment              (uploaded images embedded in rich text)
 Item ─< ExternalReference          (later)
@@ -180,6 +187,7 @@ AuditEvent                          (append-only log of every write; project id 
 - **Versioning:** append-only revision tables. The "current" state is the latest revision. Baselines reference revision IDs, so they cost nothing to create and can never drift.
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
+- **Verification:** results are stored, the status is computed, never stored. Only direct "Verified by" links count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
 - **Trace and impact:** computed from live links on every request, never stored. A path never passes through an item twice ([ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md)).
 - **Ordering:** set trees use fractional indexing or ordered lists, so reordering does not rewrite every row.
 - **Permissions:** per project: Viewer reads, Reviewer also comments, Editor also changes items and relationships, Admin also manages members. An instance administrator (`users.is_admin`) is Admin in every project, manages accounts and creates projects. Set-level overrides come later.

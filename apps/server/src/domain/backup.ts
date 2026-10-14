@@ -2,13 +2,13 @@ import { docError, type RichNode } from "@app/shared";
 import { checkAttributes } from "./attributes.ts";
 
 export const BACKUP_FORMAT = "open-requirements-backup";
-// Version 2 added linkRevisions and baselineLinks.suspect. Version 1 files are still restored.
-export const BACKUP_VERSION = 2;
+// Version 2 added linkRevisions and baselineLinks.suspect. Version 3 added verificationResults. Older files are still restored.
+export const BACKUP_VERSION = 3;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | typeof BACKUP_VERSION;
+  version: 1 | 2 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -68,6 +68,19 @@ export type Backup = {
     confirmedBy: string;
     createdAt: string;
   }[];
+  /** Results of running test cases. `attachmentId` is the evidence, one of `attachments`. */
+  verificationResults: {
+    id: string;
+    itemId: string;
+    revision: number;
+    outcome: "pass" | "fail" | "blocked";
+    runAt: string;
+    note: string;
+    attachmentId: string | null;
+    source: "manual" | "junit";
+    recordedBy: string;
+    createdAt: string;
+  }[];
   comments: {
     id: string;
     itemId: string;
@@ -117,6 +130,9 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["links", "createdBy", "users"],
   ["linkRevisions", "linkId", "links"],
   ["linkRevisions", "confirmedBy", "users"],
+  ["verificationResults", "itemId", "nodes"],
+  ["verificationResults", "attachmentId", "attachments"],
+  ["verificationResults", "recordedBy", "users"],
   ["comments", "itemId", "nodes"],
   ["comments", "authorId", "users"],
   ["comments", "mentions", "users"],
@@ -182,6 +198,10 @@ export function backupError(backup: Backup): string | null {
   const isItem = (id: string) => nodes.get(id)?.kind === "item";
   if (!backup.links.every((link) => isItem(link.upstreamId) && isItem(link.downstreamId))) {
     return "The backup has a relationship that does not join two items";
+  }
+
+  if (!backup.verificationResults.every((result) => isItem(result.itemId))) {
+    return "The backup has a verification result on something that is not an item";
   }
 
   const typeOfSet = new Map(backup.sets.map((set) => [set.id, set.itemTypeId]));

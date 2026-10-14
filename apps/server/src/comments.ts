@@ -133,8 +133,9 @@ export function commentRoutes({ app, db, requireUser, audit, access }: AppContex
         .where(
           and(
             eq(auditEvents.projectId, projectId),
-            // Drafts are private and uploads are noise; neither belongs in a shared feed.
+            // Drafts are private; uploads and the single results of a CI import are noise. None belongs in a shared feed.
             notLike(auditEvents.action, "draft.%"),
+            notLike(auditEvents.action, "junit.result.%"),
             notLike(auditEvents.action, "attachment.%"),
             before ? lt(auditEvents.at, new Date(before)) : undefined,
           ),

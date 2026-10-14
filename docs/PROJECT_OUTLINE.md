@@ -12,7 +12,7 @@ High-level outline of the entire development process, from discovery to a sustai
 
 **What it is:** A focused requirements management (RM) tool. It covers writing, organizing, reviewing, baselining and tracing requirements.
 
-**What it is not:** A full ALM suite. It does no task tracking, bug tracking, or full test management. It integrates with those tools instead of replacing them.
+**What it is not:** A full ALM suite. It does no task tracking, bug tracking, test run planning or test execution. It does store test results, to show which requirements are verified ([ADR 0009](adr/0009-verification-tracking.md)). It integrates with those tools instead of replacing them.
 
 **Gap it fills:**
 - Commercial tools (DOORS, Polarion, Codebeamer, Jama) are powerful but expensive and dated.
@@ -211,8 +211,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Mandatory change reasons (configurable per project)
 - [ ] Review and approval workflows (draft → in review → approved), with configurable approvers
 - [ ] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records)
-- [ ] Verification tracking: lightweight test case items, verification results, and status per requirement
-- [ ] Import test results from CI (JUnit XML) and link them to requirements automatically
+- [x] Verification tracking: lightweight test case items, verification results, and status per requirement
+- [x] Import test results from CI (JUnit XML) and link them to requirements automatically
 - [ ] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step
 - [ ] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status)
 - [ ] Webhooks for external automation

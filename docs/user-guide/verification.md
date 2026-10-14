@@ -1,0 +1,62 @@
+# Verification: test results and status per requirement
+
+The tool stores the results of your tests and shows which requirements are verified. It does not plan test runs or walk through test steps.
+
+## Set up
+
+1. Write each test as an item in a set of test cases. The Standard template has **Verification Tests**.
+2. Open a requirement. Under **Relationships**, add the test case as a **downstream** item with the type **Verified by**.
+
+## Record a result by hand
+
+1. Open the test case.
+2. Under **Results**, choose **Record result**.
+3. Pick Pass, Fail or Blocked. Change the date or the version only if the test was run earlier.
+4. Optional: add a note and an image as evidence.
+
+A result cannot be changed afterwards. To correct one, record another: the latest result counts.
+
+## What the status means
+
+| Status | Meaning |
+|---|---|
+| Not covered | No test case is linked with "Verified by" |
+| Not run | At least one linked test has no current pass, and none has failed |
+| Passing | Every linked test has a current pass |
+| Failing | At least one linked test has a current fail |
+
+A blocked test counts as not run.
+
+**Out of date** means a result no longer counts, because:
+
+- the test case was changed after it was run, or
+- the requirement was changed after the result was recorded.
+
+Run the test again and record the new result.
+
+## Where the status shows
+
+- **List view:** the Verification column, and the "Any verification" filter. In a set of test cases the column is "Last result".
+- **Traceability matrix:** next to each item.
+- **Trace view:** next to each item, with totals above the table.
+- **Item page:** at the top of the side panel, with each test and its last result.
+
+## Import results from CI
+
+1. Select your name at the top right. Under **Access tokens**, create a token and copy it. It is shown once.
+2. Store it as a secret in your CI system.
+3. Put the UID of the test case in the name of each automated test, for example `test_VER_012_pump_stops` or `VER-012 pump stops`.
+4. After the tests, send the JUnit XML report:
+
+```bash
+curl -X POST "https://YOUR-SERVER/api/projects/PROJECT-ID/verification-results/junit" \
+  -H "Authorization: Bearer $REQUIREMENTS_TOKEN" \
+  -H "Content-Type: application/xml" \
+  --data-binary @junit.xml
+```
+
+The project id is in the address bar when the project is open. The token's user needs the Editor role in the project.
+
+- A failed or errored test records Fail. A skipped test records nothing.
+- Several tests with the same UID record one result. A failure wins.
+- The answer lists the results recorded and the test names that matched no test case.

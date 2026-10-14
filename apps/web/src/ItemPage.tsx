@@ -25,6 +25,7 @@ import { useProject } from "./ProjectPage.tsx";
 import { Relationships } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
 import { RichView } from "./RichView.tsx";
+import { VerificationPanel } from "./Verification.tsx";
 import { Versions } from "./Versions.tsx";
 
 type ItemData = { item: Item; fields: Field[]; draft: Draft | null };
@@ -88,6 +89,7 @@ function ItemReadOnly({ item, fields }: ItemData) {
         </SimpleGrid>
       </Stack>
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
+        {project && <VerificationPanel data={project} item={item} />}
         {project && <Relationships data={project} itemId={item.id} />}
         {project && <Comments data={project} itemId={item.id} />}
         <Versions itemId={item.id} fields={fields} />
@@ -298,6 +300,7 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
         </Stack>
       </form>
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
+        {project && <VerificationPanel data={project} item={item} />}
         {project && <Relationships data={project} itemId={item.id} />}
         {project && <Comments data={project} itemId={item.id} />}
         <Versions itemId={item.id} fields={fields} editable />

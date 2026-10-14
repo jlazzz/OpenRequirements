@@ -31,6 +31,7 @@ import {
   type Field,
   formatValue,
   isSuspect,
+  isTestSet,
   type ProjectDetail,
   type ProjectSet,
   type SetItems,
@@ -44,6 +45,7 @@ import { useLinks } from "./Relationships.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
 import { TraceView } from "./TraceView.tsx";
+import { OutcomeBadge, resultText, STATUSES, statusText, useVerification, VerificationBadge } from "./Verification.tsx";
 
 export function SetPage() {
   const project = useProject();
@@ -226,7 +228,11 @@ function ListTable({
   const projectId = data.project.id;
   const queryClient = useQueryClient();
   const links = useLinks(projectId).data?.links ?? [];
+  // Test cases show their latest result; every other item shows its verification status.
+  const verification = useVerification(projectId).data;
+  const testSet = isTestSet(set);
   const [coverage, setCoverage] = useState<"all" | "no-upstream" | "no-downstream">("all");
+  const [verified, setVerified] = useState("");
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortKey>(null);
   const [hidden, setHidden] = useLocalStorage<string[]>({ key: `list-hidden-columns:${set.id}`, defaultValue: [] });
@@ -257,11 +263,14 @@ function ListTable({
         upstream: count(node.id, "downstreamId"),
         downstream: count(node.id, "upstreamId"),
         suspect: { upstream: suspect(node.id, "downstreamId"), downstream: suspect(node.id, "upstreamId") },
+        requirement: testSet ? undefined : verification?.requirements[node.id],
+        result: testSet ? verification?.tests[node.id] : undefined,
       },
     ];
   });
 
   const columns = [
+    { id: "verification", label: testSet ? "Last result" : "Verification", field: undefined },
     ...list.fields.map((field) => ({ id: field.id, label: field.name, field })),
     { id: "upstream", label: "Upstream", field: undefined },
     { id: "downstream", label: "Downstream", field: undefined },
@@ -277,11 +286,18 @@ function ListTable({
           ? row.upstream
           : column === "downstream"
             ? row.downstream
-            : formatValue(row.attributes[column]);
+            : column === "verification"
+              ? testSet
+                ? resultText(row.result)
+                : statusText(row.requirement)
+              : formatValue(row.attributes[column]);
 
   const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
   let rows = all
     .filter((r) => coverage === "all" || (coverage === "no-upstream" ? r.upstream === 0 : r.downstream === 0))
+    .filter(
+      (r) => !verified || (verified === "out_of_date" ? r.requirement?.outOfDate : r.requirement?.status === verified),
+    )
     .filter((r) => {
       const text = ["id", "name", ...list.fields.map((f) => f.id)]
         .map((c) => cell(r, c))
@@ -391,6 +407,19 @@ function ListTable({
             { value: "no-downstream", label: `No downstream (${all.filter((r) => r.downstream === 0).length})` },
           ]}
         />
+        {!testSet && (
+          <NativeSelect
+            aria-label="Verification filter"
+            size="xs"
+            value={verified}
+            onChange={(e) => setVerified(e.currentTarget.value)}
+            data={[
+              { value: "", label: "Any verification" },
+              ...STATUSES,
+              { value: "out_of_date", label: "Out of date" },
+            ]}
+          />
+        )}
         <TextInput
           aria-label="Filter rows"
           placeholder="Filter rows"
@@ -505,6 +534,11 @@ function ListTable({
                         />
                       ) : column.field?.name === "Status" ? (
                         <StatusBadge status={row.attributes[column.id]} />
+                      ) : column.id === "verification" ? (
+                        <>
+                          <VerificationBadge entry={row.requirement} />
+                          <OutcomeBadge result={row.result} />
+                        </>
                       ) : (
                         cell(row, column.id)
                       )}

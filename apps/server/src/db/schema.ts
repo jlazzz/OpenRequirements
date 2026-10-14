@@ -2,6 +2,7 @@ import type { RichNode } from "@app/shared";
 import {
   type AnyPgColumn,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -34,6 +35,19 @@ export const sessions = pgTable("sessions", {
     .references(() => users.id),
   createdAt: createdAt(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
+});
+
+/** A personal access token, for scripts and CI. It acts as its user. Revoked, never removed, so the audit log keeps its meaning. */
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid().primaryKey().defaultRandom(),
+  userId: uuid()
+    .notNull()
+    .references(() => users.id),
+  name: text().notNull(),
+  // SHA-256 of the token. The token itself is shown once, when it is made.
+  tokenHash: text().notNull().unique(),
+  createdAt: createdAt(),
+  revokedAt: timestamp({ withTimezone: true }),
 });
 
 export const projects = pgTable("projects", {
@@ -218,6 +232,34 @@ export const attachments = pgTable("attachments", {
     .references(() => users.id),
   createdAt: createdAt(),
 });
+
+/** Append-only. The outcome of running one test case once. A mistake is corrected by recording another result. */
+export const verificationResults = pgTable(
+  "verification_results",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    // The test case.
+    itemId: uuid()
+      .notNull()
+      .references(() => nodes.id),
+    // The revision number of the test case that was run.
+    revision: integer().notNull(),
+    // One of Outcome in domain/verification.ts.
+    outcome: text().$type<"pass" | "fail" | "blocked">().notNull(),
+    // When the test was run, as stated by whoever recorded it. `createdAt` is when it was recorded, and decides what is out of date.
+    runAt: timestamp({ withTimezone: true }).notNull(),
+    note: text().notNull().default(""),
+    // Evidence: an uploaded image of the same project.
+    attachmentId: uuid().references(() => attachments.id),
+    source: text().$type<"manual" | "junit">().notNull(),
+    recordedBy: uuid()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  // The latest result of an item is looked up on every status request.
+  (t) => [index().on(t.itemId, t.createdAt)],
+);
 
 /** Who may open a project, and with which role. Instance administrators have access to every project without a row here. */
 export const projectMembers = pgTable(

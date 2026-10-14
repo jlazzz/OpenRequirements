@@ -161,6 +161,14 @@ M1 ships a plain edit form on the Single item view: change fields, then "Save ve
 
 Within a milestone, build the domain logic and its tests first, then the API, then the screen.
 
+### Verification (built after Phase 1, ADR 0009)
+
+- A test case holds **results**: pass, fail or blocked, with date, person, note, optional image and the version that was run. Results are never edited.
+- Every other item shows a **verification status** from the tests linked to it by "Verified by": not covered, not run, passing, failing. It appears in List view, the matrix, the Trace view and the item's side panel.
+- A result is **out of date** once the test case or the requirement changes.
+- CI sends a JUnit report to the API with a personal access token. Tests are matched to test cases by UID.
+- Not built, on purpose: test run planning and step-by-step execution.
+
 ## 11. Still open
 
 - Conflict handling on commit (section 3) needs the owner's confirmation.

@@ -21,11 +21,13 @@ import {
   projects,
   sets,
   users,
+  verificationResults,
 } from "./db/schema.ts";
 import { BACKUP_FORMAT, BACKUP_VERSION, type Backup, backupError, parentsFirst, remapIds } from "./domain/backup.ts";
 import { imageType } from "./domain/image.ts";
 import { NO_PASSWORD } from "./domain/password.ts";
 import { ROLES } from "./domain/roles.ts";
+import { OUTCOMES } from "./domain/verification.ts";
 import { searchTextOf } from "./nodes.ts";
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -49,7 +51,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, BACKUP_VERSION] },
+    version: { enum: [1, 2, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -111,6 +113,22 @@ const backupSchema = {
       }),
       default: [],
     },
+    // Not in version 1 or 2 files.
+    verificationResults: {
+      ...rows({
+        id,
+        itemId: id,
+        revision: { type: "integer", minimum: 1 },
+        outcome: { enum: [...OUTCOMES] },
+        runAt: when,
+        note: text(2000),
+        attachmentId: idOrNull,
+        source: { enum: ["manual", "junit"] },
+        recordedBy: id,
+        createdAt: when,
+      }),
+      default: [],
+    },
     comments: rows({
       id,
       itemId: id,
@@ -152,7 +170,7 @@ const backupSchema = {
     }),
   }),
 };
-backupSchema.required = backupSchema.required.filter((key) => key !== "linkRevisions");
+backupSchema.required = backupSchema.required.filter((key) => key !== "linkRevisions" && key !== "verificationResults");
 
 const iso = (date: Date) => date.toISOString();
 const isoOrNull = (date: Date | null) => date?.toISOString() ?? null;
@@ -189,7 +207,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
         .where(eq(sets.projectId, projectId));
       const allBaselines = await db.select().from(baselines).where(inProject(baselines));
       const baselineIds = db.select({ id: baselines.id }).from(baselines).where(inProject(baselines));
-      const files = [];
+      const files: Backup["attachments"] = [];
       for (const file of await db.select().from(attachments).where(inProject(attachments))) {
         // A row whose file has gone missing is left out, so one lost image cannot block every backup.
         const bytes = await readFile(join(dir, file.id)).catch(() => null);
@@ -249,6 +267,15 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
             .from(linkRevisions)
             .where(inArray(linkRevisions.linkId, db.select({ id: links.id }).from(links).where(inProject(links))))
         ).map((r) => ({ ...r, createdAt: iso(r.createdAt) })),
+        // Evidence whose file has gone missing is left out with it, so the result itself still restores.
+        verificationResults: (
+          await db.select().from(verificationResults).where(inArray(verificationResults.itemId, nodeIds))
+        ).map((r) => ({
+          ...r,
+          attachmentId: files.some((file) => file.id === r.attachmentId) ? r.attachmentId : null,
+          runAt: iso(r.runAt),
+          createdAt: iso(r.createdAt),
+        })),
         comments: (await db.select().from(comments).where(inArray(comments.itemId, nodeIds))).map((c) => ({
           ...c,
           createdAt: iso(c.createdAt),
@@ -272,6 +299,7 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
           backup.itemRevisions.map((r) => r.authorId),
           backup.links.map((l) => l.createdBy),
           backup.linkRevisions.map((r) => r.confirmedBy),
+          backup.verificationResults.map((r) => r.recordedBy),
           backup.comments.flatMap((c) => [c.authorId, ...c.mentions]),
           backup.baselines.map((b) => b.createdBy),
           backup.attachments.map((a) => a.createdBy),
@@ -433,6 +461,12 @@ export function backupRoutes({ app, db, requireUser, requireAdmin, audit, access
               createdAt: date(file.createdAt),
             });
             await writeFile(join(dir, file.id), image.bytes);
+          }
+          // After the attachments, because a result may point at its evidence.
+          for (const part of parts(backup.verificationResults)) {
+            await tx
+              .insert(verificationResults)
+              .values(part.map((r) => ({ ...r, runAt: date(r.runAt), createdAt: date(r.createdAt) })));
           }
           await audit(tx, userId, "project.restore", "project", projectId);
           return created;

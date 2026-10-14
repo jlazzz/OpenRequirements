@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Center,
+  Divider,
   Group,
   Loader,
   Modal,
@@ -17,6 +18,7 @@ import { Outlet, useLocation } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { api, type Session, type User } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
+import { Tokens } from "./Tokens.tsx";
 
 export function useSession() {
   return useQuery({ queryKey: ["session"], queryFn: () => api<Session>("session") });
@@ -149,7 +151,7 @@ function Shell({ user }: { user: User }) {
       <main className="print-flow" style={{ height: `calc(100vh - ${TOPBAR_HEIGHT}px)`, overflow: "auto" }}>
         <Outlet />
       </main>
-      <Modal opened={changing} onClose={() => setChanging(false)} title={`${user.name}: change password`}>
+      <Modal opened={changing} onClose={() => setChanging(false)} title={`${user.name}: account`}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -176,6 +178,8 @@ function Shell({ user }: { user: User }) {
             </Button>
           </Stack>
         </form>
+        <Divider my="md" />
+        <Tokens />
       </Modal>
     </>
   );

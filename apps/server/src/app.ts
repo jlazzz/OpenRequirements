@@ -11,13 +11,14 @@ import { backupRoutes } from "./backup.ts";
 import { baselineRoutes } from "./baselines.ts";
 import { commentRoutes } from "./comments.ts";
 import type { Db } from "./db/client.ts";
-import { sessions, users } from "./db/schema.ts";
+import { apiTokens, sessions, users } from "./db/schema.ts";
 import { hashPassword, verifyPassword } from "./domain/password.ts";
 import { linkRoutes } from "./links.ts";
 import { memberRoutes } from "./members.ts";
 import { nodeRoutes } from "./nodes.ts";
 import { projectRoutes } from "./projects.ts";
 import { traceRoutes } from "./trace.ts";
+import { verificationRoutes } from "./verification.ts";
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
@@ -85,11 +86,27 @@ export async function buildApp(
     for (const method of [route.method].flat()) apiRoutes.push({ method, url: route.url, public: isPublic });
   });
 
+  const who = { id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin };
+  /** The access token a script or CI job sent, if any. A request that sends one is never read as a browser session. */
+  const bearer = (req: FastifyRequest) =>
+    req.headers.authorization === undefined ? null : (/^Bearer (\S+)$/.exec(req.headers.authorization)?.[1] ?? "");
+
   async function findUser(req: FastifyRequest): Promise<SessionUser | null> {
+    const apiToken = bearer(req);
+    if (apiToken !== null) {
+      const [user] = await db
+        .select(who)
+        .from(apiTokens)
+        .innerJoin(users, eq(users.id, apiTokens.userId))
+        .where(
+          and(eq(apiTokens.tokenHash, hashToken(apiToken)), isNull(apiTokens.revokedAt), isNull(users.deactivatedAt)),
+        );
+      return user ?? null;
+    }
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return null;
     const [user] = await db
-      .select({ id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin })
+      .select(who)
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
       .where(
@@ -101,6 +118,11 @@ export async function buildApp(
   async function requireUser(req: FastifyRequest, reply: FastifyReply) {
     req.user = await findUser(req);
     if (!req.user) return reply.code(401).send({ error: "Not signed in" });
+  }
+
+  // A leaked token must not be able to change the password or make itself a replacement.
+  async function requireSession(req: FastifyRequest, reply: FastifyReply) {
+    if (bearer(req) !== null) return reply.code(403).send({ error: "Sign in with your password to do this" });
   }
 
   async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -200,7 +222,7 @@ export async function buildApp(
   app.post(
     "/api/account/password",
     {
-      onRequest: requireUser,
+      onRequest: [requireUser, requireSession],
       config: loginLimit,
       schema: {
         body: {
@@ -232,6 +254,72 @@ export async function buildApp(
     },
   );
 
+  // Personal access tokens, for CI and scripts. A token acts as the user who made it, with that user's roles.
+  app.get("/api/tokens", { onRequest: requireUser }, async (req) => ({
+    tokens: await db
+      .select({ id: apiTokens.id, name: apiTokens.name, createdAt: apiTokens.createdAt })
+      .from(apiTokens)
+      .where(and(eq(apiTokens.userId, req.user?.id as string), isNull(apiTokens.revokedAt)))
+      .orderBy(apiTokens.createdAt),
+  }));
+
+  app.post(
+    "/api/tokens",
+    {
+      onRequest: [requireUser, requireSession],
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: { name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const user = req.user as SessionUser;
+      const name = (req.body as { name: string }).name.trim();
+      // The prefix lets secret scanners and people recognise a leaked token.
+      const token = `orq_${randomBytes(32).toString("base64url")}`;
+      const id = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(apiTokens)
+          .values({ userId: user.id, name, tokenHash: hashToken(token) })
+          .returning({ id: apiTokens.id });
+        if (!row) throw new Error("token insert returned no row");
+        await audit(tx, user.id, "token.create", "token", row.id, { label: name });
+        return row.id;
+      });
+      // The only time the token is ever sent: only its hash is stored.
+      return reply.code(201).send({ id, name, token });
+    },
+  );
+
+  app.delete(
+    "/api/tokens/:tokenId",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: { type: "object", required: ["tokenId"], properties: { tokenId: { type: "string", format: "uuid" } } },
+      },
+    },
+    async (req, reply) => {
+      const user = req.user as SessionUser;
+      const { tokenId } = req.params as { tokenId: string };
+      const revoked = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(apiTokens)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(apiTokens.id, tokenId), eq(apiTokens.userId, user.id), isNull(apiTokens.revokedAt)))
+          .returning({ name: apiTokens.name });
+        if (row) await audit(tx, user.id, "token.revoke", "token", tokenId, { label: row.name });
+        return row;
+      });
+      if (!revoked) return reply.code(404).send({ error: "Not found" });
+      return { ok: true };
+    },
+  );
+
   const access = createAccess(db);
   // Safety net under the per-route checks: any route whose path names something in a project answers 404 to people outside
   // that project, before the request body is even looked at. Routes still state the role they need.
@@ -253,6 +341,7 @@ export async function buildApp(
   nodeRoutes(context);
   linkRoutes(context);
   traceRoutes(context);
+  verificationRoutes(context);
   memberRoutes(context);
   commentRoutes(context);
   baselineRoutes(context);

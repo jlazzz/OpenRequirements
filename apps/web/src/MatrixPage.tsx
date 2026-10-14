@@ -1,10 +1,11 @@
 import { Alert, Group, Select, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { isSuspect, type LiveLink, type TreeNode } from "./api.ts";
+import { isSuspect, isTestSet, type LiveLink, type ProjectSet, type TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { StatusBadge, StatusDot } from "./Status.tsx";
+import { OutcomeBadge, useVerification, VerificationBadge } from "./Verification.tsx";
 
 /** Traceability matrix: the items of one set down the side, another set across the top, a mark where two are linked. */
 export function MatrixPage() {
@@ -12,7 +13,15 @@ export function MatrixPage() {
   const search = useSearch({ from: "/projects/$projectId/matrix" });
   const navigate = useNavigate({ from: "/projects/$projectId/matrix" });
   const links = useLinks(project?.project.id ?? "");
+  const verification = useVerification(project?.project.id ?? "").data;
   if (!project) return null;
+  // A test case shows its latest result; any other item shows its verification status.
+  const verified = (set: ProjectSet, node: TreeNode) =>
+    isTestSet(set) ? (
+      <OutcomeBadge result={verification?.tests[node.id]} />
+    ) : (
+      <VerificationBadge entry={verification?.requirements[node.id]} />
+    );
 
   const { sets, nodes } = project;
   const rowSet = sets.find((s) => s.id === search.rows) ?? sets[0];
@@ -62,7 +71,7 @@ export function MatrixPage() {
           <Text size="sm" c={unlinked > 0 ? "orange.8" : "dimmed"}>
             {unlinked} of {rows.length} {rowSet.name} items have no relationship with any {colSet.name} item.
           </Text>
-          <Table.ScrollContainer minWidth={240 + cols.length * 80}>
+          <Table.ScrollContainer minWidth={240 + cols.length * 110}>
             <Table withTableBorder withColumnBorders bg="white" aria-label={`${rowSet.name} against ${colSet.name}`}>
               <Table.Thead>
                 <Table.Tr>
@@ -75,6 +84,7 @@ export function MatrixPage() {
                         </RouterAnchor>
                       </Tooltip>
                       <StatusDot status={col.status} />
+                      <div>{verified(colSet, col)}</div>
                     </Table.Th>
                   ))}
                 </Table.Tr>
@@ -86,7 +96,7 @@ export function MatrixPage() {
                       <RouterAnchor {...item(row)} size="sm" mr={6}>
                         {row.uid} {row.name}
                       </RouterAnchor>
-                      <StatusBadge status={row.status} />
+                      <StatusBadge status={row.status} /> {verified(rowSet, row)}
                     </Table.Th>
                     {cols.map((col) => (
                       <Table.Td

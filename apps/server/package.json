@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@app/importers": "*",
     "@app/shared": "*",
     "@fastify/cookie": "^11.1.3",
     "@fastify/rate-limit": "^11.2.1",
