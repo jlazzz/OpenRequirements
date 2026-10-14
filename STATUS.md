@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (A3 slice 1)
 Last updated: 2026-10-14 (J5 slice 7)
 Last updated: 2026-10-14 (J1 slice 1)
 Last updated: 2026-10-14 (A2 slice 2)
@@ -15,6 +16,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
 - J5 slice 7, folders and the side bar: List view of a set or folder shows its sub-folders above the items with item counts; Baselines, Reviews, Test plans (plans with open cycles under them), Test runs (my runs, open cycles) and Reports open like folders in the side bar, 10 each with "All …", open state remembered per browser (`SideBar.tsx`). No route or migration. Checked in a browser on the demo project. "Test runs" has no page of its own yet (J5 slice 8); the Reports rows for cycle summary and plan history open Test plans (2026-10-14)
 - J1 slice 1, review participants: add or remove a participant on an open review (`review_participants` rows kept with `removedAt`; a signer and the last person stay), opening a review sets Status to "In review" as a status-only version (closing still approves, as status-only versions are not edits), "My reviews" on the home page. Migration 0021, backup format version 10, [ADR 0023](docs/adr/0023-review-participants-and-in-review.md). Checked in a browser on a scratch instance: add, remove, My reviews (2026-10-14)
 - A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)

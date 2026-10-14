@@ -24,6 +24,8 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
+      # Runtime dependencies only; dev tools are covered by Dependabot.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
