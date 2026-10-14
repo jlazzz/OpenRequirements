@@ -103,7 +103,8 @@ export function ReqifImportPage() {
       (project?.sets ?? []).map((set, index) => ({
         id: set.id,
         name: set.name,
-        fields: lists[index]?.data?.fields ?? [],
+        // The steps of a test case cannot be filled from one ReqIF attribute.
+        fields: (lists[index]?.data?.fields ?? []).filter((f) => f.type !== "steps"),
       })),
     [project?.sets, fetched],
   );

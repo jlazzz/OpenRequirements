@@ -16,13 +16,19 @@ import { useDisclosure } from "@mantine/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { FormEvent } from "react";
-import { api, type Project, type Template } from "./api.ts";
+import { api, type Project, type RunSummary, type Template } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { useSession } from "./Root.tsx";
+import { RunStateBadge } from "./TestPages.tsx";
 
 export function ProjectsPage() {
   const isAdmin = useSession().data?.user?.isAdmin ?? false;
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => api<{ projects: Project[] }>("projects") });
+  // The signed-in user's open test runs, in every project.
+  const runs = useQuery({
+    queryKey: ["test-runs", "mine"],
+    queryFn: () => api<{ runs: (RunSummary & { project: string })[] }>("test-runs/mine"),
+  });
   const [creating, { open, close }] = useDisclosure(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -94,6 +100,55 @@ export function ProjectsPage() {
             ))}
           </Table.Tbody>
         </Table>
+      )}
+
+      {runs.data && runs.data.runs.length > 0 && (
+        <>
+          <Title order={2} size="h4" mt="xl" mb="xs">
+            My test runs
+          </Title>
+          <Table highlightOnHover withTableBorder bg="white" aria-label="My test runs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Test case</Table.Th>
+                <Table.Th>Project</Table.Th>
+                <Table.Th>Cycle</Table.Th>
+                <Table.Th>State</Table.Th>
+                <Table.Th>Steps</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {runs.data.runs.map((run) => (
+                <Table.Tr key={run.id}>
+                  <Table.Td>
+                    <RouterAnchor
+                      to="/projects/$projectId/runs/$testRunId"
+                      params={{ projectId: run.projectId, testRunId: run.id }}
+                    >
+                      {run.uid}
+                    </RouterAnchor>{" "}
+                    {run.name}
+                  </Table.Td>
+                  <Table.Td>{run.project}</Table.Td>
+                  <Table.Td>
+                    <RouterAnchor
+                      to="/projects/$projectId/cycles/$testCycleId"
+                      params={{ projectId: run.projectId, testCycleId: run.cycleId }}
+                    >
+                      {run.cycle}
+                    </RouterAnchor>
+                  </Table.Td>
+                  <Table.Td>
+                    <RunStateBadge state={run.state} />
+                  </Table.Td>
+                  <Table.Td>
+                    {run.done} of {run.total}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </>
       )}
 
       <Modal opened={creating} onClose={close} title="New project">

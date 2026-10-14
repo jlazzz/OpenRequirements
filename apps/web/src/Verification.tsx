@@ -275,11 +275,28 @@ function Results({ data, item }: { data: ProjectDetail; item: Item }) {
             <Text size="xs" c="dimmed">
               {new Date(result.runAt).toLocaleDateString()} · {result.recordedBy}
               {result.source === "junit" && " · from CI"}
+              {result.runId && (
+                <>
+                  {" · "}
+                  <RouterAnchor
+                    to="/projects/$projectId/runs/$testRunId"
+                    params={{ projectId, testRunId: result.runId }}
+                    inherit
+                  >
+                    test run
+                  </RouterAnchor>
+                </>
+              )}
             </Text>
             {result.note && (
               <Text size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                 {result.note}
               </Text>
+            )}
+            {result.defectUrl && (
+              <Anchor href={result.defectUrl} target="_blank" rel="noreferrer" size="sm" mr="xs">
+                Defect
+              </Anchor>
             )}
             {result.attachmentId && (
               <Anchor href={`/api/attachments/${result.attachmentId}`} target="_blank" rel="noreferrer" size="sm">

@@ -91,7 +91,7 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/backup.ts, src/import.ts, src/reqif.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/reqif.ts   Feature route files: one per feature, taking `AppContext`
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
@@ -99,6 +99,7 @@ apps/
     src/domain/suspect.ts    The suspect-link rule: which ends of a link changed since it was confirmed
     src/domain/verification.ts  The verification status rule: a requirement's status from its tests' latest results, and what is out of date
     src/domain/trace.ts      Walks relationships upstream or downstream as a tree, with loop and repeat guards
+    src/domain/testrun.ts    The run state rule: a run's state from the latest result of each step
     src/domain/review.ts     The review outcome rule, the signature digest, and the "only Status changed" check
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/db/         Drizzle schema and client
@@ -120,7 +121,7 @@ e2e/                Playwright tests (empty)
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
 - Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for instance-admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
-- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId` or `reviewId`: a hook uses those names to refuse non-members before the body is read.
+- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId`, `reviewId`, `testPlanId`, `testCycleId` or `testRunId`: a hook uses those names to refuse non-members before the body is read.
 - `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
@@ -159,6 +160,9 @@ Use these terms exactly, in code, API and UI.
 | **Verification result** | The outcome of running a test case once: pass, fail or blocked, against one version of the test case. Append-only. Called "result" in the UI. |
 | **Verification status** | Computed per requirement from the latest result of each test linked by "Verified by": not covered, not run, passing, failing |
 | **Out of date** | A result that no longer counts, because the test case or the requirement has a newer version |
+| **Test plan** | A named selection of test cases for a goal, in optional groups |
+| **Test cycle** | One pass through a test plan. Starting it freezes each test case's current version. Closing is permanent. |
+| **Test run** | One test case executed once in a cycle, step by step. Its state is computed from its step results; finishing it records a verification result. |
 | **Review** | People looking at one baseline's items: reviewers comment and mark items reviewed, approvers approve or reject each item. States: open, closed, approved, rejected. Closing is permanent. |
 | **Signature** | An approver's electronic signature on their decisions in a review: password re-entered, with name, time, meaning (approval or rejection) and a digest of what was signed. Append-only. |
 | **External reference** | A link to something outside the tool (Jira issue, Git commit, CI test result) |
@@ -179,6 +183,9 @@ Link ─< LinkRevision               (append-only: one per confirmation of a sus
 Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
 Baseline ─< BaselineLink               (ids of the links that were live, and whether each was suspect)
 Item ─< VerificationResult         (test cases only; append-only: outcome, test case revision, run date, note, evidence attachment, source)
+Project ─< TestPlan ─< TestPlanCase  (test case, group, position; soft-removed)
+TestPlan ─< TestCycle ─< TestRun      (test case, frozen ItemRevision, group, assignee; a cycle closes once)
+TestRun ─< StepResult                 (append-only: step number, outcome, actual result; the latest per step counts)
 User ─< ApiToken                   (hash only; revoked, never removed)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted; optionally made in a review)
 Project ─< Attachment              (uploaded images embedded in rich text)
@@ -196,6 +203,7 @@ AuditEvent                          (append-only log of every write; project id 
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
 - **Verification:** results are stored, the status is computed, never stored. Only direct "Verified by" links count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
+- **Test runs:** step results are append-only and a run's state is computed. Finishing a run appends an ordinary verification result at the version the cycle froze, so the status rule has one source. A Reviewer executes runs assigned to them, an Editor any run ([ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md)).
 - **Reviews:** held on a baseline. Marks are append-only; the state is worked out once, at closing, and stored. An approver signs once with their password. A version that only changes Status is flagged when saved and is skipped by the suspect and verification rules ([ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md)).
 - **ReqIF:** export of a set or baseline; import maps specifications, attributes and relation types onto existing sets, fields and relationship types, and only adds items. Structured imports go through `POST /api/projects/:projectId/import` ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)).
 - **Trace and impact:** computed from live links on every request, never stored. A path never passes through an item twice ([ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md)).

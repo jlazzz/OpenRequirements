@@ -12,6 +12,7 @@ import { SearchPage } from "./SearchPage.tsx";
 import { FolderPage, SetPage } from "./SetView.tsx";
 import { SuspectPage } from "./SuspectPage.tsx";
 import { ActivityPage, MembersPage } from "./TeamPages.tsx";
+import { TestCyclePage, TestPlanPage, TestPlansPage, TestRunPage } from "./TestPages.tsx";
 import { TrashPage } from "./TrashPage.tsx";
 import { InvitePage, UsersPage } from "./UsersPage.tsx";
 
@@ -52,6 +53,10 @@ const projectChildren = [
   createRoute({ ...inProject, path: "import", component: ReqifImportPage }),
   createRoute({ ...inProject, path: "reviews", component: ReviewsPage }),
   createRoute({ ...inProject, path: "reviews/$reviewId", component: ReviewPage }),
+  createRoute({ ...inProject, path: "test-plans", component: TestPlansPage }),
+  createRoute({ ...inProject, path: "test-plans/$testPlanId", component: TestPlanPage }),
+  createRoute({ ...inProject, path: "cycles/$testCycleId", component: TestCyclePage }),
+  createRoute({ ...inProject, path: "runs/$testRunId", component: TestRunPage }),
   createRoute({
     ...inProject,
     path: "search",

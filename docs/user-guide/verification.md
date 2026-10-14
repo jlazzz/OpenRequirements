@@ -1,6 +1,6 @@
 # Verification: test results and status per requirement
 
-The tool stores the results of your tests and shows which requirements are verified. It does not plan test runs or walk through test steps.
+The tool stores the results of your tests and shows which requirements are verified. To plan test runs and walk through test steps, see [Test plans, cycles and runs](test-plans.md).
 
 ## Set up
 

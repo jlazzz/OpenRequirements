@@ -135,7 +135,7 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 
 ## T1. Structured test steps
 
-**Exists:** a test case has one text field "Expected result".
+**Built 2026-10-13** ([ADR 0012](adr/0012-test-plans-cycles-and-runs.md)). Before: a test case had one text field "Expected result".
 
 **Slices (1 session, start of bundle D):**
 
@@ -145,7 +145,7 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 
 ## T2. Test plans, cycles and runs
 
-**Exists:** results are recorded one at a time on a test case.
+**Built 2026-10-13** ([ADR 0012](adr/0012-test-plans-cycles-and-runs.md)). Before: results were recorded one at a time on a test case.
 
 **Slices (3 sessions):**
 
@@ -155,6 +155,8 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 
 
 ## T3. Manual execution screen
+
+**Built 2026-10-13**, except the notification on assignment, which waits for J3 slice 3.
 
 **Slices (2 sessions):**
 

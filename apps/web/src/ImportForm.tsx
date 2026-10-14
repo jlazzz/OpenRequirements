@@ -28,7 +28,9 @@ async function readTable(file: File): Promise<string[][]> {
 type Props = { projectId: string; setId: string; parentId?: string; fields: Field[]; onDone: () => void };
 
 /** Spreadsheet import: choose a file, say what each column is, then create one item per row. */
-export function ImportForm({ projectId, setId, parentId, fields, onDone }: Props) {
+export function ImportForm({ projectId, setId, parentId, fields: all, onDone }: Props) {
+  // The steps of a test case are not one cell of text: they are entered on the test case.
+  const fields = all.filter((f) => f.type !== "steps");
   const queryClient = useQueryClient();
   const [table, setTable] = useState<string[][] | null>(null);
   const [targets, setTargets] = useState<string[]>([]);

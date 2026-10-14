@@ -11,7 +11,7 @@ import {
   type XmlElement,
   type XmlNode,
 } from "@app/reqif";
-import { docToText, type RichNode, textToDoc } from "@app/shared";
+import { docToText, type RichNode, type Step, stepsToText, textToDoc } from "@app/shared";
 import { coerce, type ImportField, type Target } from "./mapping.ts";
 
 const x = (name: string, attrs: Record<string, string> = {}, children: XmlNode[] = []): XmlElement => ({
@@ -408,7 +408,9 @@ export function toReqif(
               ? `${String(value)}T00:00:00Z`
               : field.type === "number" || field.type === "boolean"
                 ? (value as number | boolean)
-                : String(value);
+                : field.type === "steps"
+                  ? stepsToText(value as Step[])
+                  : String(value);
       }
       objects.push({ id: `_${node.id}`, name: node.uid ?? "", typeId: `_${set.itemTypeId}`, values });
     }

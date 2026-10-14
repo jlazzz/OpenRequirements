@@ -78,9 +78,7 @@ export const statusFieldOf = (fields: FieldDef[]) => fields.find((f) => f.name =
 export function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
   // A test step is an object: its action and expected result are both searched.
   const words = (value: unknown) => (typeof value === "object" && value !== null ? Object.values(value) : [value]);
-  return [uid, name, docToText(description), ...Object.values(attributes).flat().flatMap(words).map(String)].join(
-    "\n",
-  );
+  return [uid, name, docToText(description), ...Object.values(attributes).flat().flatMap(words).map(String)].join("\n");
 }
 
 const nullableId = { type: ["string", "null"], format: "uuid" } as const;

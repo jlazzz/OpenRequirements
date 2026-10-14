@@ -6,7 +6,12 @@ test("steps are a list of actions with expected results, as plain text", () => {
   expect(stepsError([{ action: "Press start", expected: "" }])).toBeNull();
   expect(stepsError("Press start")).toMatch(/list/);
   expect(stepsError(Array(201).fill({ action: "x", expected: "" }))).toMatch(/at most 200/);
-  expect(stepsError([{ action: "ok", expected: "" }, { action: "  ", expected: "x" }])).toBe("has no action in step 2");
+  expect(
+    stepsError([
+      { action: "ok", expected: "" },
+      { action: "  ", expected: "x" },
+    ]),
+  ).toBe("has no action in step 2");
   expect(stepsError([{ action: "x" }])).toMatch(/step 1/);
   expect(stepsError([{ action: "x", expected: "y", extra: 1 }])).toMatch(/step 1/);
   expect(stepsError([{ action: "x".repeat(2001), expected: "" }])).toMatch(/step 1/);

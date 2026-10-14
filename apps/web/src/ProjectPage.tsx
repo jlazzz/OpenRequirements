@@ -220,6 +220,13 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
+        <RouterNavLink
+          to="/projects/$projectId/test-plans"
+          params={{ projectId: info.id }}
+          label="Test plans"
+          pl={26}
+          py={4}
+        />
         {canEdit(project.data?.role) && (
           <RouterNavLink
             to="/projects/$projectId/import"

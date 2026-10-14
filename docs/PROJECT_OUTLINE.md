@@ -12,7 +12,7 @@ High-level outline of the entire development process, from discovery to a sustai
 
 **What it is:** A focused requirements management (RM) tool. It covers writing, organizing, reviewing, baselining and tracing requirements.
 
-**What it is not:** A full ALM suite. It does no task tracking, bug tracking, test run planning or test execution. It does store test results, to show which requirements are verified ([ADR 0009](adr/0009-verification-tracking.md)). It integrates with those tools instead of replacing them.
+**What it is not:** A full ALM suite. It does no task tracking or bug tracking. It does plan and execute tests and store their results, to show which requirements are verified ([ADR 0011](adr/0011-test-planning-and-execution-in-scope.md), [ADR 0012](adr/0012-test-plans-cycles-and-runs.md)). It integrates with those tools instead of replacing them.
 
 **Gap it fills:**
 - Commercial tools (DOORS, Polarion, Codebeamer, Jama) are powerful but expensive and dated.
@@ -213,6 +213,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records). Those three are built; password expiry, lockout and timeout are not ([ADR 0010](adr/0010-reviews-approvals-and-signatures.md))
 - [x] Verification tracking: lightweight test case items, verification results, and status per requirement
 - [x] Import test results from CI (JUnit XML) and link them to requirements automatically
+- [x] Test steps, test plans, cycles and runs with step-by-step execution ([ADR 0012](adr/0012-test-plans-cycles-and-runs.md))
 - [ ] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step
 - [ ] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status)
 - [ ] Webhooks for external automation

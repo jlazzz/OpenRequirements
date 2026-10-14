@@ -25,6 +25,7 @@ import { useProject } from "./ProjectPage.tsx";
 import { Relationships } from "./Relationships.tsx";
 import { RichTextInput } from "./RichText.tsx";
 import { RichView } from "./RichView.tsx";
+import { StepsInput, StepsView } from "./Steps.tsx";
 import { VerificationPanel } from "./Verification.tsx";
 import { Versions } from "./Versions.tsx";
 
@@ -76,7 +77,7 @@ function ItemReadOnly({ item, fields }: ItemData) {
         </Title>
         <RichView doc={item.description} />
         <SimpleGrid cols={{ base: 1, sm: 2 }} component="dl" m={0}>
-          {fields.map((field) => (
+          {fields.filter(notSteps).map((field) => (
             <div key={field.id}>
               <Text component="dt" size="sm" fw={600}>
                 {field.name}
@@ -87,6 +88,9 @@ function ItemReadOnly({ item, fields }: ItemData) {
             </div>
           ))}
         </SimpleGrid>
+        {fields.filter(isSteps).map((field) => (
+          <StepsView key={field.id} label={field.name} value={item.attributes[field.id]} />
+        ))}
       </Stack>
       <Stack gap="lg" w={280} style={{ flexShrink: 0 }}>
         {project && <VerificationPanel data={project} item={item} />}
@@ -260,7 +264,7 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
             uploadImage={(file) => uploadImage(projectId, file)}
           />
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            {fields.map((field) => (
+            {fields.filter(notSteps).map((field) => (
               <FieldInput
                 key={field.id}
                 field={field}
@@ -269,6 +273,14 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
               />
             ))}
           </SimpleGrid>
+          {fields.filter(isSteps).map((field) => (
+            <StepsInput
+              key={field.id}
+              label={field.name}
+              value={attributes[field.id]}
+              onChange={(value) => setValue(field.id, value)}
+            />
+          ))}
 
           {(save.isError || discard.isError) && (
             <Alert color="red" role="alert">
@@ -309,6 +321,9 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
   );
 }
 
+// The steps of a test case take the full width, below the other fields.
+const isSteps = (field: Field) => field.type === "steps";
+const notSteps = (field: Field) => !isSteps(field);
 const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 function FieldInput({ field, value, onChange }: { field: Field; value: unknown; onChange: (value: unknown) => void }) {

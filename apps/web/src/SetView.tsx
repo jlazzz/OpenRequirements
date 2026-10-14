@@ -527,7 +527,10 @@ function ListTable({
                   </Table.Td>
                   {shown.map((column) => (
                     <Table.Td key={column.id} c={column.field || cell(row, column.id) !== 0 ? undefined : "dimmed"}>
-                      {editing && column.field && column.field.type !== "multi_enum" ? (
+                      {editing &&
+                      column.field &&
+                      column.field.type !== "multi_enum" &&
+                      column.field.type !== "steps" ? (
                         <CellInput
                           field={column.field}
                           label={`${column.label} of ${row.item.uid}`}

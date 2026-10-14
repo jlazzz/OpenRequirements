@@ -366,7 +366,12 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
       const projectId = await access(req, reply, { testPlanId }, "editor");
       if (!projectId) return reply;
       const userId = req.user?.id as string;
-      const body = req.body as { name: string; environment?: string; scope?: "all" | "group" | "failed"; group?: string };
+      const body = req.body as {
+        name: string;
+        environment?: string;
+        scope?: "all" | "group" | "failed";
+        group?: string;
+      };
       const cycleName = body.name.trim();
 
       const result = await db.transaction(async (tx) => {

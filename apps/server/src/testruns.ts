@@ -85,9 +85,10 @@ export async function loadRuns(db: Db | Tx, filter: SQL | undefined) {
     .select({ id: attributeDefinitions.id, itemTypeId: attributeDefinitions.itemTypeId })
     .from(attributeDefinitions)
     .where(
-      and(eq(attributeDefinitions.type, "steps"), inArray(attributeDefinitions.itemTypeId, [
-        ...new Set(rows.map((row) => row.itemTypeId)),
-      ])),
+      and(
+        eq(attributeDefinitions.type, "steps"),
+        inArray(attributeDefinitions.itemTypeId, [...new Set(rows.map((row) => row.itemTypeId))]),
+      ),
     )
     .orderBy(desc(attributeDefinitions.position));
   const stepField = new Map(stepFields.map((field) => [field.itemTypeId, field.id]));

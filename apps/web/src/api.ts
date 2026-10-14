@@ -1,9 +1,10 @@
-import type { RichNode } from "@app/shared";
+import { type RichNode, type Step, stepsToText } from "@app/shared";
 
 export type User = { id: string; email: string; name: string; isAdmin: boolean };
 export type Session = { user: User | null; needsSetup: boolean };
 export type Project = { id: string; name: string; createdAt: string };
-export type ProjectSet = { id: string; name: string; uidPrefix: string; itemType: string };
+/** `isTest` says the set holds test cases: they take steps, results and runs. */
+export type ProjectSet = { id: string; name: string; uidPrefix: string; itemType: string; isTest: boolean };
 export type TreeNode = {
   id: string;
   setId: string;
@@ -55,7 +56,7 @@ export async function api<T>(path: string, body?: object, method?: "PATCH" | "DE
 export type Field = {
   id: string;
   name: string;
-  type: "text" | "number" | "enum" | "multi_enum" | "date" | "boolean";
+  type: "text" | "number" | "enum" | "multi_enum" | "date" | "boolean" | "steps";
   options: string[] | null;
 };
 /** Field values of an item, keyed by field id. */
@@ -71,7 +72,9 @@ export type SetItems = {
 export function formatValue(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  return Array.isArray(value) ? value.join(", ") : String(value);
+  if (!Array.isArray(value)) return String(value);
+  // A list of words is a multi-select value; a list of anything else is the steps of a test case.
+  return value.every((entry) => typeof entry === "string") ? value.join(", ") : stepsToText(value as Step[]);
 }
 
 export type LinkType = { id: string; name: string };
@@ -168,10 +171,36 @@ export type Result = {
   runAt: string;
   note: string;
   attachmentId: string | null;
-  source: "manual" | "junit";
+  source: "manual" | "junit" | "run";
+  /** Set on the result of a test run. */
+  runId: string | null;
+  /** Where the defect of a failed run is tracked, in an external tool. */
+  defectUrl: string | null;
   recordedBy: string;
   recordedAt: string;
   outOfDate: boolean;
 };
-/** As on the server: item types have no "is a test" flag, so a type whose name contains "test" holds test cases. */
-export const isTestSet = (set: ProjectSet | undefined) => set !== undefined && /test/i.test(set.itemType);
+export const isTestSet = (set: ProjectSet | undefined) => set?.isTest === true;
+
+export type RunState = "not_started" | "in_progress" | "passed" | "failed" | "blocked";
+/** One execution of one test case in a cycle, as a row of a list. */
+export type RunSummary = {
+  id: string;
+  cycleId: string;
+  cycle: string;
+  projectId: string;
+  itemId: string;
+  uid: string;
+  /** The name of the test case in the version the cycle froze. */
+  name: string;
+  revision: number;
+  group: string;
+  assigneeId: string | null;
+  assignee: string | null;
+  state: RunState;
+  /** A finished run has recorded its verification result and cannot change. */
+  finished: boolean;
+  /** Steps with a result, and steps in all. */
+  done: number;
+  total: number;
+};

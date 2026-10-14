@@ -1195,7 +1195,9 @@ test("a backup restores as a new project with history, relationships, comments, 
   const newPlan = (await get(`/api/test-plans/${plan.id}`, cookie)).json();
   const newRan = tree.nodes.find((n: { uid: string }) => n.uid === "VER-002").id;
   expect(newPlan.cases).toEqual([{ itemId: newRan, group: "Smoke" }]);
-  expect(newPlan.cycles).toEqual([expect.objectContaining({ name: "Round 1", runs: expect.objectContaining({ failed: 1 }) })]);
+  expect(newPlan.cycles).toEqual([
+    expect.objectContaining({ name: "Round 1", runs: expect.objectContaining({ failed: 1 }) }),
+  ]);
   const [newRun] = (await get(`/api/test-cycles/${newPlan.cycles[0].id}`, cookie)).json().runs;
   expect(newRun).toMatchObject({ uid: "VER-002", assignee: "Rob Reviewer", state: "failed", finished: true });
   expect((await get(`/api/test-runs/${newRun.id}`, cookie)).json().run.steps).toEqual([
@@ -1695,7 +1697,12 @@ test("a test plan is run as a cycle: runs are assigned, executed step by step an
   const edit = (baseRevision: number, description = "Bench") =>
     post(
       `/api/items/${t1}/revisions`,
-      { baseRevision, name: "Occlusion test", description: textToDoc(description), attributes: { [stepsField]: steps } },
+      {
+        baseRevision,
+        name: "Occlusion test",
+        description: textToDoc(description),
+        attributes: { [stepsField]: steps },
+      },
       owner,
     );
   expect((await edit(1)).statusCode).toBe(201);
@@ -1775,9 +1782,9 @@ test("a test plan is run as a cycle: runs are assigned, executed step by step an
   expect((await edit(2, "Bench, with the new clamp")).statusCode).toBe(201);
   // A step is corrected by recording it again: the latest result counts.
   expect((await step(run1, { steps: [2], outcome: "pass" }, tester.cookie)).json()).toEqual({ state: "passed" });
-  expect(
-    (await step(run1, { steps: [2], outcome: "fail", actual: " Still running " }, tester.cookie)).json(),
-  ).toEqual({ state: "failed" });
+  expect((await step(run1, { steps: [2], outcome: "fail", actual: " Still running " }, tester.cookie)).json()).toEqual({
+    state: "failed",
+  });
   expect((await finish(run1, { defectUrl: "javascript:alert(1)" }, tester.cookie)).statusCode).toBe(400);
   const defectUrl = "https://tracker.example/BUG-1";
   expect((await finish(run1, { note: "See defect", defectUrl }, tester.cookie)).json()).toEqual({ outcome: "fail" });
