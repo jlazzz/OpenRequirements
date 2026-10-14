@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (bundle I, J5 slice 5)
+Last updated: 2026-10-14 (A2 slice 2)
 Last updated: 2026-10-14 (bundle I, J1 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
@@ -11,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)
 - A3 slice 2, releases: version in root `package.json`, shown at `GET /api/version` and in the account dialog; `release.yml` on a `vX.Y.Z` tag checks notes, lint, types and tests, pushes the image to GHCR, attaches a CycloneDX SBOM, signs with cosign keyless; `CHANGELOG.md`, [docs/RELEASING.md](docs/RELEASING.md), compose `APP_IMAGE`/`APP_VERSION`, upgrade section of the install guide, [ADR 0021](docs/adr/0021-numbered-releases-signed-images.md). The workflow has never run; actions are pinned by major tag, not SHA; upgrade test not built (2026-10-14)
 - J5 slice 5, drag and drop: drag folders and items in the explorer and in List view (⠿ handle) to reorder, move, or drop onto an item to make a child; a set row moves to its top level; ticked rows drag together. Pure rule `dropPlacement` in `packages/shared`, the move route and its checks unchanged. "Pick several" fields are editable in List view and in bulk set-field. Checked in a browser with synthetic drag events on a scratch instance. `API_PORT` sets the web proxy target (2026-10-14)
 - J1 slice 3, Part 11 hardening: account lockout, password expiry and session inactivity timeout (environment variables, off when unset), tamper-evident audit log (SHA-256 hash chain under an advisory lock, `GET /api/audit/verify`, button on the Users page), [ADR 0020](docs/adr/0020-part-11-hardening-audit-chain.md). Migration 0019. Not checked in a browser; the chain does not cover rows from before it or a restored backup (2026-10-14)
@@ -82,7 +83,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
 1. Playwright end-to-end tests
-2. Dogfood: write this project's own requirements spec and import it
+2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 

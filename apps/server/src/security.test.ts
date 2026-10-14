@@ -40,6 +40,7 @@ const login = (server: FastifyInstance, password = admin.password) =>
   call(server, "POST", "/api/login", { email: admin.email, password });
 const verify = async (cookie: string) => (await call(app, "GET", "/api/audit/verify", undefined, cookie)).json();
 
+// @req VER-051
 test("the audit log verifies, and a rewritten or deleted row is reported as the first broken one", async () => {
   const owner = cookieOf(await call(app, "POST", "/api/setup", admin));
   for (const name of ["A", "B", "C"]) await call(app, "POST", "/api/projects", { name, templateId: "standard" }, owner);
@@ -102,6 +103,7 @@ test("by default failed sign-ins never lock an account", async () => {
   expect((await login(app)).statusCode).toBe(200);
 });
 
+// @req VER-046
 test("the account locks after the set number of failures, even for the right password, then opens", async () => {
   await call(strict, "POST", "/api/setup", admin);
   for (let i = 0; i < 3; i++) expect((await login(strict, "wrong password!")).statusCode).toBe(401);

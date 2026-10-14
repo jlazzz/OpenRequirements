@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { changedEnds, isSuspect } from "./suspect.ts";
 
+// @req VER-018
 test("a link is not suspect while both ends are at the confirmed revisions", () => {
   expect(isSuspect({ upstream: 2, downstream: 5 }, { upstream: 2, downstream: 5 })).toBe(false);
 });

@@ -28,6 +28,7 @@ npm run db:generate  # new SQL migration after editing apps/server/src/db/schema
 npm run up           # build and start the full stack in Docker on :3000
 npm run docs:dev     # user guide with live reload; docs:build writes docs/.vitepress/dist (served at /help)
 npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
+npm run dogfood      # load this tool's own requirements into an instance (DOGFOOD_URL, DOGFOOD_EMAIL, DOGFOOD_PASSWORD); safe to re-run
 npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
 
@@ -129,6 +130,7 @@ docs/
   user-guide/
 deploy/             Dockerfile and docker-compose.yml
 scripts/demo/       `npm run demo`: builds the Kestrel-EO demo project through the API
+scripts/dogfood/    `npm run dogfood`: this tool's own requirements as data, and the loader
 scripts/samples/    `npm run samples:import`: writes the synthetic import files
 samples/import/     Synthetic DOORS, Polarion, Jama and Word files for testing import
 e2e/                Playwright tests (empty)

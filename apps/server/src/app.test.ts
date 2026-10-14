@@ -456,6 +456,7 @@ test("nodes can be reordered and moved between folders of one set", async () => 
   expect(await auditActions()).toEqual(expect.arrayContaining(["item.move"]));
 });
 
+// @req VER-001
 test("deleting hides a folder and everything in it, but keeps history and never reuses a UID", async () => {
   const { cookie, detail, sys, add } = await projectWithSets();
   const folder = (await add(sys.id, { kind: "folder", name: "F" })).json().node;
@@ -627,6 +628,7 @@ test("two requests linking the same pair cannot both succeed, and projects canno
   expect((await post("/api/links", { upstreamId: a, downstreamId: c, typeId }, cookie)).statusCode).toBe(400);
 });
 
+// @req VER-017
 test("a new version of either end makes a relationship suspect until an editor confirms it", async () => {
   const { cookie, detail, un, sys, add } = await projectWithSets();
   const projectId = (await detail()).project.id;
@@ -880,6 +882,7 @@ test("an expired invitation is refused", async () => {
   );
 });
 
+// @req VER-011
 test("each project role can do exactly what it should", async () => {
   const { cookie: owner, detail, sys, add } = await projectWithSets();
   const projectId = (await detail()).project.id;
