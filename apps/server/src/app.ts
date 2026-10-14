@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
@@ -121,8 +122,26 @@ export async function buildApp(
     "cross-origin-opener-policy": "same-origin",
     ...(opts.https ? { "strict-transport-security": "max-age=31536000" } : {}),
   };
-  app.addHook("onSend", async (_req, reply) => {
+  // The guide's pages carry a few inline scripts (site data, dark mode). Only those exact scripts are allowed, by hash.
+  let helpCsp = headers["content-security-policy"] ?? "";
+  if (opts.helpRoot && existsSync(opts.helpRoot)) {
+    const hashes = new Set<string>();
+    for (const file of readdirSync(opts.helpRoot, { recursive: true, encoding: "utf8" })) {
+      if (!file.endsWith(".html")) continue;
+      const html = readFileSync(join(opts.helpRoot, file), "utf8");
+      for (const [, body] of html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
+        hashes.add(
+          `'sha256-${createHash("sha256")
+            .update(body ?? "")
+            .digest("base64")}'`,
+        );
+      }
+    }
+    helpCsp = helpCsp.replace("script-src 'self'", `script-src 'self' ${[...hashes].join(" ")}`);
+  }
+  app.addHook("onSend", async (req, reply) => {
     for (const [name, value] of Object.entries(headers)) if (!reply.hasHeader(name)) reply.header(name, value);
+    if (req.url === "/help" || req.url.startsWith("/help/")) reply.header("content-security-policy", helpCsp);
   });
   await app.register(rateLimit, { global: false });
   app.decorateRequest("user", null);
@@ -490,7 +509,12 @@ export async function buildApp(
   }
   if (opts.helpRoot && existsSync(opts.helpRoot)) {
     // The guide is public, static and outside /api/. `decorateReply: false` because the app shell registered `sendFile`.
-    await app.register(fastifyStatic, { root: opts.helpRoot, prefix: "/help/", decorateReply: false });
+    await app.register(fastifyStatic, {
+      root: opts.helpRoot,
+      prefix: "/help/",
+      extensions: ["html"],
+      decorateReply: false,
+    });
     app.get("/help", { config: { public: true } }, async (_req, reply) => reply.redirect("/help/"));
   }
   app.setNotFoundHandler((req, reply) => {
