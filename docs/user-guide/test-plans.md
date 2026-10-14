@@ -11,13 +11,13 @@ Plan which tests to run, run them step by step, and let the results set the stat
 ## Write steps on a test case
 
 1. Open a test case.
-2. Under **Steps**, choose **Add step**. Write the action and the expected result. Each is a rich-text box like the description: formatting, lists, tables, images (paste, drop or **Image**) and equations.
+2. Under **Steps**, choose **Add step**. Write the action and the expected result. Each is a rich-text box like the description: formatting, lists, tables, images (paste, drop or **Image / file**), files and equations. A file that is not an image (PDF, text, log, CSV, zip) shows as a download link, for a setup file or a drawing.
 3. Use ↑, ↓ and ✕ to reorder or remove steps.
 4. Choose **Save version**.
 
 A test case without steps can still be run. It counts as one step.
 
-Steps written before rich text keep their plain text and show as one paragraph per line. In the version compare, a spreadsheet export, Word and ReqIF, steps appear as numbered lines of text; an image appears as its file name.
+Steps written before rich text keep their plain text and show as one paragraph per line. In the version compare, a spreadsheet export, Word and ReqIF, steps appear as numbered lines of text; an image or file appears as its name.
 
 ## Make a test plan
 
@@ -50,7 +50,7 @@ Your open runs are listed under **My test runs** on the home page.
 ## Execute a run
 
 1. Open the run from the cycle page or from **My test runs**.
-2. For each step, type what actually happened if needed, then choose **Pass**, **Fail** or **Blocked**.
+2. For each step, write what actually happened if needed (a rich-text box: paste a screenshot, or add a file with **Image / file**), then choose **Pass**, **Fail** or **Blocked**.
 3. **Pass all remaining** marks every step that has no result.
 4. Choose **Finish run**. For a failed run, paste the link to the defect in your issue tracker.
 5. **Next run** opens the next run in the cycle.

@@ -1,3 +1,4 @@
+import { actualToStored, type RichNode, storedActual } from "@app/shared";
 import { and, desc, eq, inArray, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { FastifyRequest } from "fastify";
@@ -105,7 +106,7 @@ export async function loadRuns(db: Db | Tx, filter: SQL | undefined) {
       return {
         ...step,
         outcome: done?.outcome ?? null,
-        actual: done?.actual ?? "",
+        actual: storedActual(done?.actual ?? ""),
         by: done?.by ?? null,
         at: done?.at ?? null,
       };
@@ -400,8 +401,8 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
           properties: {
             steps: { type: "array", minItems: 1, maxItems: 200, items: { type: "integer", minimum: 1 } },
             outcome: { enum: [...OUTCOMES] },
-            // What actually happened.
-            actual: { type: "string", maxLength: 5000 },
+            // What actually happened: plain text or a rich-text document.
+            actual: { anyOf: [{ type: "string" }, { type: "object" }] },
           },
         },
       },
@@ -411,8 +412,10 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
       const projectId = await access(req, reply, { testRunId }, "reviewer");
       if (!projectId) return reply;
       const userId = req.user?.id as string;
-      const body = req.body as { steps: number[]; outcome: Outcome; actual?: string };
+      const body = req.body as { steps: number[]; outcome: Outcome; actual?: string | RichNode };
       const steps = [...new Set(body.steps)];
+      const actual = actualToStored(body.actual ?? "");
+      if ("error" in actual) return reply.code(400).send({ error: actual.error });
 
       const result = await db.transaction(async (tx) => {
         const cycle = await lockCycle(tx, { testRunId });
@@ -429,7 +432,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
             runId: testRunId,
             step,
             outcome: body.outcome,
-            actual: body.actual?.trim() ?? "",
+            actual: actual.stored,
             recordedBy: userId,
             // The moment of the write, not of the transaction's start: the latest result of a step must be the last one written.
             createdAt: sql`clock_timestamp()`,

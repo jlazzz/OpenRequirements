@@ -27,6 +27,7 @@ const NODES = new Set([
   "tableHeader",
   "tableCell",
   "image",
+  "file",
   "inlineMath",
   "blockMath",
 ]);
@@ -37,6 +38,7 @@ const SAFE_LINK = /^(https?:\/\/|mailto:)/i;
 const ATTACHMENT_SRC = /^\/api\/attachments\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const MAX_LATEX = 2000;
 const MAX_DEPTH = 30;
+const MAX_FILE_NAME = 500;
 
 /** Returns why a value is not an acceptable document, or null when it is. Trust boundary: run on everything a client sends. */
 export function docError(value: unknown): string | null {
@@ -47,8 +49,11 @@ export function docError(value: unknown): string | null {
     if (typeof type !== "string" || !NODES.has(type)) return `Unsupported content: ${String(type)}`;
     if (depth > MAX_DEPTH) return "Text is nested too deeply";
     if (type === "text" ? typeof text !== "string" : text !== undefined) return "Malformed text";
-    if (type === "image" && !(typeof attrs?.src === "string" && ATTACHMENT_SRC.test(attrs.src))) {
-      return "Images must be uploaded, not linked from elsewhere";
+    if ((type === "image" || type === "file") && !(typeof attrs?.src === "string" && ATTACHMENT_SRC.test(attrs.src))) {
+      return "Images and files must be uploaded, not linked from elsewhere";
+    }
+    if (type === "file" && !(typeof attrs?.name === "string" && attrs.name.length <= MAX_FILE_NAME)) {
+      return "Malformed file";
     }
     if (
       (type === "inlineMath" || type === "blockMath") &&
@@ -83,6 +88,7 @@ export function docToText(node: RichNode): string {
   // An equation reads as its LaTeX source; an image as its alternative text.
   if (node.type === "inlineMath" || node.type === "blockMath") return String(node.attrs?.latex ?? "");
   if (node.type === "image") return String(node.attrs?.alt ?? "");
+  if (node.type === "file") return String(node.attrs?.name ?? "");
   const parts = (node.content ?? []).map(docToText);
   return TEXT_BLOCKS.has(node.type) ? parts.join("") : parts.filter((part) => part !== "").join("\n");
 }

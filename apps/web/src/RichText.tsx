@@ -6,15 +6,30 @@ import { Link, RichTextEditor } from "@mantine/tiptap";
 import Image from "@tiptap/extension-image";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
-import { type Editor, useEditor } from "@tiptap/react";
+import { type Editor, mergeAttributes, Node, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useRef, useState } from "react";
+
+/** An uploaded file of any allowed type, shown as a link that downloads it. Images use the Image node. */
+const FileLink = Node.create({
+  name: "file",
+  group: "inline",
+  inline: true,
+  atom: true,
+  addAttributes: () => ({ src: { default: "" }, name: { default: "" } }),
+  parseHTML: () => [{ tag: "a[data-file]" }],
+  renderHTML: ({ node, HTMLAttributes }) => [
+    "a",
+    mergeAttributes(HTMLAttributes, { "data-file": "", href: node.attrs.src, download: node.attrs.name }),
+    String(node.attrs.name || "file"),
+  ],
+});
 
 type Props = {
   label: string;
   initial: RichNode;
   onChange: (doc: RichNode) => void;
-  /** Stores an image file and returns the address to embed. */
+  /** Stores a file (an image, or any file the server accepts) and returns the address to embed. */
   uploadImage: (file: File) => Promise<string>;
   /** Least height of the writing area, in pixels. */
   minHeight?: number;
@@ -29,15 +44,20 @@ export function RichTextInput({ label, initial, onChange, uploadImage, minHeight
   const fileInput = useRef<HTMLInputElement>(null);
   const editorRef = useRef<Editor | null>(null);
 
-  const insertImages = (files: Iterable<File>) => {
-    const images = [...files].filter((file) => file.type.startsWith("image/"));
-    for (const file of images) {
+  const insertFiles = (files: Iterable<File>) => {
+    const list = [...files];
+    for (const file of list) {
       uploadImage(file).then(
-        (src) => editorRef.current?.chain().focus().setImage({ src, alt: file.name }).run(),
+        (src) => {
+          const chain = editorRef.current?.chain().focus();
+          // Files the editor cannot show become a download link.
+          if (/^image\/(png|jpeg|gif|webp)$/.test(file.type)) chain?.setImage({ src, alt: file.name }).run();
+          else chain?.insertContent({ type: "file", attrs: { src, name: file.name } }).run();
+        },
         (error: Error) => setProblem(`${file.name}: ${error.message}`),
       );
     }
-    return images.length > 0;
+    return list.length > 0;
   };
   const editEquation = (kind: "inline" | "block") => (node: { attrs: Record<string, unknown> }, pos: number) => {
     const latex = window.prompt("Equation (LaTeX)", String(node.attrs.latex ?? ""));
@@ -53,6 +73,7 @@ export function RichTextInput({ label, initial, onChange, uploadImage, minHeight
       Link,
       TableKit.configure({ table: { resizable: false } }),
       Image,
+      FileLink,
       Mathematics.configure({
         katexOptions: { throwOnError: false },
         inlineOptions: { onClick: editEquation("inline") },
@@ -63,9 +84,9 @@ export function RichTextInput({ label, initial, onChange, uploadImage, minHeight
     shouldRerenderOnTransaction: true,
     editorProps: {
       attributes: { "aria-label": label },
-      // Pasted or dropped image files are uploaded and embedded.
-      handlePaste: (_view, event) => insertImages(event.clipboardData?.files ?? []),
-      handleDrop: (_view, event) => insertImages(event.dataTransfer?.files ?? []),
+      // Pasted or dropped files are uploaded and embedded: images shown, the rest as links.
+      handlePaste: (_view, event) => insertFiles(event.clipboardData?.files ?? []),
+      handleDrop: (_view, event) => insertFiles(event.dataTransfer?.files ?? []),
     },
     onUpdate: ({ editor: current }) => onChange(current.getJSON() as RichNode),
   });
@@ -110,7 +131,7 @@ export function RichTextInput({ label, initial, onChange, uploadImage, minHeight
             {control("Insert table", "Table", () =>
               editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
             )}
-            {control("Insert image", "Image", () => fileInput.current?.click())}
+            {control("Insert image or file", "Image / file", () => fileInput.current?.click())}
             {control("Insert equation", "Equation", insertEquation)}
           </RichTextEditor.ControlsGroup>
           {inTable && (
@@ -132,11 +153,11 @@ export function RichTextInput({ label, initial, onChange, uploadImage, minHeight
       <input
         ref={fileInput}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
+        multiple
         hidden
         onChange={(event) => {
           setProblem(null);
-          insertImages(event.currentTarget.files ?? []);
+          insertFiles(event.currentTarget.files ?? []);
           event.currentTarget.value = "";
         }}
       />

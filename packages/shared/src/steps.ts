@@ -45,3 +45,33 @@ export function stepsToText(steps: Step[]): string {
     })
     .join("\n");
 }
+
+/** The longest stored actual result: plain text, or the JSON of a document. */
+export const MAX_ACTUAL = 100_000;
+const DOC_START = '{"type":"doc"';
+
+/**
+ * An actual result as it is stored in the text column: plain text as is, a document as its JSON. Returns an error
+ * message instead when the value is not acceptable. A document with no text, image or file is stored as "".
+ */
+export function actualToStored(value: unknown): { stored: string } | { error: string } {
+  if (typeof value === "string") {
+    return value.length > MAX_ACTUAL ? { error: "Actual result is too long" } : { stored: value.trim() };
+  }
+  const problem = docError(value);
+  if (problem) return { error: problem };
+  const json = JSON.stringify(value);
+  if (json.length > MAX_ACTUAL) return { error: "Actual result is too long" };
+  const empty = !docToText(value as RichNode).trim() && !/"type":"(image|file)"/.test(json);
+  return { stored: empty ? "" : json };
+}
+
+/** A stored actual result as plain text or a document. */
+export function storedActual(stored: string): StepText {
+  if (!stored.startsWith(DOC_START)) return stored;
+  try {
+    return JSON.parse(stored) as RichNode;
+  } catch {
+    return stored;
+  }
+}

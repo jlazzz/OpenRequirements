@@ -76,6 +76,8 @@ export function docToXhtml(doc: RichNode, image: (src: string) => { data: string
         const alt = String(attrs.alt ?? "");
         return file ? x("object", file, alt ? [alt] : []) : alt;
       }
+      case "file":
+        return String(attrs.name ?? "");
       case "inlineMath":
         return x("span", { class: "math" }, [String(attrs.latex ?? "")]);
       case "blockMath":
