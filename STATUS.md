@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Bundle E built: evidence files (PDF, text, logs, CSV, zip; many per result, per run and per step; drop, paste, button; a log with a JUnit report), verification status frozen in baselines, a cycle names the baseline it verifies and shows in its review, reports (cycle summary, plan history, requirement verification, flaky tests, CSV each), backup format version 6 with files streamed out, [ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md), [user guide](docs/user-guide/evidence-and-reports.md). Also, asked by the owner: bulk set field, move and delete in List view, and dark mode ([user guide](docs/user-guide/bulk-actions.md)). Checked in a browser on a scratch instance (2026-10-13)
 - Bundle D built: test steps on test cases, test plans with groups, cycles with frozen versions, runs with step-by-step execution and keyboard, "My test runs", defect link on a failed run, JUnit into a cycle, backup format version 5, [ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md), [user guide](docs/user-guide/test-plans.md). Checkpoint test done in a browser: plan, cycle, run, requirement turned Passing (2026-10-13)
 - ReqIF import and export built: standalone `packages/reqif` (XML, zip, ReqIF model), export of a set or baseline as .reqif or .reqifz, import page with mapping and review, structured import route, round-trip test, [ADR 0011](docs/adr/0011-reqif-import-and-export.md), [user guide](docs/user-guide/reqif.md) (2026-10-13)
 - Roadmap planned: ten plans in two tracks in [docs/ROADMAP.md](docs/ROADMAP.md). Test planning and execution brought into scope, [ADR 0011](docs/adr/0011-test-planning-and-execution-in-scope.md) (2026-10-13)
@@ -39,7 +40,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundle D (test steps, plans, cycles, runs, execution screen): built, waiting for the owner's test.** Checkpoint: plan a cycle, execute it, see requirement status change. Bundle E does not start before that feedback.
+- **Bundle E (evidence files, frozen status, reports) plus bulk item actions and dark mode: built, waiting for the owner's test.** Checkpoint: attach a PDF to a step, compare two cycles. Bundle F does not start before that feedback.
+- Bundle D (test steps, plans, cycles, runs, execution screen): built and checked in a browser, waiting for the owner's own test.
 - **ReqIF import and export: built, waiting for the owner's test. Word import starts after that feedback.**
 - Reviews and approvals: built, waiting for the owner's test.
 - Verification tracking: built, waiting for the owner's test.
@@ -58,13 +60,13 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 4. Playwright end-to-end tests
 5. Dogfood: write this project's own requirements spec and import it
 
-After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: E (evidence files, frozen status, reports), F (HTTPS, edit conflicts, notifications), G (Word and ReqIF), H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
+After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: F (HTTPS, edit conflicts, notifications), G (Word and ReqIF), H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
 
 Before item 1: Word import (headings become folders, paragraphs become items, with a review step). It reuses the zip and XML readers and the structured import route.
 
 Known gaps left for later milestones or owner decision:
 
-- Test plans: assigning a run notifies nobody. No evidence files on a step, no comparing two cycles, no reports (bundle E). A closed cycle is not signed. The defect link is a plain URL. Cases in a plan cannot be reordered by hand. Not checked in a browser: the version compare of steps, regrouping and removing plan cases, "only what failed" cycles, closing a cycle, a Reviewer executing an assigned run. All are covered by server tests except the compare.
+- Test plans: assigning a run notifies nobody. A closed cycle is not signed. Reports export CSV only, no Word. The defect link is a plain URL. Cases in a plan cannot be reordered by hand. Not checked in a browser: the version compare of steps, regrouping and removing plan cases, "only what failed" cycles, closing a cycle, a Reviewer executing an assigned run. All are covered by server tests except the compare.
 - ReqIF: not tested with real files from DOORS, DOORS Next or Polarion, nor imported into them; the owner is looking for samples. Import only adds items, so a re-import duplicates. It cannot create sets, item types or fields. Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
@@ -75,12 +77,14 @@ Known gaps left for later milestones or owner decision:
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
 - Suspect links: no notification when a link becomes suspect, no "suspect only" filter in List view, and baseline compare does not report suspect differences. The review page links to the changed item; its version compare is opened from there by hand.
 - Trace view: no filter by relationship type or state, no trace of a baseline, rows are not capped for very densely linked sets. Coverage is not shown on the project home page.
-- Verification: evidence is one image per result, no PDF or log files. A result goes out of date on any new version of the requirement, with no "still valid" confirmation. Status is not frozen in baselines. The relationship type is found by the name "Verified by". Tokens do not expire and show no "last used" date.
+- Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
+- Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
+- Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. The relationship type is found by the name "Verified by". Tokens do not expire and show no "last used" date.
 - Reviews: participants cannot be changed after creation, a review always covers its whole baseline, nobody is notified, and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: no password expiry, lockout or inactivity timeout, and the audit log is not tamper-evident. Opening a review does not set Status to "In review".
 - Baselines compare with the current state only, not with another baseline. A baseline cannot be exported.
 - Import only adds new items: it cannot update existing ones or create folders. At most 2,000 items per file.
 - Export is CSV only (Excel opens it). No .xlsx export.
-- Backup and restore hold the whole project in memory: fine for text, slow for hundreds of megabytes of images.
+- Backup download streams its files; restore still reads the whole file in memory, at most 256 MB.
 - Not checked in a browser: image upload through the editor, inserting an equation, the Trace view's "Export CSV" button, printing a review, evidence upload on a result, and the Access tokens section of the account dialog. All but the CSV button are covered by server tests.
 
 ## Open decisions

@@ -188,7 +188,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
             </Text>
           )}
           <Table.ScrollContainer minWidth={(up + down + 1) * 240}>
-            <Table withTableBorder withColumnBorders bg="white" aria-label={`Trace of ${title}`}>
+            <Table withTableBorder withColumnBorders bg="var(--mantine-color-body)" aria-label={`Trace of ${title}`}>
               <Table.Thead>
                 <Table.Tr>
                   {upLevels.map((l) => (
@@ -213,7 +213,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
                     <Table.Tr key={`${b.item.id}:${i}`} style={{ verticalAlign: "top" }}>
                       {upLevels.map((l) => levelCell(upstream, l, i, `u${l}`))}
                       {i === 0 && (
-                        <Table.Th scope="row" rowSpan={b.height} fw={400} bg="gray.0">
+                        <Table.Th scope="row" rowSpan={b.height} fw={400} bg="var(--mantine-color-default-hover)">
                           {itemCell(b.item, true)}
                         </Table.Th>
                       )}

@@ -18,20 +18,36 @@ import {
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { type Attributes, api, canEdit, formatValue, type Link, type SetItems, type TreeNode } from "./api.ts";
+import {
+  type Attributes,
+  api,
+  canEdit,
+  formatValue,
+  type Link,
+  type RequirementVerification,
+  type SetItems,
+  type TreeNode,
+} from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { ReqifExport } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
+import { useVerification, VerificationBadge } from "./Verification.tsx";
 import { RevisionDiff } from "./Versions.tsx";
 
 type Baseline = { id: string; name: string; setId: string | null; createdAt: string; author: string };
 /** A folder or item as the baseline froze it. Items carry the revision that was current then. */
 type Entry = TreeNode & { revision: number | null; description: RichNode | null; attributes: Attributes | null };
 /** `suspect` is null when the baseline was made before suspect links were recorded. */
-type BaselineDetail = { baseline: Baseline; entries: Entry[]; links: (Link & { suspect: boolean | null })[] };
+type BaselineDetail = {
+  baseline: Baseline;
+  entries: Entry[];
+  links: (Link & { suspect: boolean | null })[];
+  /** The verification status the baseline froze, by item id. Empty for a baseline made before status was frozen. */
+  verification: Record<string, Pick<RequirementVerification, "status" | "outOfDate">>;
+};
 
 /** The project's baselines, newest first, and the form to make a new one. */
 export function BaselinesPage() {
@@ -78,7 +94,7 @@ export function BaselinesPage() {
       )}
       {list.data?.baselines.length === 0 && <Text c="dimmed">No baselines yet.</Text>}
       {list.data && list.data.baselines.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Baselines">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Baselines">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
@@ -154,6 +170,7 @@ export function BaselinePage() {
     })),
   });
   const liveLinks = useLinks(projectId).data?.links;
+  const verifiedNow = useVerification(projectId).data?.requirements;
   const [differencesOnly, setDifferencesOnly] = useState(false);
   const [shownId, setShownId] = useState<string | null>(null);
 
@@ -165,7 +182,16 @@ export function BaselinePage() {
     );
   }
   if (!project || !detail.data) return null;
-  const { baseline, entries } = detail.data;
+  const { baseline, entries, verification } = detail.data;
+  // An item's verification changed when what the baseline froze is not what is worked out now.
+  const verifiedThen = (id: string) => {
+    const then = verification[id];
+    return then && { ...then, tests: [] };
+  };
+  const statusChanged = (id: string) => {
+    const [then, now] = [verification[id], verifiedNow?.[id]];
+    return then !== undefined && now !== undefined && (then.status !== now.status || then.outOfDate !== now.outOfDate);
+  };
   const frozenById = new Map(entries.map((entry) => [entry.id, entry]));
   const uidOf = (id: string) => (frozenById.get(id) ?? project.nodes.find((n) => n.id === id))?.uid ?? "?";
 
@@ -179,11 +205,14 @@ export function BaselinePage() {
         )
       : new Map<string, BaselineChange>();
     const added = itemsWithin(project.nodes, set.id).filter((n) => changes.get(n.id) === "added");
-    const rows = [...frozen, ...added].filter((row) => !differencesOnly || changes.has(row.id));
+    const rows = [...frozen, ...added].filter(
+      (row) => !differencesOnly || changes.has(row.id) || statusChanged(row.id),
+    );
     const statusField = now?.fields.find((f) => f.name === "Status" && f.type === "enum")?.id ?? "";
     return { set, now, changes, rows, total: frozen.length, statusField };
   });
   const differences = sections.reduce((sum, section) => sum + section.changes.size, 0);
+  const statusChanges = Object.keys(verification).filter(statusChanged).length;
 
   // Relationships: those the baseline froze against those live now, within what the baseline covers.
   const inScope = (id: string) =>
@@ -211,7 +240,8 @@ export function BaselinePage() {
           <Text c="dimmed" size="sm">
             Baseline of {setId ? sets[0]?.name : "the whole project"} · created by {baseline.author} on{" "}
             {new Date(baseline.createdAt).toLocaleString()} ·{" "}
-            {differences === 0 ? "nothing has changed since" : `${differences} items differ now`}
+            {differences === 0 ? "no item has changed since" : `${differences} items differ now`}
+            {statusChanges > 0 && ` · verification changed on ${statusChanges}`}
           </Text>
         </div>
         <Group>
@@ -237,12 +267,17 @@ export function BaselinePage() {
               {differencesOnly ? "No differences." : "No items."}
             </Text>
           ) : (
-            <Table withTableBorder bg="white" aria-label={`${set.name} in baseline ${baseline.name}`}>
+            <Table
+              withTableBorder
+              bg="var(--mantine-color-body)"
+              aria-label={`${set.name} in baseline ${baseline.name}`}
+            >
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th w={130}>ID</Table.Th>
                   <Table.Th>Name</Table.Th>
                   <Table.Th w={120}>Status then</Table.Th>
+                  <Table.Th w={230}>Verification then</Table.Th>
                   <Table.Th w={200}>Folder</Table.Th>
                   <Table.Th w={90}>Version</Table.Th>
                   <Table.Th w={150}>Compared with now</Table.Th>
@@ -261,6 +296,17 @@ export function BaselinePage() {
                       <Table.Td c={change === "added" ? "dimmed" : undefined}>{row.name}</Table.Td>
                       <Table.Td>
                         <StatusBadge status={frozenById.get(row.id)?.attributes?.[statusField]} />
+                      </Table.Td>
+                      <Table.Td>
+                        <VerificationBadge entry={verifiedThen(row.id)} />
+                        {statusChanged(row.id) && (
+                          <Group gap={4} mt={2}>
+                            <Text size="xs" c="dimmed">
+                              Now:
+                            </Text>
+                            <VerificationBadge entry={verifiedNow?.[row.id]} />
+                          </Group>
+                        )}
                       </Table.Td>
                       <Table.Td>{change !== "added" && row.parentId && frozenById.get(row.parentId)?.name}</Table.Td>
                       <Table.Td>{frozenById.get(row.id)?.revision}</Table.Td>

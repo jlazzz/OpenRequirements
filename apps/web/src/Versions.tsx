@@ -66,7 +66,7 @@ export function Versions({ itemId, fields, editable }: { itemId: string; fields:
             <>
               {revision.author} · {new Date(revision.createdAt).toLocaleString()}
               {revision.changeReason && (
-                <Text size="xs" c="dark" fs="italic">
+                <Text size="xs" c="var(--mantine-color-bright)" fs="italic">
                   {revision.changeReason}
                 </Text>
               )}

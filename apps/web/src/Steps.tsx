@@ -14,7 +14,7 @@ export function StepsView({ label, value }: { label: string; value: unknown }) {
       {steps.length === 0 ? (
         <Text>—</Text>
       ) : (
-        <Table withTableBorder bg="white" aria-label={label} style={{ whiteSpace: "pre-wrap" }}>
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label={label} style={{ whiteSpace: "pre-wrap" }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th w={40}>#</Table.Th>

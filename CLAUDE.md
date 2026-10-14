@@ -73,7 +73,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | CI results | JUnit XML read by a hand-written scanner in `packages/importers`, no XML library ([ADR 0009](docs/adr/0009-verification-tracking.md)) | in use |
 | ReqIF | Read and written by `packages/reqif`: hand-written XML parser and zip on the platform's `CompressionStream`, no library. The browser parses the file; the server gets JSON ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)) | in use |
 | Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
-| File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images only, type checked by content. S3-compatible later. | in use |
+| File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images, PDF, text, CSV and zip, type checked by content in `domain/filetype.ts`; only images are ever shown, the rest is a download. Limit `MAX_ATTACHMENT_MB`, default 25. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml` | in use |
 | End-to-end tests | Playwright | proposed |
 
@@ -97,11 +97,12 @@ apps/
     src/domain/tree.ts       Pure tree logic: descendants, sibling order
     src/domain/roles.ts      Role ranking and @mention matching
     src/domain/suspect.ts    The suspect-link rule: which ends of a link changed since it was confirmed
-    src/domain/verification.ts  The verification status rule: a requirement's status from its tests' latest results, and what is out of date
+    src/domain/verification.ts  The verification status rule: a requirement's status from its tests' latest results, what is out of date, and which tests are flaky
     src/domain/trace.ts      Walks relationships upstream or downstream as a tree, with loop and repeat guards
     src/domain/testrun.ts    The run state rule: a run's state from the latest result of each step
     src/domain/review.ts     The review outcome rule, the signature digest, and the "only Status changed" check
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
+    src/domain/filetype.ts   What an uploaded file is, judged by its bytes, and a safe stored file name
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
@@ -160,6 +161,8 @@ Use these terms exactly, in code, API and UI.
 | **Verification result** | The outcome of running a test case once: pass, fail or blocked, against one version of the test case. Append-only. Called "result" in the UI. |
 | **Verification status** | Computed per requirement from the latest result of each test linked by "Verified by": not covered, not run, passing, failing |
 | **Out of date** | A result that no longer counts, because the test case or the requirement has a newer version |
+| **Evidence** | Files attached to a result, or to a run and optionally one of its steps: images, PDF, text and logs, CSV, zip. Append-only. |
+| **Flaky test** | A test case whose last five results changed outcome more than once |
 | **Test plan** | A named selection of test cases for a goal, in optional groups |
 | **Test cycle** | One pass through a test plan. Starting it freezes each test case's current version. Closing is permanent. |
 | **Test run** | One test case executed once in a cycle, step by step. Its state is computed from its step results; finishing it records a verification result. |
@@ -182,13 +185,15 @@ Link                               (upstream item, downstream item, type, revisi
 Link ─< LinkRevision               (append-only: one per confirmation of a suspect link, with the revisions of both ends confirmed against)
 Project ─< Baseline ─< BaselineEntry   (node, its ItemRevision id, and its parent, position and folder name at that moment)
 Baseline ─< BaselineLink               (ids of the links that were live, and whether each was suspect)
-Item ─< VerificationResult         (test cases only; append-only: outcome, test case revision, run date, note, evidence attachment, source)
+Baseline ─< BaselineVerification       (each requirement's verification status and out-of-date flag when the baseline was made)
+Item ─< VerificationResult         (test cases only; append-only: outcome, test case revision, run date, note, source)
+VerificationResult | TestRun ─< ResultAttachment  (append-only evidence: the attachment, and the step of a run it belongs to)
 Project ─< TestPlan ─< TestPlanCase  (test case, group, position; soft-removed)
-TestPlan ─< TestCycle ─< TestRun      (test case, frozen ItemRevision, group, assignee; a cycle closes once)
+TestPlan ─< TestCycle ─< TestRun      (test case, frozen ItemRevision, group, assignee; a cycle closes once, may name the baseline it verifies)
 TestRun ─< StepResult                 (append-only: step number, outcome, actual result; the latest per step counts)
 User ─< ApiToken                   (hash only; revoked, never removed)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted; optionally made in a review)
-Project ─< Attachment              (uploaded images embedded in rich text)
+Project ─< Attachment              (uploaded files: images embedded in rich text, and evidence; content type from the bytes, original name)
 Item ─< ExternalReference          (later)
 Baseline ─< Review ─< ReviewParticipant  (reviewer or approver; fixed at creation)
 Review ─< ReviewMark                  (append-only: reviewed, approved, rejected or cleared, per person and item; the latest counts)
@@ -203,6 +208,8 @@ AuditEvent                          (append-only log of every write; project id 
 - **Editing:** inline, auto-saved to a private draft. An explicit "Save version" creates the revision.
 - **Suspect links:** computed, never stored. A link is suspect when either end has a newer revision than the one it was made or last confirmed against. Confirming appends a link revision ([ADR 0007](docs/adr/0007-suspect-links.md)).
 - **Verification:** results are stored, the status is computed, never stored. Only direct "Verified by" links count, test case downstream. A result is out of date when the test case has a newer version or the requirement was revised after it was recorded ([ADR 0009](docs/adr/0009-verification-tracking.md)).
+- **Evidence and reports:** evidence files hang on a result, or on a run and its steps; only images are ever shown, everything else is a download. Baselines freeze verification status. Reports are computed from stored runs and results, nothing new is stored ([ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md)).
+- **Bulk item actions:** `POST /api/sets/:setId/bulk` deletes, moves or sets a field on up to 500 items of one set, all or none, with one audit event and (for edits) one new version per item.
 - **Test runs:** step results are append-only and a run's state is computed. Finishing a run appends an ordinary verification result at the version the cycle froze, so the status rule has one source. A Reviewer executes runs assigned to them, an Editor any run ([ADR 0012](docs/adr/0012-test-plans-cycles-and-runs.md)).
 - **Reviews:** held on a baseline. Marks are append-only; the state is worked out once, at closing, and stored. An approver signs once with their password. A version that only changes Status is flagged when saved and is skipped by the suspect and verification rules ([ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md)).
 - **ReqIF:** export of a set or baseline; import maps specifications, attributes and relation types onto existing sets, fields and relationship types, and only adds items. Structured imports go through `POST /api/projects/:projectId/import` ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)).

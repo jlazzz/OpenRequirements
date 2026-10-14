@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Button,
   Center,
@@ -12,6 +13,8 @@ import {
   Text,
   TextInput,
   Title,
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "@tanstack/react-router";
@@ -64,7 +67,7 @@ function AuthForm({ mode }: { mode: "setup" | "login" }) {
   const setup = mode === "setup";
 
   return (
-    <Center mih="100vh" p="md" bg="gray.1">
+    <Center mih="100vh" p="md" bg="var(--mantine-color-default-hover)">
       <Paper component="form" onSubmit={onSubmit} withBorder p="lg" w={360} maw="100%">
         <Stack gap="sm">
           <Title order={1} size="h3">
@@ -100,6 +103,25 @@ function AuthForm({ mode }: { mode: "setup" | "login" }) {
 }
 
 const TOPBAR_HEIGHT = 44;
+
+/** Switches between light and dark. The choice is kept in this browser; until one is made, the system's setting is used. */
+function ColorSchemeToggle() {
+  const { setColorScheme } = useMantineColorScheme();
+  const dark = useComputedColorScheme("light") === "dark";
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
+  return (
+    <ActionIcon
+      variant="subtle"
+      color="gray.3"
+      size="md"
+      aria-label={label}
+      title={label}
+      onClick={() => setColorScheme(dark ? "light" : "dark")}
+    >
+      <span aria-hidden>{dark ? "☀" : "☾"}</span>
+    </ActionIcon>
+  );
+}
 
 function Shell({ user }: { user: User }) {
   const queryClient = useQueryClient();
@@ -141,7 +163,10 @@ function Shell({ user }: { user: User }) {
             </RouterAnchor>
           )}
         </nav>
-        <Button size="compact-sm" variant="subtle" color="gray.3" ml="auto" onClick={() => setChanging(true)}>
+        <Group gap="xs" ml="auto" wrap="nowrap">
+          <ColorSchemeToggle />
+        </Group>
+        <Button size="compact-sm" variant="subtle" color="gray.3" onClick={() => setChanging(true)}>
           {user.name}
         </Button>
         <Button size="compact-sm" variant="default" onClick={() => logout.mutate()} loading={logout.isPending}>

@@ -167,7 +167,7 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 
 ## T4. Evidence files
 
-**Exists:** one image per result, type checked by content, stored in `ATTACHMENTS_DIR`.
+**Built 2026-10-13** ([ADR 0013](adr/0013-evidence-frozen-status-reports-bulk.md)), except streaming the restore of a backup: the download streams its files, the restore still reads the whole file. Before: one image per result, type checked by content, stored in `ATTACHMENTS_DIR`.
 
 **Slices (2 sessions):**
 
@@ -176,7 +176,7 @@ A finished run writes one ordinary `verification_results` row with source `run`.
 
 ## T5. Frozen status and reports
 
-**Exists:** status is computed live. Baselines freeze items and relationships, not status.
+**Built 2026-10-13** ([ADR 0013](adr/0013-evidence-frozen-status-reports-bulk.md)). The cycle summary is worked out in the browser from the cycle's runs. Before: status was computed live. Baselines froze items and relationships, not status.
 
 **Slices (2 sessions):**
 

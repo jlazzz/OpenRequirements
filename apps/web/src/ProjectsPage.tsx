@@ -80,7 +80,7 @@ export function ProjectsPage() {
         <Text c="dimmed">No projects yet.{isAdmin ? " Create the first one with “New project”." : ""}</Text>
       )}
       {projects.data && projects.data.projects.length > 0 && (
-        <Table highlightOnHover withTableBorder bg="white">
+        <Table highlightOnHover withTableBorder bg="var(--mantine-color-body)">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
@@ -107,7 +107,7 @@ export function ProjectsPage() {
           <Title order={2} size="h4" mt="xl" mb="xs">
             My test runs
           </Title>
-          <Table highlightOnHover withTableBorder bg="white" aria-label="My test runs">
+          <Table highlightOnHover withTableBorder bg="var(--mantine-color-body)" aria-label="My test runs">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Test case</Table.Th>

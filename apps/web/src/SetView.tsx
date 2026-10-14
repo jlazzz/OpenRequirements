@@ -11,6 +11,7 @@ import {
   NativeSelect,
   NumberInput,
   SegmentedControl,
+  Select,
   Stack,
   Switch,
   Table,
@@ -205,9 +206,9 @@ function ReadingView({ data, list, containerId }: { data: ProjectDetail; list: S
     <div
       style={{
         maxWidth: 820,
-        background: "white",
+        background: "var(--mantine-color-body)",
         padding: "8px 24px",
-        border: "1px solid var(--mantine-color-gray-3)",
+        border: "1px solid var(--mantine-color-default-border)",
       }}
     >
       {level(containerId, 0)}
@@ -247,6 +248,15 @@ function ListTable({
   );
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [problem, setProblem] = useState<string | null>(null);
+  // Bulk actions: the ticked rows, and which dialog is open for them.
+  const [selected, setSelected] = useState<string[]>([]);
+  // The kind stays set while the dialog fades out, so its title does not change as it closes.
+  const [bulk, setBulk] = useState<"edit" | "move" | "delete">("edit");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  // What the open dialog acts on: the selection as it was when the dialog opened.
+  const [bulkItems, setBulkItems] = useState<{ id: string; uid: string }[]>([]);
+  const [bulkField, setBulkField] = useState("");
+  const [bulkValue, setBulkValue] = useState<unknown>(null);
 
   const details = new Map(list.items.map((item) => [item.id, item]));
   const count = (id: string, end: "upstreamId" | "downstreamId") => links.filter((l) => l[end] === id).length;
@@ -358,6 +368,50 @@ function ListTable({
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects", projectId] }),
   });
+
+  // Only rows that are shown can be acted on: a filter narrows a selection, it never hides part of it.
+  const chosen = rows.filter((r) => selected.includes(r.item.id));
+  const shownIds = rows.map((r) => r.item.id);
+  const toggle = (ids: string[], on: boolean) =>
+    setSelected((previous) => (on ? [...new Set([...previous, ...ids])] : previous.filter((id) => !ids.includes(id))));
+  const bulkFields = list.fields.filter((f) => f.type !== "steps" && f.type !== "multi_enum");
+  const field = bulkFields.find((f) => f.id === bulkField) ?? bulkFields[0];
+  const folders = data.nodes.filter((n) => n.setId === set.id && n.kind === "folder");
+  const pathOf = (folder: TreeNode): string => {
+    const parent = folders.find((n) => n.id === folder.parentId);
+    return parent ? `${pathOf(parent)} / ${folder.name}` : folder.name;
+  };
+  const act = useMutation({
+    mutationFn: (body: object) =>
+      api<{ changed: number }>(`sets/${set.id}/bulk`, { ...body, itemIds: bulkItems.map((item) => item.id) }),
+    onSuccess: () => {
+      setBulkOpen(false);
+      setSelected([]);
+      setBulkValue(null);
+      return queryClient.invalidateQueries({ queryKey: ["projects", projectId] });
+    },
+  });
+  const openBulk = (next: typeof bulk) => {
+    act.reset();
+    setBulk(next);
+    setBulkItems(chosen.map((r) => ({ id: r.item.id, uid: r.item.uid })));
+    setBulkOpen(true);
+  };
+  const onBulk = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (bulk === "delete") act.mutate({ action: "delete" });
+    if (bulk === "move") act.mutate({ action: "move", parentId: String(form.get("destination")) || null });
+    if (bulk === "edit" && field) {
+      act.mutate({
+        action: "edit",
+        attributes: { [field.id]: bulkValue },
+        changeReason: String(form.get("changeReason")) || undefined,
+      });
+    }
+  };
+  const itemCount = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
+  const things = itemCount(bulkItems.length);
 
   // Exports what the table shows now: the filtered, sorted rows and the chosen columns, plus each description as text.
   const exportCsv = () => {
@@ -482,14 +536,54 @@ function ListTable({
           {problem ?? finish.error?.message}
         </Alert>
       )}
+      {chosen.length > 0 && (
+        <Group gap="xs" role="toolbar" aria-label="Actions on the selected items">
+          <Text size="sm" fw={600}>
+            {itemCount(chosen.length)} selected
+          </Text>
+          <Button size="compact-sm" variant="default" disabled={!field} onClick={() => openBulk("edit")}>
+            Set a field…
+          </Button>
+          <Button size="compact-sm" variant="default" onClick={() => openBulk("move")}>
+            Move to…
+          </Button>
+          <Button size="compact-sm" variant="default" color="red" onClick={() => openBulk("delete")}>
+            Delete
+          </Button>
+          <Button size="compact-sm" variant="subtle" color="gray" onClick={() => setSelected([])}>
+            Clear selection
+          </Button>
+          {chosen.length > 500 && (
+            <Text size="sm" c="red">
+              At most 500 items can be changed at once.
+            </Text>
+          )}
+        </Group>
+      )}
 
       {rows.length === 0 ? (
         <Text c="dimmed">No items match.</Text>
       ) : (
         <Table.ScrollContainer minWidth={280 + 150 * shown.length}>
-          <Table withTableBorder withColumnBorders highlightOnHover bg="white" aria-label={`Items in ${title}`}>
+          <Table
+            withTableBorder
+            withColumnBorders
+            highlightOnHover
+            bg="var(--mantine-color-body)"
+            aria-label={`Items in ${title}`}
+          >
             <Table.Thead>
               <Table.Tr>
+                {canEdit(data.role) && (
+                  <Table.Th w={36}>
+                    <Checkbox
+                      aria-label="Select all items shown"
+                      checked={shownIds.every((id) => selected.includes(id))}
+                      indeterminate={chosen.length > 0 && chosen.length < rows.length}
+                      onChange={(e) => toggle(shownIds, e.currentTarget.checked)}
+                    />
+                  </Table.Th>
+                )}
                 {header("id", "ID", 130)}
                 {header("name", "Name")}
                 {shown.map((column) => header(column.id, column.label))}
@@ -498,6 +592,15 @@ function ListTable({
             <Table.Tbody>
               {rows.map((row) => (
                 <Table.Tr key={row.item.id}>
+                  {canEdit(data.role) && (
+                    <Table.Td>
+                      <Checkbox
+                        aria-label={`Select ${row.item.uid}`}
+                        checked={selected.includes(row.item.id)}
+                        onChange={(e) => toggle([row.item.id], e.currentTarget.checked)}
+                      />
+                    </Table.Td>
+                  )}
                   <Table.Td style={{ whiteSpace: "nowrap" }}>
                     <RouterAnchor
                       to="/projects/$projectId/items/$nodeId"
@@ -567,6 +670,90 @@ function ListTable({
           </Table>
         </Table.ScrollContainer>
       )}
+
+      <Modal
+        opened={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title={bulk === "edit" ? `Set a field on ${things}` : bulk === "move" ? `Move ${things}` : `Delete ${things}?`}
+      >
+        <form onSubmit={onBulk}>
+          <Stack gap="sm">
+            {bulk === "edit" && field && (
+              <>
+                <NativeSelect
+                  label="Field"
+                  data={bulkFields.map((f) => ({ value: f.id, label: f.name }))}
+                  value={field.id}
+                  onChange={(e) => {
+                    setBulkField(e.currentTarget.value);
+                    setBulkValue(null);
+                  }}
+                />
+                <div>
+                  <Text size="sm" fw={500} mb={2}>
+                    New value
+                  </Text>
+                  <CellInput
+                    field={field}
+                    label={`New value of ${field.name}`}
+                    value={bulkValue}
+                    onChange={setBulkValue}
+                  />
+                  <Text size="xs" c="dimmed" mt={2}>
+                    Left empty, the field is cleared.
+                  </Text>
+                </div>
+                <TextInput name="changeReason" label="Reason for the change" maxLength={500} />
+                <Text size="sm">
+                  Each item that does not have this value yet gets a new version. Nothing else about it changes.
+                </Text>
+              </>
+            )}
+            {bulk === "move" && (
+              <Select
+                name="destination"
+                label="Move to"
+                description="The items are placed last in the destination, in the order they have now."
+                data={[
+                  { value: "", label: `${set.name} (top level)` },
+                  ...folders.map((f) => ({ value: f.id, label: pathOf(f) })),
+                ]}
+                defaultValue=""
+                allowDeselect={false}
+                searchable
+              />
+            )}
+            {bulk === "delete" && (
+              <Text size="sm">
+                {bulkItems
+                  .slice(0, 10)
+                  .map((item) => item.uid)
+                  .join(", ")}
+                {bulkItems.length > 10 && ` and ${bulkItems.length - 10} more`}. They disappear from the project, but
+                their history is kept, their IDs are never reused, and they can be restored from Deleted items.
+              </Text>
+            )}
+            {act.isError && (
+              <Alert color="red" role="alert">
+                {act.error.message}
+              </Alert>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setBulkOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                color={bulk === "delete" ? "red" : undefined}
+                loading={act.isPending}
+                disabled={bulkItems.length > 500}
+              >
+                {bulk === "edit" ? `Change ${things}` : bulk === "move" ? `Move ${things}` : `Delete ${things}`}
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

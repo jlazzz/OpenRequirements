@@ -61,7 +61,7 @@ export function MembersPage() {
       )}
       {members.data?.members.length === 0 && <Text c="dimmed">No members yet.</Text>}
       {members.data && members.data.members.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Project members">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Project members">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>

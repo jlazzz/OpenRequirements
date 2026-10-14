@@ -72,7 +72,12 @@ export function MatrixPage() {
             {unlinked} of {rows.length} {rowSet.name} items have no relationship with any {colSet.name} item.
           </Text>
           <Table.ScrollContainer minWidth={240 + cols.length * 110}>
-            <Table withTableBorder withColumnBorders bg="white" aria-label={`${rowSet.name} against ${colSet.name}`}>
+            <Table
+              withTableBorder
+              withColumnBorders
+              bg="var(--mantine-color-body)"
+              aria-label={`${rowSet.name} against ${colSet.name}`}
+            >
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th miw={240}>{rowSet.name}</Table.Th>
@@ -102,7 +107,13 @@ export function MatrixPage() {
                       <Table.Td
                         key={col.id}
                         ta="center"
-                        bg={suspect(row, col) ? "orange.1" : linked(row, col) ? "blue.0" : undefined}
+                        bg={
+                          suspect(row, col)
+                            ? "var(--mantine-color-orange-light)"
+                            : linked(row, col)
+                              ? "var(--mantine-color-blue-light)"
+                              : undefined
+                        }
                       >
                         {linked(row, col) && (
                           <span

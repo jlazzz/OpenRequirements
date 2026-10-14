@@ -38,7 +38,7 @@ export function SearchPage() {
         </Text>
       )}
       {results.length > 0 && (
-        <Table withTableBorder highlightOnHover bg="white" aria-label="Search results">
+        <Table withTableBorder highlightOnHover bg="var(--mantine-color-body)" aria-label="Search results">
           <Table.Thead>
             <Table.Tr>
               <Table.Th w={130}>ID</Table.Th>

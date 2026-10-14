@@ -1,3 +1,4 @@
+import { toCsv } from "@app/importers";
 import type { RichNode, Step } from "@app/shared";
 import {
   Alert,
@@ -6,12 +7,14 @@ import {
   Badge,
   Button,
   Checkbox,
+  FileButton,
   Group,
   Modal,
   NativeSelect,
   Progress,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
   Textarea,
@@ -24,17 +27,21 @@ import { type FormEvent, useEffect, useState } from "react";
 import {
   api,
   canEdit,
+  download,
+  type Evidence,
   isTestSet,
   type Member,
   type Outcome,
   type RunState,
   type RunSummary,
   type TreeNode,
+  uploadFile,
 } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { RichView } from "./RichView.tsx";
+import { EvidenceLinks } from "./Verification.tsx";
 
 type Counts = Record<RunState, number>;
 type PlanRow = {
@@ -54,10 +61,16 @@ type PlanDetail = {
     id: string;
     name: string;
     environment: string;
+    baselineId: string | null;
     createdAt: string;
     closedAt: string | null;
     runs: Counts;
   }[];
+};
+/** Every cycle of a plan, oldest first, and the state each test case reached in each. */
+type PlanHistoryData = {
+  cycles: { id: string; name: string; createdAt: string }[];
+  tests: { itemId: string; uid: string; name: string; states: Record<string, RunState> }[];
 };
 type CycleDetail = {
   cycle: {
@@ -66,6 +79,9 @@ type CycleDetail = {
     environment: string;
     planId: string;
     plan: string;
+    /** The baseline the cycle verifies, when it names one. */
+    baselineId: string | null;
+    baseline: string | null;
     createdAt: string;
     author: string;
     closedAt: string | null;
@@ -80,6 +96,8 @@ type RunDetail = {
     description: RichNode;
     steps: RunStep[];
     result: { outcome: Outcome; note: string; defectUrl: string | null; at: string; by: string } | null;
+    /** Evidence files, oldest first. */
+    attachments: Evidence[];
   };
   cycle: { id: string; name: string; environment: string; closedAt: string | null; planId: string; plan: string };
   /** The same person's next unfinished run in the cycle. */
@@ -138,6 +156,179 @@ function RunProgress({ counts }: { counts: Counts }) {
   );
 }
 
+const csvFile = (name: string, rows: (string | number)[][]) =>
+  download(`${name}.csv`, new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" }));
+
+/** Runs counted by state, one row per group or person, with a total. */
+function Tally({ label, rows }: { label: string; rows: [string, Counts][] }) {
+  return (
+    <Table withTableBorder bg="var(--mantine-color-body)" aria-label={`Runs by ${label.toLowerCase()}`}>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>{label}</Table.Th>
+          {STATES.map((state) => (
+            <Table.Th key={state} w={110}>
+              {RUN_STATE[state].label}
+            </Table.Th>
+          ))}
+          <Table.Th w={80}>Runs</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {rows.map(([name, counts]) => (
+          <Table.Tr key={name}>
+            <Table.Td>{name}</Table.Td>
+            {STATES.map((state) => (
+              <Table.Td key={state} c={counts[state] ? undefined : "dimmed"}>
+                {counts[state]}
+              </Table.Td>
+            ))}
+            <Table.Td>{STATES.reduce((sum, state) => sum + counts[state], 0)}</Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+/** Cycle summary: how the runs stand, by group and by the person they are assigned to. */
+function CycleSummary({ name, runs }: { name: string; runs: RunSummary[] }) {
+  const by = (key: (run: RunSummary) => string): [string, Counts][] => {
+    const groups = new Map<string, RunSummary[]>();
+    for (const run of runs) groups.set(key(run), [...(groups.get(key(run)) ?? []), run]);
+    return [...groups].map(([label, members]) => [label, countRuns(members)]);
+  };
+  const groups = by((run) => run.group || NO_GROUP);
+  const people = by((run) => run.assignee ?? "Nobody");
+  const lines = (kind: string, rows: [string, Counts][]) =>
+    rows.map(([label, counts]) => [kind, label, ...STATES.map((state) => counts[state])]);
+  return (
+    <Stack gap="xs">
+      <Group justify="space-between">
+        <Title order={2} size="h4">
+          Summary
+        </Title>
+        <Button
+          size="compact-sm"
+          variant="default"
+          onClick={() =>
+            csvFile(`${name} summary`, [
+              ["By", "Name", ...STATES.map((state) => RUN_STATE[state].label)],
+              ...lines("Group", groups),
+              ...lines("Assigned to", people),
+            ])
+          }
+        >
+          Export CSV
+        </Button>
+      </Group>
+      <Tally label="Group" rows={groups} />
+      <Tally label="Assigned to" rows={people} />
+    </Stack>
+  );
+}
+
+/** Plan history: the cycles of a plan side by side, one row per test case. This is how two cycles are compared. */
+function PlanHistory({ projectId, planId, plan }: { projectId: string; planId: string; plan: string }) {
+  const history = useQuery({
+    queryKey: ["projects", projectId, "test-plans", planId, "history"],
+    queryFn: () => api<PlanHistoryData>(`test-plans/${planId}/history`),
+  });
+  const [changedOnly, setChangedOnly] = useState(false);
+  if (!history.data || history.data.cycles.length === 0) return null;
+  const { cycles, tests } = history.data;
+  const [previous, last] = cycles.slice(-2);
+  // A test changed when its state in the last cycle is not what it was in the one before.
+  const changed = (test: PlanHistoryData["tests"][number]) =>
+    previous !== undefined && last !== undefined && test.states[previous.id] !== test.states[last.id];
+  const shown = tests.filter((test) => !changedOnly || changed(test));
+  const label = (state: RunState | undefined) => (state ? RUN_STATE[state].label : "");
+  return (
+    <Stack gap="sm">
+      <Group justify="space-between">
+        <Title order={2} size="h4">
+          History
+        </Title>
+        <Group gap="sm">
+          {cycles.length > 1 && (
+            <Switch
+              label="Only what changed in the last cycle"
+              checked={changedOnly}
+              onChange={(e) => setChangedOnly(e.currentTarget.checked)}
+            />
+          )}
+          <Button
+            size="compact-sm"
+            variant="default"
+            onClick={() =>
+              csvFile(`${plan} history`, [
+                ["ID", "Test case", ...cycles.map((cycle) => cycle.name)],
+                ...shown.map((test) => [test.uid, test.name, ...cycles.map((cycle) => label(test.states[cycle.id]))]),
+              ])
+            }
+          >
+            Export CSV
+          </Button>
+        </Group>
+      </Group>
+      {shown.length === 0 ? (
+        <Text c="dimmed">Nothing changed between the last two cycles.</Text>
+      ) : (
+        <Table.ScrollContainer minWidth={300 + 130 * cycles.length}>
+          <Table withTableBorder withColumnBorders bg="var(--mantine-color-body)" aria-label="Cycles side by side">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Test case</Table.Th>
+                {cycles.map((cycle) => (
+                  <Table.Th key={cycle.id} w={130}>
+                    <RouterAnchor
+                      to="/projects/$projectId/cycles/$testCycleId"
+                      params={{ projectId, testCycleId: cycle.id }}
+                      size="sm"
+                    >
+                      {cycle.name}
+                    </RouterAnchor>
+                  </Table.Th>
+                ))}
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {shown.map((test) => (
+                <Table.Tr key={test.itemId}>
+                  <Table.Td fw={changed(test) ? 600 : undefined}>
+                    <RouterAnchor
+                      to="/projects/$projectId/items/$nodeId"
+                      params={{ projectId, nodeId: test.itemId }}
+                      size="sm"
+                    >
+                      {test.uid}
+                    </RouterAnchor>{" "}
+                    {test.name}
+                  </Table.Td>
+                  {cycles.map((cycle) => {
+                    const state = test.states[cycle.id];
+                    return (
+                      <Table.Td key={cycle.id}>
+                        {state ? (
+                          <RunStateBadge state={state} />
+                        ) : (
+                          <Text size="xs" c="dimmed">
+                            Not in the cycle
+                          </Text>
+                        )}
+                      </Table.Td>
+                    );
+                  })}
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+    </Stack>
+  );
+}
+
 /** Splits rows into their groups, in the order the groups first appear. */
 function grouped<T extends { group: string }>(rows: T[]): [string, T[]][] {
   const groups = new Map<string, T[]>();
@@ -188,7 +379,7 @@ export function TestPlansPage() {
       )}
       {list.data?.plans.length === 0 && <Text c="dimmed">No test plans yet.</Text>}
       {list.data && list.data.plans.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Test plans">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test plans">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
@@ -254,6 +445,10 @@ export function TestPlanPage() {
     queryFn: () => api<PlanDetail>(`test-plans/${testPlanId}`),
   });
   const links = useLinks(projectId).data;
+  const baselines = useQuery({
+    queryKey: ["projects", projectId, "baselines"],
+    queryFn: () => api<{ baselines: { id: string; name: string }[] }>(`projects/${projectId}/baselines`),
+  });
   const [selected, setSelected] = useState<string[]>([]);
   const [source, setSource] = useState<string | null>(null);
   const [addGroup, setAddGroup] = useState("");
@@ -333,6 +528,7 @@ export function TestPlanPage() {
     start.mutate({
       name: String(form.get("name")),
       environment: String(form.get("environment")),
+      baselineId: String(form.get("baselineId")) || undefined,
       ...(scope.startsWith("group:") ? { scope: "group", group: scope.slice(6) } : { scope }),
     });
   };
@@ -383,7 +579,7 @@ export function TestPlanPage() {
         </Title>
         {cycles.length === 0 && <Text c="dimmed">No cycle has been started from this plan.</Text>}
         {cycles.length > 0 && (
-          <Table withTableBorder bg="white" aria-label="Test cycles">
+          <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test cycles">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
@@ -433,16 +629,27 @@ export function TestPlanPage() {
                     : []),
                 ]}
               />
+              <NativeSelect
+                name="baselineId"
+                label="Verifies baseline"
+                data={[
+                  { value: "", label: "None" },
+                  ...(baselines.data?.baselines ?? []).map((b) => ({ value: b.id, label: b.name })),
+                ]}
+              />
               <Button type="submit" loading={start.isPending}>
                 Start cycle
               </Button>
             </Group>
             <Text size="xs" c="dimmed" mt={4}>
-              Starting a cycle makes one run per test case and freezes the version each test case has now.
+              Starting a cycle makes one run per test case and freezes the version each test case has now. A cycle that
+              verifies a baseline is listed in the reviews of that baseline.
             </Text>
           </form>
         )}
       </Stack>
+
+      <PlanHistory projectId={projectId} planId={testPlanId} plan={plan.name} />
 
       <Stack gap="sm">
         <Title order={2} size="h4">
@@ -455,7 +662,7 @@ export function TestPlanPage() {
             const ids = members.map((c) => c.itemId);
             const label = name || NO_GROUP;
             return (
-              <Table key={name} withTableBorder bg="white" aria-label={`Test cases in ${label}`}>
+              <Table key={name} withTableBorder bg="var(--mantine-color-body)" aria-label={`Test cases in ${label}`}>
                 <Table.Thead>
                   <Table.Tr>
                     {editor && (
@@ -682,6 +889,18 @@ export function TestCyclePage() {
           </RouterAnchor>
           {cycle.environment && ` · ${cycle.environment}`} · started by {cycle.author} on {when(cycle.createdAt)}
           {cycle.closedAt && ` · closed by ${cycle.closedBy} on ${when(cycle.closedAt)}`}
+          {cycle.baselineId && (
+            <>
+              {" · verifies baseline "}
+              <RouterAnchor
+                to="/projects/$projectId/baselines/$baselineId"
+                params={{ projectId, baselineId: cycle.baselineId }}
+                inherit
+              >
+                {cycle.baseline}
+              </RouterAnchor>
+            </>
+          )}
         </Text>
       </div>
       <RunProgress counts={countRuns(runs)} />
@@ -738,7 +957,7 @@ export function TestCyclePage() {
       </Group>
       {shown.length === 0 && <Text c="dimmed">No runs match.</Text>}
       {shown.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Test runs">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test runs">
           <Table.Thead>
             <Table.Tr>
               {editor && open && (
@@ -760,7 +979,7 @@ export function TestCyclePage() {
           {grouped(shown).map(([name, members]) => (
             <Table.Tbody key={name}>
               {(name || grouped(runs).length > 1) && (
-                <Table.Tr bg="gray.0">
+                <Table.Tr bg="var(--mantine-color-default-hover)">
                   <Table.Th colSpan={6} scope="rowgroup">
                     {name || NO_GROUP} ({members.length})
                   </Table.Th>
@@ -804,6 +1023,8 @@ export function TestCyclePage() {
           ))}
         </Table>
       )}
+
+      <CycleSummary name={cycle.name} runs={runs} />
 
       <Modal opened={closing} onClose={() => setClosing(false)} title={`Close ${cycle.name}?`}>
         <Stack gap="sm">
@@ -882,6 +1103,16 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
         queryClient.invalidateQueries({ queryKey: ["test-runs"] }),
       ]),
   });
+  // Evidence: each file is uploaded to the project, then attached to the run, on one step or on the whole test.
+  const attach = useMutation({
+    mutationFn: async ({ files, step }: { files: File[]; step?: number }) => {
+      for (const file of files) {
+        const { id } = await uploadFile(projectId, file);
+        await api(`test-runs/${run.id}/attachments`, { attachmentId: id, step });
+      }
+    },
+    onSettled: refresh,
+  });
   const mark = (index: number, outcome: Outcome) =>
     record.mutate({ steps: [index + 1], outcome, actual: actuals[index] });
   const remaining = run.steps.flatMap((step, index) => (step.outcome ? [] : [index + 1]));
@@ -899,8 +1130,19 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
       else return;
       event.preventDefault();
     };
+    // A pasted screenshot becomes evidence of the highlighted step. Pasted text has no files and is left alone.
+    const onPaste = (event: ClipboardEvent) => {
+      const files = [...(event.clipboardData?.files ?? [])];
+      if (files.length === 0) return;
+      event.preventDefault();
+      attach.mutate({ files, step: at + 1 });
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("paste", onPaste);
+    };
   });
 
   const cyclePage = (
@@ -941,14 +1183,14 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
         </Text>
       </div>
       <RichView doc={run.description} />
-      {(record.isError || finish.isError) && (
+      {(record.isError || finish.isError || attach.isError) && (
         <Alert color="red" role="alert">
-          {(record.error ?? finish.error)?.message}
+          {(record.error ?? finish.error ?? attach.error)?.message}
         </Alert>
       )}
       {cycle.closedAt && !run.finished && <Alert color="gray">This cycle is closed. The run was not finished.</Alert>}
 
-      <Table withTableBorder bg="white" aria-label="Steps" style={{ whiteSpace: "pre-wrap" }}>
+      <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Steps" style={{ whiteSpace: "pre-wrap" }}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th w={40}>#</Table.Th>
@@ -963,9 +1205,19 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
             <Table.Tr
               // biome-ignore lint/suspicious/noArrayIndexKey: a step has no identity but its place in the frozen list
               key={index}
-              bg={canExecute && index === at ? "blue.0" : undefined}
+              bg={canExecute && index === at ? "var(--mantine-primary-color-light)" : undefined}
               aria-current={canExecute && index === at ? "step" : undefined}
               onClick={() => setAt(index)}
+              // A file dropped on a step becomes its evidence.
+              onDragOver={canExecute ? (event) => event.preventDefault() : undefined}
+              onDrop={
+                canExecute
+                  ? (event) => {
+                      event.preventDefault();
+                      attach.mutate({ files: [...event.dataTransfer.files], step: index + 1 });
+                    }
+                  : undefined
+              }
               style={{ verticalAlign: "top" }}
             >
               <Table.Td>{index + 1}</Table.Td>
@@ -988,6 +1240,24 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
                 ) : (
                   step.actual
                 )}
+                <Group gap="xs" mt={4}>
+                  <EvidenceLinks files={run.attachments.filter((file) => file.step === index + 1)} showStep={false} />
+                  {canExecute && (
+                    <FileButton multiple onChange={(files) => attach.mutate({ files, step: index + 1 })}>
+                      {(props) => (
+                        <Button
+                          {...props}
+                          size="compact-xs"
+                          variant="subtle"
+                          aria-label={`Attach evidence to step ${index + 1}`}
+                          loading={attach.isPending && attach.variables?.step === index + 1}
+                        >
+                          Attach
+                        </Button>
+                      )}
+                    </FileButton>
+                  )}
+                </Group>
               </Table.Td>
               <Table.Td>
                 {canExecute ? (
@@ -1025,6 +1295,38 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
           ))}
         </Table.Tbody>
       </Table>
+
+      <Group gap="xs">
+        <Text size="sm" fw={600}>
+          Evidence of the whole test:
+        </Text>
+        <EvidenceLinks files={run.attachments.filter((file) => file.step === null)} />
+        {run.attachments.every((file) => file.step !== null) && (
+          <Text size="sm" c="dimmed">
+            none
+          </Text>
+        )}
+        {canExecute && (
+          <FileButton multiple onChange={(files) => attach.mutate({ files })}>
+            {(props) => (
+              <Button
+                {...props}
+                size="compact-sm"
+                variant="default"
+                loading={attach.isPending && attach.variables?.step === undefined}
+              >
+                Attach files
+              </Button>
+            )}
+          </FileButton>
+        )}
+      </Group>
+      {canExecute && (
+        <Text size="xs" c="dimmed">
+          Evidence can be an image, PDF, text, log, CSV or zip file. Drop a file on a step, or paste a screenshot: it
+          goes to the highlighted step. Evidence cannot be removed afterwards.
+        </Text>
+      )}
 
       {canExecute && (
         <Stack gap="sm" maw={560}>

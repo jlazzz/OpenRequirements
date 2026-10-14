@@ -77,7 +77,12 @@ export function ImpactPage() {
           None
         </Text>
       ) : (
-        <Box bg="white" py="xs" pr="md" style={{ border: "1px solid var(--mantine-color-gray-3)", overflowX: "auto" }}>
+        <Box
+          bg="var(--mantine-color-body)"
+          py="xs"
+          pr="md"
+          style={{ border: "1px solid var(--mantine-color-default-border)", overflowX: "auto" }}
+        >
           {tree(nodes)}
         </Box>
       )}

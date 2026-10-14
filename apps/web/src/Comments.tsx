@@ -52,7 +52,7 @@ export function Comments({ data, itemId }: { data: ProjectDetail; itemId: string
           <div key={comment.id}>
             <Group gap={4} wrap="nowrap" align="flex-start">
               <Text size="xs" c="dimmed" flex={1}>
-                <Text span fw={600} c="dark" inherit>
+                <Text span fw={600} c="var(--mantine-color-bright)" inherit>
                   {comment.author}
                 </Text>{" "}
                 · {new Date(comment.createdAt).toLocaleString()}

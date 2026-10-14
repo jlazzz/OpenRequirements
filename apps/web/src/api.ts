@@ -102,18 +102,35 @@ export type SetTrace = {
 };
 export type Impact = { upstream: TraceNode[]; downstream: TraceNode[] };
 
-/** Uploads an image to a project and returns the address to embed in rich text. */
-export async function uploadImage(projectId: string, file: File): Promise<string> {
-  const res = await fetch(`/api/projects/${projectId}/attachments`, {
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** An uploaded file of a project. `src` is where it is read from. */
+export type Upload = { id: string; src: string; name: string | null; contentType: string };
+
+/**
+ * Uploads a file to a project: an image for rich text, or evidence of a test (an image, PDF, text, log, CSV or zip).
+ * The server decides what the file is from its content.
+ */
+export async function uploadFile(projectId: string, file: File): Promise<Upload> {
+  const res = await fetch(`/api/projects/${projectId}/attachments?name=${encodeURIComponent(file.name)}`, {
     method: "POST",
-    headers: { "content-type": file.type },
+    // Only the image types are named: saying "image" makes the server insist that it is one.
+    headers: { "content-type": IMAGE_TYPES.includes(file.type) ? file.type : "application/octet-stream" },
     body: file,
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 413) throw new Error("Image is larger than 5 MB");
+  if (res.status === 413) throw new Error(`${file.name} is too large to upload`);
   if (!res.ok) throw new Error(data.error ?? data.message ?? `Upload failed (${res.status})`);
-  return data.src;
+  return data;
 }
+
+/** Uploads an image to a project and returns the address to embed in rich text. */
+export const uploadImage = async (projectId: string, file: File) => (await uploadFile(projectId, file)).src;
+
+/** An evidence file of a result or run. `step` is set when it belongs to one step of a run. */
+export type Evidence = { id: string; name: string | null; contentType: string; step: number | null };
+/** What to call an evidence file on screen. */
+export const evidenceName = (file: { name: string | null; contentType: string }) =>
+  file.name ?? (file.contentType.startsWith("image/") ? "Image" : "File");
 
 export type Member = { userId: string; name: string; email: string; role: Role };
 export type Comment = {
@@ -170,7 +187,7 @@ export type Result = {
   revision: number;
   runAt: string;
   note: string;
-  attachmentId: string | null;
+  attachments: Evidence[];
   source: "manual" | "junit" | "run";
   /** Set on the result of a test run. */
   runId: string | null;

@@ -145,10 +145,10 @@ export function ProjectPage() {
         w={320}
         miw={200}
         maw="60vw"
-        bg="gray.0"
+        bg="var(--mantine-color-default-hover)"
         // Drag the bottom-right corner to make the explorer wider or narrower.
         style={{
-          borderRight: "1px solid var(--mantine-color-gray-3)",
+          borderRight: "1px solid var(--mantine-color-default-border)",
           overflowX: "hidden",
           overflowY: "auto",
           flexShrink: 0,
@@ -224,6 +224,13 @@ export function ProjectPage() {
           to="/projects/$projectId/test-plans"
           params={{ projectId: info.id }}
           label="Test plans"
+          pl={26}
+          py={4}
+        />
+        <RouterNavLink
+          to="/projects/$projectId/reports"
+          params={{ projectId: info.id }}
+          label="Reports"
           pl={26}
           py={4}
         />

@@ -19,6 +19,8 @@ import { useState } from "react";
 import {
   api,
   canEdit,
+  type Evidence,
+  evidenceName,
   type Item,
   isTestSet,
   type LastResult,
@@ -26,7 +28,7 @@ import {
   type ProjectDetail,
   type RequirementVerification,
   type Result,
-  uploadImage,
+  uploadFile,
   type Verification,
   type VerificationStatus,
 } from "./api.ts";
@@ -148,6 +150,23 @@ function VerifiedBy({ data, itemId }: { data: ProjectDetail; itemId: string }) {
   );
 }
 
+/**
+ * Evidence files as links, each named, with its step when it belongs to one (left out where the step is plain, as in
+ * the step's own row). Renders nothing when there are none.
+ */
+export function EvidenceLinks({ files, showStep = true }: { files: Evidence[]; showStep?: boolean }) {
+  return files.length === 0 ? null : (
+    <Group gap="xs">
+      {files.map((file) => (
+        <Anchor key={file.id} href={`/api/attachments/${file.id}`} target="_blank" rel="noreferrer" size="sm">
+          {evidenceName(file)}
+          {showStep && file.step ? ` (step ${file.step})` : ""}
+        </Anchor>
+      ))}
+    </Group>
+  );
+}
+
 const today = () => new Date().toLocaleDateString("en-CA");
 
 function Results({ data, item }: { data: ProjectDetail; item: Item }) {
@@ -159,19 +178,19 @@ function Results({ data, item }: { data: ProjectDetail; item: Item }) {
   const [revision, setRevision] = useState(item.revision);
   const [date, setDate] = useState(today);
   const [note, setNote] = useState("");
-  const [evidence, setEvidence] = useState<File | null>(null);
+  const [evidence, setEvidence] = useState<File[]>([]);
   const [open, setOpen] = useState(false);
   const record = useMutation({
     mutationFn: async () => {
-      // The address of an upload ends in the attachment's id.
-      const attachmentId = evidence ? (await uploadImage(projectId, evidence)).split("/").pop() : undefined;
+      const attachmentIds = [];
+      for (const file of evidence) attachmentIds.push((await uploadFile(projectId, file)).id);
       // Today's results carry the time too; an earlier day is recorded as noon, so it reads as that day everywhere.
       const runAt = date === today() ? undefined : new Date(`${date}T12:00:00`).toISOString();
-      return api(`items/${item.id}/results`, { outcome, revision, runAt, note, attachmentId });
+      return api(`items/${item.id}/results`, { outcome, revision, runAt, note, attachmentIds });
     },
     onSuccess: () => {
       setNote("");
-      setEvidence(null);
+      setEvidence([]);
       setOpen(false);
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: key }),
@@ -235,9 +254,9 @@ function Results({ data, item }: { data: ProjectDetail; item: Item }) {
               <FileInput
                 size="xs"
                 label="Evidence"
-                description="An image, at most 5 MB"
-                placeholder="Choose an image"
-                accept="image/png,image/jpeg,image/gif,image/webp"
+                description="Images, PDF, text, log, CSV or zip files"
+                placeholder="Choose files"
+                multiple
                 clearable
                 value={evidence}
                 onChange={setEvidence}
@@ -298,11 +317,7 @@ function Results({ data, item }: { data: ProjectDetail; item: Item }) {
                 Defect
               </Anchor>
             )}
-            {result.attachmentId && (
-              <Anchor href={`/api/attachments/${result.attachmentId}`} target="_blank" rel="noreferrer" size="sm">
-                Evidence
-              </Anchor>
-            )}
+            <EvidenceLinks files={result.attachments} />
           </div>
         ))}
       </Stack>

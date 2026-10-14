@@ -46,7 +46,7 @@ export function TrashPage() {
       )}
       {trash.data?.deleted.length === 0 && <Text c="dimmed">Nothing has been deleted.</Text>}
       {trash.data && trash.data.deleted.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Deleted items">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Deleted items">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>

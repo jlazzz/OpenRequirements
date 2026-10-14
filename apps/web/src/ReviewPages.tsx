@@ -60,6 +60,8 @@ type ReviewDetail = {
   marks: { itemId: string; userId: string; mark: Mark; at: string }[];
   outcomes: Record<string, "approved" | "rejected" | "undecided">;
   comments: (Comment & { itemId: string })[];
+  /** The test cycles run to verify this review's baseline, with their runs counted by state. */
+  cycles: { id: string; name: string; closedAt: string | null; runs: Record<string, number> }[];
 };
 type Entry = TreeNode & { revision: number | null; description: RichNode | null; attributes: Attributes | null };
 type Closed = { state: State; updated: number; skipped: string[] };
@@ -139,7 +141,7 @@ export function ReviewsPage() {
       )}
       {list.data?.reviews.length === 0 && <Text c="dimmed">No reviews yet.</Text>}
       {list.data && list.data.reviews.length > 0 && (
-        <Table withTableBorder bg="white" aria-label="Reviews">
+        <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Reviews">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
@@ -299,7 +301,7 @@ export function ReviewPage() {
     );
   }
   if (!project || !detail.data || !frozen.data) return null;
-  const { review, participants, marks, outcomes, comments } = detail.data;
+  const { review, participants, marks, outcomes, comments, cycles } = detail.data;
   const entries = frozen.data.entries;
   const items = entries.filter((e) => e.kind === "item");
   const open = review.state === "open";
@@ -418,7 +420,32 @@ export function ReviewPage() {
       )}
       {mine?.signature && open && <Alert color="blue">You have signed this review. Your decisions are final.</Alert>}
 
-      <Table withTableBorder bg="white" aria-label="Reviewers and approvers" maw={900}>
+      {cycles.length > 0 && (
+        <Text size="sm">
+          <Text span fw={600}>
+            Test evidence for this baseline:
+          </Text>{" "}
+          {cycles.map((cycle, index) => (
+            <span key={cycle.id}>
+              {index > 0 && " · "}
+              <RouterAnchor
+                to="/projects/$projectId/cycles/$testCycleId"
+                params={{ projectId, testCycleId: cycle.id }}
+                inherit
+              >
+                {cycle.name}
+              </RouterAnchor>{" "}
+              (
+              {Object.entries(cycle.runs)
+                .map(([state, count]) => `${count} ${state.replace("_", " ")}`)
+                .join(", ")}
+              , {cycle.closedAt ? "closed" : "still open"})
+            </span>
+          ))}
+        </Text>
+      )}
+
+      <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Reviewers and approvers" maw={900}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Name</Table.Th>
@@ -469,7 +496,7 @@ export function ReviewPage() {
             <Title order={2} size="h4" mb={4}>
               {set.name}
             </Title>
-            <Table withTableBorder bg="white" aria-label={`${set.name} in review ${review.name}`}>
+            <Table withTableBorder bg="var(--mantine-color-body)" aria-label={`${set.name} in review ${review.name}`}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th w={110}>ID</Table.Th>
@@ -547,7 +574,7 @@ export function ReviewPage() {
               .map((c) => (
                 <div key={c.id}>
                   <Text size="xs" c="dimmed">
-                    <Text span fw={600} c="dark" inherit>
+                    <Text span fw={600} c="var(--mantine-color-bright)" inherit>
                       {c.author}
                     </Text>{" "}
                     · {when(c.createdAt)}

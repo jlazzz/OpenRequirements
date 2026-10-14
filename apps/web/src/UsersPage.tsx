@@ -102,7 +102,7 @@ export function UsersPage() {
             <Title order={2} size="h4" mb="xs">
               Invitations not yet used
             </Title>
-            <Table withTableBorder bg="white">
+            <Table withTableBorder bg="var(--mantine-color-body)">
               <Table.Tbody>
                 {accounts.data.invitations.map((invitation) => (
                   <Table.Tr key={invitation.id}>
@@ -129,7 +129,7 @@ export function UsersPage() {
               {setActive.error.message}
             </Alert>
           )}
-          <Table withTableBorder bg="white">
+          <Table withTableBorder bg="var(--mantine-color-body)">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Name</Table.Th>
