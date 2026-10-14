@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Open-source, self-hostable requirements management (RM) tool. RM only, not ALM: no task tracking or bug tracking. One exception, made on purpose ([ADR 0009](docs/adr/0009-verification-tracking.md)): verification results are stored and give each requirement a status. Test run planning and step-by-step test execution are still out of scope.
+Open-source, self-hostable requirements and test management tool. Not ALM: no task tracking or bug tracking. Test management is in scope ([ADR 0011](docs/adr/0011-test-planning-and-execution-in-scope.md)): test plans, cycles, runs and step-by-step execution. A failed test links to a defect in an external tool.
+
+Plans for the next bundles: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Full plan and phase checklists: [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md). This file is drawn from its sections 4, 5 and 11.
 
@@ -48,7 +50,7 @@ Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
 - **Domain logic first.** Build versioning, baselines and suspect links as pure, tested modules in `apps/server/src/domain/` before wiring up any API or UI. No database or HTTP imports in that folder.
 - **Record decisions.** When a session makes a significant decision, write an ADR in `docs/adr/` as `NNNN-short-title.md`.
 - **Update the status.** At the end of every session that changes the project, update `STATUS.md`: move finished work to Done with the date, set In progress and Next, and bump "Last updated". Tick the matching checklist items in `docs/PROJECT_OUTLINE.md`.
-- **Stay in scope.** If a feature looks like ALM, integrate with an external tool instead of building it. Storing test results is in scope; planning or executing test runs is not ([ADR 0009](docs/adr/0009-verification-tracking.md)).
+- **Stay in scope.** If a feature looks like ALM, integrate with an external tool instead of building it. Test planning and execution are in scope; defect and task tracking are not ([ADR 0011](docs/adr/0011-test-planning-and-execution-in-scope.md)).
 - **Boring tech.** Proven, well-documented components that are easy to self-host. Do not add a dependency for a few lines.
 
 ## Stack

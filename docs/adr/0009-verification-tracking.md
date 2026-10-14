@@ -1,7 +1,7 @@
 # 0009: Verification tracking, and where "RM, not ALM" now stops
 
 Date: 2026-10-13
-Status: Accepted
+Status: Accepted. The scope section is replaced by [ADR 0011](0011-test-planning-and-execution-in-scope.md).
 
 ## Context
 

@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Roadmap planned: ten plans in two tracks in [docs/ROADMAP.md](docs/ROADMAP.md). Test planning and execution brought into scope, [ADR 0011](docs/adr/0011-test-planning-and-execution-in-scope.md) (2026-10-13)
 - Reviews and approvals built: review from a baseline, reviewers and approvers, marks and comments per item, electronic signature with password, permanent closing, Status = Approved with no suspect or out-of-date side effects, backup format version 4, [ADR 0010](docs/adr/0010-reviews-approvals-and-signatures.md), [user guide](docs/user-guide/reviews.md) (2026-10-13)
 - Verification tracking built: pure status rule, append-only results on test cases, status in List view, matrix, Trace view and item page, JUnit import from CI, personal access tokens, backup format version 3, [ADR 0009](docs/adr/0009-verification-tracking.md), [user guide](docs/user-guide/verification.md) (2026-10-13)
 - Trace view and impact analysis built: pure graph walk with loop guard, Trace view per set or folder with level pickers, coverage summary with a target set, impact trees on an item, CSV export of the trace, [ADR 0008](docs/adr/0008-trace-view-and-impact-analysis.md), [user guide](docs/user-guide/trace.md) (2026-10-13)
@@ -53,6 +54,8 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 4. Playwright end-to-end tests
 5. Dogfood: write this project's own requirements spec and import it
 
+After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: D (test steps, plans, cycles, runs, execution), E (evidence files, frozen status, reports), F (HTTPS, edit conflicts, notifications), G (Word and ReqIF), H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
+
 Known gaps left for later milestones or owner decision:
 
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
@@ -74,6 +77,7 @@ Known gaps left for later milestones or owner decision:
 ## Open decisions
 
 - Project name
+- Four roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): edit conflicts, test terms, signing with SSO, new dependencies
 - Three design details in [docs/DESIGN.md](docs/DESIGN.md) section 11
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance
