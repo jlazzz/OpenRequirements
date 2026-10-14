@@ -1,0 +1,38 @@
+name: Performance budgets
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Start the server
+        run: |
+          DATABASE_URL=postgres://app:app@localhost:5432/app PORT=3107 node apps/server/src/main.ts > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3107/api/version && exit 0; sleep 1; done
+          cat server.log; exit 1
+      - name: Time the budgets
+        run: npm run perf
+        env:
+          PERF_URL: http://localhost:3107
+          PERF_EMAIL: perf@example.com
+          PERF_PASSWORD: perf-ci-password-12345

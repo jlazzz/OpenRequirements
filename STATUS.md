@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (A3 slice 3)
 Last updated: 2026-10-14 (A3 slice 1)
 Last updated: 2026-10-14 (J5 slice 7)
 Last updated: 2026-10-14 (J1 slice 1)
@@ -16,6 +17,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
 - J5 slice 7, folders and the side bar: List view of a set or folder shows its sub-folders above the items with item counts; Baselines, Reviews, Test plans (plans with open cycles under them), Test runs (my runs, open cycles) and Reports open like folders in the side bar, 10 each with "All …", open state remembered per browser (`SideBar.tsx`). No route or migration. Checked in a browser on the demo project. "Test runs" has no page of its own yet (J5 slice 8); the Reports rows for cycle summary and plan history open Test plans (2026-10-14)
 - J1 slice 1, review participants: add or remove a participant on an open review (`review_participants` rows kept with `removedAt`; a signer and the last person stay), opening a review sets Status to "In review" as a status-only version (closing still approves, as status-only versions are not edits), "My reviews" on the home page. Migration 0021, backup format version 10, [ADR 0023](docs/adr/0023-review-participants-and-in-review.md). Checked in a browser on a scratch instance: add, remove, My reviews (2026-10-14)
