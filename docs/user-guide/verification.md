@@ -61,6 +61,23 @@ The project id is in the address bar when the project is open. The token's user 
 - Several tests with the same UID record one result. A failure wins.
 - The answer lists the results recorded and the test names that matched no test case.
 
+## Send results from GitHub Actions
+
+This repository's `ci.yml` already uploads its own test results and `@req` tags (`scripts/ci/upload-results.ts`). It stays off until you add two repository secrets:
+
+1. Load the project with `npm run dogfood` on your instance, if you have not.
+2. As a user with the **Editor** role in that project (a Viewer or Reviewer cannot import), create an access token as above.
+3. In GitHub, **Settings → Secrets and variables → Actions**, add `REQ_URL` (the instance's address, for example `https://req.example.com`) and `REQ_TOKEN` (the token).
+
+The instance must be reachable from the internet. GitHub-hosted runners cannot reach `localhost` or a private network address; use a public address, a tunnel, or a self-hosted runner.
+
+Details:
+
+- The step runs after the tests, also when they fail, so failures are recorded. It exits non-zero only when the upload or sign-in fails, never because a test failed.
+- It is skipped on pull requests from forks, which GitHub gives no secrets.
+- The project is found by name, "Open Requirements (own requirements)". For another name set `REQ_PROJECT_NAME`, or `REQ_PROJECT` to a project id, in the step's `env`.
+- Vitest tests name their test case in a `// @req VER-nnn` comment; the script puts that UID in front of the test's name in the report so the import can match it. A test name containing a quotation mark is not matched.
+
 ## See one CI upload
 
 Every upload is kept as a **CI run**. Open **CI runs** in the project's side bar for the list, newest first, with a bar of passed, failed, skipped and unmatched tests. Filter by pipeline or branch. Open a run to see each test case it recorded, its outcome, the requirements it verifies, and the reported tests that matched no test case (the first 200 names are kept). On a test case, a result from CI links to its run.

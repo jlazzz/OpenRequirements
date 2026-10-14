@@ -28,5 +28,13 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - run: npm test -- --reporter=default --reporter=junit --outputFile.junit=junit.xml
       - run: npm run build
+      # Sends the results to a requirements instance. Off until the repository secrets REQ_URL and REQ_TOKEN exist,
+      # and never on pull requests from forks. See docs/user-guide/verification.md.
+      - name: Upload results to the requirements tool
+        if: always() && env.REQ_URL != '' && env.REQ_TOKEN != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          REQ_URL: ${{ secrets.REQ_URL }}
+          REQ_TOKEN: ${{ secrets.REQ_TOKEN }}
+        run: node scripts/ci/upload-results.ts
