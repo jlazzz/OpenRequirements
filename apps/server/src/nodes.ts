@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { docError, docToText, emptyDoc, formatUid, type RichNode } from "@app/shared";
+import { docError, docToText, emptyDoc, formatUid, type RichNode, type Step, stepText } from "@app/shared";
 import { and, desc, eq, ilike, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
@@ -77,8 +77,9 @@ export const statusFieldOf = (fields: FieldDef[]) => fields.find((f) => f.name =
 
 /** What search matches for an item: its UID, name, description text and field values. */
 export function searchTextOf(uid: string, name: string, description: RichNode, attributes: Record<string, unknown>) {
-  // A test step is an object: its action and expected result are both searched.
-  const words = (value: unknown) => (typeof value === "object" && value !== null ? Object.values(value) : [value]);
+  // A test step is an object: its action and expected result are both searched, as text.
+  const words = (value: unknown) =>
+    typeof value === "object" && value !== null ? Object.values(value as Step).map(stepText) : [value];
   return [uid, name, docToText(description), ...Object.values(attributes).flat().flatMap(words).map(String)].join("\n");
 }
 

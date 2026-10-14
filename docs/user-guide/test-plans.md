@@ -11,11 +11,13 @@ Plan which tests to run, run them step by step, and let the results set the stat
 ## Write steps on a test case
 
 1. Open a test case.
-2. Under **Steps**, choose **Add step**. Type the action and the expected result.
+2. Under **Steps**, choose **Add step**. Write the action and the expected result. Each is a rich-text box like the description: formatting, lists, tables, images (paste, drop or **Image**) and equations.
 3. Use ↑, ↓ and ✕ to reorder or remove steps.
 4. Choose **Save version**.
 
 A test case without steps can still be run. It counts as one step.
+
+Steps written before rich text keep their plain text and show as one paragraph per line. In the version compare, a spreadsheet export, Word and ReqIF, steps appear as numbered lines of text; an image appears as its file name.
 
 ## Make a test plan
 

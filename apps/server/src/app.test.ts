@@ -1862,6 +1862,16 @@ test("a test case holds steps, which are checked, searched and kept per version"
     steps,
     undefined,
   ]);
+  // Rich steps: a document per action and expected result, kept as sent; plain steps above stay as they were.
+  const rich = [{ action: textToDoc("Close the clamp"), expected: "Alarm sounds" }];
+  expect((await save(rich, 3)).statusCode).toBe(201);
+  expect((await get(`/api/items/${t1}`, cookie)).json().item.attributes[stepsField]).toEqual(rich);
+  expect((await get(`/api/projects/${projectId}/search?q=close clamp alarm`, cookie)).json().ids).toEqual([t1]);
+  const linked = {
+    type: "doc",
+    content: [...(textToDoc("Look").content ?? []), { type: "image", attrs: { src: "https://example.com/a.png" } }],
+  };
+  expect((await save([{ action: linked, expected: "" }], 4)).statusCode).toBe(400);
 });
 
 test("a test plan is run as a cycle: runs are assigned, executed step by step and record verification results", async () => {

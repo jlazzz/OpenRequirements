@@ -296,10 +296,11 @@ function ItemForm({ item, fields, draft, onReset }: ItemData & { onReset: () => 
           </SimpleGrid>
           {fields.filter(isSteps).map((field) => (
             <StepsInput
-              key={field.id}
+              key={`${editorKey}-${field.id}`}
               label={field.name}
               value={attributes[field.id]}
               onChange={(value) => setValue(field.id, value)}
+              uploadImage={(file) => uploadImage(projectId, file)}
             />
           ))}
 

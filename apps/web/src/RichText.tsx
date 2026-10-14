@@ -16,13 +16,15 @@ type Props = {
   onChange: (doc: RichNode) => void;
   /** Stores an image file and returns the address to embed. */
   uploadImage: (file: File) => Promise<string>;
+  /** Least height of the writing area, in pixels. */
+  minHeight?: number;
 };
 
 /**
  * Rich-text field. Uncontrolled: `initial` is read once, so remount it (change its key) to load other content.
  * New node or mark types must also be allowed in packages/shared/src/richtext.ts, or saving is refused.
  */
-export function RichTextInput({ label, initial, onChange, uploadImage }: Props) {
+export function RichTextInput({ label, initial, onChange, uploadImage, minHeight = 120 }: Props) {
   const [problem, setProblem] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -125,7 +127,7 @@ export function RichTextInput({ label, initial, onChange, uploadImage }: Props) 
             <RichTextEditor.Redo />
           </RichTextEditor.ControlsGroup>
         </RichTextEditor.Toolbar>
-        <RichTextEditor.Content mih={120} />
+        <RichTextEditor.Content mih={minHeight} />
       </RichTextEditor>
       <input
         ref={fileInput}

@@ -1,5 +1,5 @@
 import { toCsv } from "@app/importers";
-import type { RichNode, Step } from "@app/shared";
+import { type RichNode, type Step, stepDoc } from "@app/shared";
 import {
   Alert,
   Anchor,
@@ -1221,8 +1221,12 @@ function Execution({ projectId, data: { run, cycle, nextRunId, canExecute } }: {
               style={{ verticalAlign: "top" }}
             >
               <Table.Td>{index + 1}</Table.Td>
-              <Table.Td>{step.action}</Table.Td>
-              <Table.Td>{step.expected}</Table.Td>
+              <Table.Td>
+                <RichView doc={stepDoc(step.action)} />
+              </Table.Td>
+              <Table.Td>
+                <RichView doc={stepDoc(step.expected)} />
+              </Table.Td>
               <Table.Td>
                 {canExecute ? (
                   <Textarea
