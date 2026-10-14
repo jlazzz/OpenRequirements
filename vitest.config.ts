@@ -5,6 +5,7 @@ export default defineConfig({
     globalSetup: "apps/server/test/global-setup.ts",
     // Database tests truncate shared tables, so test files must not run at the same time.
     fileParallelism: false,
-    exclude: ["**/node_modules/**", "e2e/**"],
+    // .claude/worktrees holds other sessions' checkouts; their tests would share this database.
+    exclude: ["**/node_modules/**", "e2e/**", ".claude/**"],
   },
 });
