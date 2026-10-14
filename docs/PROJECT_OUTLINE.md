@@ -213,6 +213,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Electronic signatures meeting 21 CFR Part 11 expectations (re-authentication at signing, signature manifestation, signed records). Those three are built, and so are password expiry, account lockout and the inactivity timeout, each off unless set ([ADR 0010](adr/0010-reviews-approvals-and-signatures.md), [ADR 0020](adr/0020-part-11-hardening-audit-chain.md))
 - [x] Verification tracking: lightweight test case items, verification results, and status per requirement
 - [x] Import test results from CI (JUnit XML) and link them to requirements automatically
+- [x] CI runs: each upload kept as a run with its results, requirements and unmatched names ([ADR 0022](adr/0022-ci-runs.md))
 - [x] Test steps, test plans, cycles and runs with step-by-step execution ([ADR 0012](adr/0012-test-plans-cycles-and-runs.md))
 - [x] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step ([ADR 0016](adr/0016-api-webhooks-references-oidc.md))
 - [x] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status) ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). Code references link files on a branch, not single commits

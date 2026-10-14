@@ -293,7 +293,19 @@ function Results({ data, item }: { data: ProjectDetail; item: Item }) {
             </Group>
             <Text size="xs" c="dimmed">
               {new Date(result.runAt).toLocaleDateString()} · {result.recordedBy}
-              {result.source === "junit" && " · from CI"}
+              {result.source === "junit" && !result.ciRunId && " · from CI"}
+              {result.ciRunId && (
+                <>
+                  {" · "}
+                  <RouterAnchor
+                    to="/projects/$projectId/ci-runs/$ciRunId"
+                    params={{ projectId, ciRunId: result.ciRunId }}
+                    inherit
+                  >
+                    from CI
+                  </RouterAnchor>
+                </>
+              )}
               {result.runId && (
                 <>
                   {" · "}

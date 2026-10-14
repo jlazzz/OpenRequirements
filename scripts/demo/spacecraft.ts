@@ -420,10 +420,15 @@ async function main() {
         : `<testcase classname="fsw" name="${name}" time="0.05"/>`;
     });
     const xml = `<?xml version="1.0"?><testsuites><testsuite name="kestrel-fsw build ${1040 + run}" tests="${cases.length}">${cases.join("")}</testsuite></testsuites>`;
-    await tomas.call("POST", `projects/${pid}/verification-results/junit`, undefined, {
-      type: "application/xml",
-      data: xml,
-    });
+    await tomas.call(
+      "POST",
+      `projects/${pid}/verification-results/junit?pipeline=kestrel-fsw&branch=${run === 4 ? "fix-safe-mode" : "main"}&commit=${(0xa1b2c0 + run).toString(16)}&buildUrl=${encodeURIComponent(`https://ci.example.com/kestrel-fsw/${1040 + run}`)}`,
+      undefined,
+      {
+        type: "application/xml",
+        data: xml,
+      },
+    );
   }
   log("CI: five JUnit reports for the flight software unit tests");
 

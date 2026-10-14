@@ -60,3 +60,9 @@ The project id is in the address bar when the project is open. The token's user 
 - A failed or errored test records Fail. A skipped test records nothing.
 - Several tests with the same UID record one result. A failure wins.
 - The answer lists the results recorded and the test names that matched no test case.
+
+## See one CI upload
+
+Every upload is kept as a **CI run**. Open **CI runs** in the project's side bar for the list, newest first, with a bar of passed, failed, skipped and unmatched tests. Filter by pipeline or branch. Open a run to see each test case it recorded, its outcome, the requirements it verifies, and the reported tests that matched no test case (the first 200 names are kept). On a test case, a result from CI links to its run.
+
+To label the run, add optional query parameters to the address: `pipeline`, `branch`, `commit` and `buildUrl`, for example `?pipeline=build&branch=main&commit=$GIT_COMMIT&buildUrl=$BUILD_URL`. The answer carries `ciRunId`. A CI run cannot be edited or removed.

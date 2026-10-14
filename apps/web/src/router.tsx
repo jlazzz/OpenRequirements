@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { ApiDocsPage } from "./ApiDocs.tsx";
 import { BaselinePage, BaselinesPage } from "./BaselinePages.tsx";
+import { CiRunPage, CiRunsPage } from "./CiRunsPage.tsx";
 import { ImpactPage } from "./ImpactPage.tsx";
 import { IntegrationsPage } from "./IntegrationsPage.tsx";
 import { ItemPage } from "./ItemPage.tsx";
@@ -81,6 +82,8 @@ const projectChildren = [
   createRoute({ ...inProject, path: "cycles/$testCycleId", component: TestCyclePage }),
   createRoute({ ...inProject, path: "runs/$testRunId", component: TestRunPage }),
   createRoute({ ...inProject, path: "reports", component: ReportsPage }),
+  createRoute({ ...inProject, path: "ci-runs", component: CiRunsPage }),
+  createRoute({ ...inProject, path: "ci-runs/$ciRunId", component: CiRunPage }),
   createRoute({
     ...inProject,
     path: "search",

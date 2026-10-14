@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (bundle I, J5 slice 5)
+Last updated: 2026-10-14 (bundle I, T6 slice 1 and 2)
 Last updated: 2026-10-14 (bundle I, J1 slice 3)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
@@ -11,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- T6 CI runs: each JUnit upload is a `ci_runs` row (pipeline, branch, commit, build URL, counts, unmatched names) that its results point at; "CI runs" page with filters and a run page with results, requirements and unmatched names; link from a result on the test case; backup format version 9, migration 0020, [ADR 0022](docs/adr/0022-ci-runs.md), [user guide](docs/user-guide/verification.md). Checked in a browser on a scratch instance with the demo project (2026-10-14)
 - A3 slice 2, releases: version in root `package.json`, shown at `GET /api/version` and in the account dialog; `release.yml` on a `vX.Y.Z` tag checks notes, lint, types and tests, pushes the image to GHCR, attaches a CycloneDX SBOM, signs with cosign keyless; `CHANGELOG.md`, [docs/RELEASING.md](docs/RELEASING.md), compose `APP_IMAGE`/`APP_VERSION`, upgrade section of the install guide, [ADR 0021](docs/adr/0021-numbered-releases-signed-images.md). The workflow has never run; actions are pinned by major tag, not SHA; upgrade test not built (2026-10-14)
 - J5 slice 5, drag and drop: drag folders and items in the explorer and in List view (⠿ handle) to reorder, move, or drop onto an item to make a child; a set row moves to its top level; ticked rows drag together. Pure rule `dropPlacement` in `packages/shared`, the move route and its checks unchanged. "Pick several" fields are editable in List view and in bulk set-field. Checked in a browser with synthetic drag events on a scratch instance. `API_PORT` sets the web proxy target (2026-10-14)
 - J1 slice 3, Part 11 hardening: account lockout, password expiry and session inactivity timeout (environment variables, off when unset), tamper-evident audit log (SHA-256 hash chain under an advisory lock, `GET /api/audit/verify`, button on the Users page), [ADR 0020](docs/adr/0020-part-11-hardening-audit-chain.md). Migration 0019. Not checked in a browser; the chain does not cover rows from before it or a restored backup (2026-10-14)
@@ -56,6 +57,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **T6 CI runs: built, waiting for the owner's test.** Checkpoint: upload a JUnit report with `?pipeline=&branch=`, open it under CI runs.
 - **J5 slice 5 (drag and drop, multi-select fields): built, waiting for the owner's test.** Checkpoint: drag a folder and an item in the explorer; drop an item on another item in List view.
 - **J1 slice 3 (Part 11 hardening): built, waiting for the owner's test.** Checkpoint: set `LOGIN_LOCKOUT_ATTEMPTS=3`, fail three sign-ins; click Verify audit log on Users.
 - **J5 slice 1 (editable item types, fields, sets, relationship types): built, waiting for the owner's test.** Checkpoint: add a field to an item type, rename "Verified by" and see verification still work.
