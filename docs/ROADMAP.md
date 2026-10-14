@@ -26,8 +26,8 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 1. **Edit conflicts (J3):** decided 2026-10-14: merge screen with "keep mine / take theirs" per field.
 2. **Test terms (T2):** decided 2026-10-13: Plan, Cycle, Run, as in Jama.
-3. **Signing with SSO (H):** an SSO user signs by logging in again at the identity provider. The alternative is a separate signing PIN.
-4. **New dependencies:** `openid-client`, `@fastify/swagger`. `nodemailer` was added in F; `@fastify/helmet` was not needed (ADR 0014). `docx`, `mammoth`, `fast-xml-parser` and `fflate` were not needed: Word and ReqIF are read and written by hand (ADR 0011, ADR 0015).
+3. **Signing with SSO (H):** decided 2026-10-14: an SSO user signs by logging in again at the identity provider ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)).
+4. **New dependencies:** none for H: OpenAPI and OpenID Connect are written by hand ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). `nodemailer` was added in F; `@fastify/helmet` was not needed (ADR 0014). `docx`, `mammoth`, `fast-xml-parser` and `fflate` were not needed: Word and ReqIF are read and written by hand (ADR 0011, ADR 0015).
 
 ---
 
@@ -79,7 +79,9 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 ## J4. Integrations
 
-**Exists:** every route has a JSON schema. Personal access tokens. JUnit import. Every write calls `audit(...)`.
+**Built 2026-10-14 as bundle H** ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)): slices 1 to 6, with no new dependency. `WEBHOOK_ALLOW_PRIVATE` became `ALLOW_PRIVATE_URLS`, since it covers connections too. Left out: response schemas in the OpenAPI document, SAML and LDAP.
+
+**Existed before:** every route has a JSON schema. Personal access tokens. JUnit import. Every write calls `audit(...)`.
 
 **Slices (6 sessions):**
 

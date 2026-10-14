@@ -198,7 +198,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Word (.docx) import: headings → structure, paragraphs → requirements, with a review step ([ADR 0015](adr/0015-word-export-import-and-reimport.md), 2026-10-14)
 - [ ] Spec export to PDF and Word with configurable templates. Word export and a printed PDF with cover and page numbers built 2026-10-14; templates are not configurable yet
 - [x] Activity feed and notifications (in-app, email) ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
-- [ ] Public REST API (OpenAPI documented) and API tokens
+- [x] Public REST API (OpenAPI documented) and API tokens ([ADR 0016](adr/0016-api-webhooks-references-oidc.md), 2026-10-14). Response bodies are not described yet
 
 **Exit criteria:** A design-partner team of 3+ people runs a real project in it and exports a spec for a design review.
 
@@ -214,10 +214,10 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Verification tracking: lightweight test case items, verification results, and status per requirement
 - [x] Import test results from CI (JUnit XML) and link them to requirements automatically
 - [x] Test steps, test plans, cycles and runs with step-by-step execution ([ADR 0012](adr/0012-test-plans-cycles-and-runs.md))
-- [ ] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step
-- [ ] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status)
-- [ ] Webhooks for external automation
-- [ ] SSO: OIDC and SAML; LDAP
+- [x] Code traceability: scan repos for requirement tags in code comments (e.g. `@req SYS-042`) via a CLI or CI step ([ADR 0016](adr/0016-api-webhooks-references-oidc.md))
+- [x] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status) ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). Code references link files on a branch, not single commits
+- [x] Webhooks for external automation ([ADR 0016](adr/0016-api-webhooks-references-oidc.md))
+- [ ] SSO: OIDC and SAML; LDAP. OpenID Connect built 2026-10-14 ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)); SAML and LDAP wait for a request
 - [ ] Backup/restore tooling and upgrade documentation
 - [ ] Security hardening: dependency scanning, rate limiting, security headers, a third-party review if possible
 

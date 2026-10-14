@@ -57,6 +57,35 @@ Links in emails start with `https://DOMAIN`. Without HTTPS, set `PUBLIC_URL=http
 
 A failed email is tried again after 1, 2, 4… minutes, eight times in all. What was sent and what failed is in the `outbox` table.
 
+## Turn on single sign-on
+
+People can sign in through an OpenID Connect identity provider (Okta, Microsoft Entra ID, Google, Keycloak, Authentik…). Local accounts keep working.
+
+1. At the provider, register a web application with the redirect URI `https://DOMAIN/api/oidc/callback` (or `PUBLIC_URL/api/oidc/callback`), and the scopes `openid email profile`.
+2. Add to `deploy/.env`, then run the install command again:
+
+```
+OIDC_ISSUER=https://login.example.com/realms/acme
+OIDC_CLIENT_ID=requirements
+OIDC_CLIENT_SECRET=…
+OIDC_NAME=Acme login
+```
+
+The provider must say the email address is verified. The first sign-in makes an account with that address, or uses the account that already has it. It gets no project until a project admin adds it.
+
+## Webhooks and connections
+
+Project admins set these up in each project ([user guide](integrations.md)). Two settings are the server administrator's:
+
+```
+# Encrypts the tokens of Jira, GitHub and GitLab connections. Any long random string. Keep it: if it changes, tokens must be entered again.
+INTEGRATION_KEY=…
+# Lets webhooks and connections call addresses on private networks, e.g. a Jira inside the company network.
+ALLOW_PRIVATE_URLS=true
+```
+
+Without `ALLOW_PRIVATE_URLS`, the server refuses to call `localhost`, `10.x`, `172.16–31.x`, `192.168.x` and similar addresses, so a project admin cannot reach inside your network through it.
+
 ## Add people
 
 1. As the administrator, open **Users** and create an invitation for the person's email address.

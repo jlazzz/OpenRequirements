@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14
+Last updated: 2026-10-14 (bundle H)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Bundle H built: OpenAPI document at `/api/openapi.json` and an API page, token expiry and "last used", webhooks fed by every audited write with signed JSON and retries, references from items to Jira, GitHub, GitLab and documents with open or closed read through per-project connections, `@req` tag scanner for CI (`packages/cli`), sign-in through OpenID Connect, signing a review by signing in again at the provider, backup format version 7, [ADR 0016](docs/adr/0016-api-webhooks-references-oidc.md), [user guide](docs/user-guide/integrations.md), [install guide](docs/user-guide/install.md) updated. No new dependency. Checked in a browser on a scratch instance with a fake identity provider, receiver and GitHub: SSO sign-in, webhook deliveries, a reference turning Open, token expiry, the API page; the scanner run twice against it (2026-10-14)
 - Bundle G built: Word export of a set or baseline (cover, headings, items, field tables, images, page numbers), printed Reading view with cover, running header and page numbers, Word import with paragraph or heading mode and a review step (skip, merge), imports that update items by UID, id or ReqIF identifier with a preview, Folder and UID columns in spreadsheets and in the CSV export, ReqIF re-import without duplicates, [ADR 0015](docs/adr/0015-word-export-import-and-reimport.md), [user guide](docs/user-guide/word-and-spreadsheets.md). No new dependency. Checked in a browser on a scratch instance: CSV re-import, Word re-import of an export, skip and merge, printed PDF (2026-10-14)
 - Bundle F built: HTTPS by Caddy and security headers, merge screen for edit conflicts and "also editing", in-app notifications (mention, review invitation, run assigned, relationship become suspect), email by outbox with per-person choice of each/digest/never, forgot password and admin reset links, emailed invitations, [ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md), [user guide](docs/user-guide/working-together.md), [install guide](docs/user-guide/install.md) updated. Also fixed: Sign out left the screen showing the signed-out user. Checked in a browser on a scratch instance (2026-10-14)
 - Bundle E built: evidence files (PDF, text, logs, CSV, zip; many per result, per run and per step; drop, paste, button; a log with a JUnit report), verification status frozen in baselines, a cycle names the baseline it verifies and shows in its review, reports (cycle summary, plan history, requirement verification, flaky tests, CSV each), backup format version 6 with files streamed out, [ADR 0013](docs/adr/0013-evidence-frozen-status-reports-bulk.md), [user guide](docs/user-guide/evidence-and-reports.md). Also, asked by the owner: bulk set field, move and delete in List view, and dark mode ([user guide](docs/user-guide/bulk-actions.md)). Checked in a browser on a scratch instance (2026-10-13)
@@ -42,7 +43,8 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
-- **Bundle G (Word, import upgrades, ReqIF re-import): built, waiting for the owner's test.** Checkpoint: export a spec to Word, re-import a ReqIF file. Bundle H does not start before that feedback. Started at the owner's request before their test of bundle F.
+- **Bundle H (API docs, webhooks, references, connections, OIDC): built, waiting for the owner's test.** Checkpoint: a webhook fires on a save; log in through an identity provider. Bundle I does not start before that feedback. Built at the owner's request before their test of bundles F and G.
+- Bundle G (Word, import upgrades, ReqIF re-import): built, waiting for the owner's test. Checkpoint: export a spec to Word, re-import a ReqIF file.
 - Bundle F (HTTPS, edit conflicts, notifications, email, account recovery): built, waiting for the owner's test. Checkpoint: two browsers edit one item; an email arrives for a mention.
 - Bundle E (evidence files, frozen status, reports) plus bulk item actions and dark mode: built, waiting for the owner's test. Checkpoint: attach a PDF to a step, compare two cycles.
 - Bundle D (test steps, plans, cycles, runs, execution screen): built and checked in a browser, waiting for the owner's own test.
@@ -62,7 +64,7 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 2. Playwright end-to-end tests
 3. Dogfood: write this project's own requirements spec and import it
 
-After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: H (API docs, webhooks, integrations, OIDC), I (review gaps, editable item types, baseline compare, dashboard).
+After that, bundle I in [docs/ROADMAP.md](docs/ROADMAP.md): review gaps, editable item types, baseline compare, dashboard.
 
 Known gaps left for later milestones or owner decision:
 
@@ -70,6 +72,7 @@ Known gaps left for later milestones or owner decision:
 - ReqIF: not tested with real files from DOORS, DOORS Next or Polarion, nor imported into them; the owner is looking for samples. It cannot create sets, item types or fields.
 - Word: the export was not opened in Microsoft Word or LibreOffice (only read back by the importer and macOS). Import not tried with a real Word file; one from macOS `textutil` has no heading styles, so its headings came in as items. Export has no options (fields, UID position, cover). Default values, relation groups and attributes on relationships are not read. The import page, the export menus and image import were not checked in a browser; the same code paths are covered by tests in Node.
 
+- Integrations: OpenAPI has no response schemas. No SAML or LDAP, and no rule on which provider accounts may sign in (any verified email gets an account, without projects). Not tried against a real identity provider, Jira, GitHub or GitLab: only fakes. The review sign dialog for a person without a password was not checked in a browser (server tests cover the flow). Webhook deliveries cannot be re-sent by hand; no delivery or reference history is kept beyond the latest attempt. The private-address check can be passed by DNS that changes between check and call. Code references point at files on a branch, not at commits.
 - Reorder and move use an Actions menu. Drag and drop in the explorer is not built.
 - Items cannot be nested under items, only under folders and sets.
 - Version diffs compare wording; a formatting-only change is reported without detail.
@@ -92,7 +95,6 @@ Known gaps left for later milestones or owner decision:
 ## Open decisions
 
 - Project name
-- Two roadmap decisions at the top of [docs/ROADMAP.md](docs/ROADMAP.md): signing with SSO, new dependencies (`nodemailer` added for bundle F, none for G)
 - One design detail in [docs/DESIGN.md](docs/DESIGN.md) section 11: the home screen
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance

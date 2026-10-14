@@ -26,11 +26,12 @@ npm run dev:server   # API on :3000, restarts on change
 npm run dev:web      # Vite on :5173, proxies /api to :3000
 npm run db:generate  # new SQL migration after editing apps/server/src/db/schema.ts
 npm run up           # build and start the full stack in Docker on :3000
+npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
 
 Before calling work done: `npm run lint && npm run typecheck && npm test`. CI runs the same.
 
-Not set up yet: Playwright, OpenAPI output. Add each command here when it lands.
+Not set up yet: Playwright. Add each command here when it lands.
 
 ## Hard rules
 
@@ -69,7 +70,9 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | Backend | Fastify on Node 24+, run as TypeScript with no build step ([ADR 0002](docs/adr/0002-backend-fastify-native-typescript.md)) | in use |
 | Database | PostgreSQL 17, JSONB for custom attributes | in use |
 | ORM / migrations | Drizzle + drizzle-kit ([ADR 0003](docs/adr/0003-orm-drizzle.md)) | in use |
-| Auth | Local accounts, scrypt hashes, session cookie (`Secure` behind HTTPS); personal access tokens (`Authorization: Bearer`) for CI; password reset by one-time link; OIDC/SAML/LDAP later | in use |
+| Auth | Local accounts, scrypt hashes, session cookie (`Secure` behind HTTPS); personal access tokens (`Authorization: Bearer`) for CI; password reset by one-time link; OpenID Connect sign-in written by hand in `oidc.ts` ([ADR 0016](docs/adr/0016-api-webhooks-references-oidc.md)); SAML/LDAP later | in use |
+| API description | OpenAPI 3.1 built from the route schemas by `domain/openapi.ts`, no library; served at `/api/openapi.json`, committed as `docs/openapi.json` | in use |
+| Outbound calls | Webhooks and connections through `outboundFetch` in `worker.ts`: private addresses refused unless `ALLOW_PRIVATE_URLS`; connection tokens encrypted with `INTEGRATION_KEY` | in use |
 | CI results | JUnit XML read by a hand-written scanner in `packages/importers`, no XML library ([ADR 0009](docs/adr/0009-verification-tracking.md)) | in use |
 | ReqIF | Read and written by `packages/reqif`: hand-written XML parser and zip on the platform's `CompressionStream`, no library. The browser parses the file; the server gets JSON ([ADR 0011](docs/adr/0011-reqif-import-and-export.md)) | in use |
 | Spreadsheets | CSV parsed by `packages/importers`; `.xlsx` read in the browser with `read-excel-file` ([ADR 0006](docs/adr/0006-import-backup-and-baselines.md)) | in use |
@@ -93,7 +96,7 @@ apps/
   server/           API server + background worker
     src/app.ts      App setup, auth routes, the `AppContext` passed to feature files
     src/access.ts   Permission check (`createAccess`), role lookup and `audit`
-    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/export.ts, src/notifications.ts, src/recovery.ts   Feature route files: one per feature, taking `AppContext`
+    src/projects.ts, src/nodes.ts, src/links.ts, src/trace.ts, src/verification.ts, src/attachments.ts, src/members.ts, src/comments.ts, src/baselines.ts, src/reviews.ts, src/testplans.ts, src/testruns.ts, src/backup.ts, src/import.ts, src/export.ts, src/notifications.ts, src/recovery.ts, src/webhooks.ts, src/references.ts, src/oidc.ts   Feature route files: one per feature, taking `AppContext`
     src/mail.ts     Email outbox, the mail loop, and `notify()`, which writes notifications in the caller's transaction
     src/domain/templates.ts  Project templates (item types, fields, sets)
     src/domain/attributes.ts Validates field values against an item type's field definitions
@@ -106,10 +109,15 @@ apps/
     src/domain/review.ts     The review outcome rule, the signature digest, and the "only Status changed" check
     src/domain/backup.ts     Backup file format, its consistency check, and id rewriting for restore
     src/domain/filetype.ts   What an uploaded file is, judged by its bytes, and a safe stored file name
+    src/domain/references.ts What a reference URL points at, and how its title and state are read from Jira, GitHub or GitLab
+    src/domain/network.ts    Which IP addresses are private, for calls to other servers
+    src/domain/openapi.ts, src/domain/oidc.ts, src/domain/secret.ts  The OpenAPI document, ID token checks, token encryption
+    src/worker.ts   `startLoop` for background work, and `outboundFetch` for every call to another server
     src/db/         Drizzle schema and client
     drizzle/        Generated SQL migrations. Never edit a committed one.
     src/domain/     Pure domain logic: versioning, baselines, suspect links
 packages/
+  cli/              The `@req UID` tag scanner, run in CI: sends a repository's tags as code references
   shared/           Pure code used by both web and server: UID format, word diff, rich-text format and validation, baseline compare, trace paths, three-way merge of item edits
   reqif/            ReqIF parser/serializer with its XML and zip readers. Standalone: imports nothing from the repo or npm, runs in Node and the browser
   importers/        CSV reading and writing, mapping spreadsheet rows to folders and items, reading JUnit XML reports, mapping between ReqIF and sets, items and rich text, and writing and reading Word (.docx)
@@ -125,7 +133,7 @@ e2e/                Playwright tests (empty)
 - ESM everywhere. Relative imports use the `.ts` extension (`./uid.ts`), because Node runs the sources directly.
 - Erasable TypeScript only: no `enum`, no parameter properties, no namespaces. Use `import type` for types.
 - Every `/api/` route either has `onRequest: requireUser` (add `requireAdmin` after it for instance-admin-only routes) or `config: { public: true }`. The server refuses to start otherwise.
-- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId`, `reviewId`, `testPlanId`, `testCycleId` or `testRunId`: a hook uses those names to refuse non-members before the body is read.
+- Project routes then call `if (!(await access(req, reply, { setId }, "editor"))) return reply;` first. It answers 404 to non-members and 403 when the role is too low. Name path parameters `projectId`, `setId`, `itemId`, `nodeId`, `linkId`, `attachmentId`, `commentId`, `baselineId`, `reviewId`, `testPlanId`, `testCycleId`, `testRunId`, `webhookId`, `referenceId` or `integrationId`: a hook uses those names to refuse non-members before the body is read.
 - `audit(...)` looks up the project and a label by itself for items, folders, links and projects. Pass `{ projectId, label }` for anything else that should appear in the activity stream.
 - Route params that are IDs are validated as `format: "uuid"` in the route schema.
 - UI: use Mantine components and theme before writing custom CSS.
@@ -172,7 +180,8 @@ Use these terms exactly, in code, API and UI.
 | **Review** | People looking at one baseline's items: reviewers comment and mark items reviewed, approvers approve or reject each item. States: open, closed, approved, rejected. Closing is permanent. |
 | **Notification** | A message to one person about something another person did: a mention, a review invitation, an assigned run, a relationship become suspect. In-app, and by email if they want. |
 | **Signature** | An approver's electronic signature on their decisions in a review: password re-entered, with name, time, meaning (approval or rejection) and a digest of what was signed. Append-only. |
-| **External reference** | A link to something outside the tool (Jira issue, Git commit, CI test result) |
+| **External reference** | A link from an item to something outside the tool: a Jira issue, a pull request, a file tagged `@req UID` in code. Called "reference" in the UI. Its title and open or closed state are read through a **connection** |
+| **Webhook** | An address a project's changes are posted to, as signed JSON, from `audit(...)` |
 
 ## Core data model (sketch)
 
@@ -198,7 +207,9 @@ TestRun ─< StepResult                 (append-only: step number, outcome, actu
 User ─< ApiToken                   (hash only; revoked, never removed)
 Item ─< Comment                    (plain text, mentions resolved to user ids, soft-deleted; optionally made in a review)
 Project ─< Attachment              (uploaded files: images embedded in rich text, and evidence; content type from the bytes, original name)
-Item ─< ExternalReference          (later)
+Item ─< ExternalReference          (URL, title, kind, source repository for code tags, state read from the other tool; soft-deleted)
+Project ─< Integration             (a connection: Jira, GitHub or GitLab base URL, encrypted token; soft-deleted)
+Project ─< Webhook ─< WebhookDelivery  (URL, secret, event filter; deliveries retried like the outbox)
 Baseline ─< Review ─< ReviewParticipant  (reviewer or approver; fixed at creation)
 Review ─< ReviewMark                  (append-only: reviewed, approved, rejected or cleared, per person and item; the latest counts)
 Review ─< Signature                   (append-only, one per approver: meaning, copied name and email, digest of the signed decisions)
