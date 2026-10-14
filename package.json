@@ -20,11 +20,15 @@
     "up": "docker compose -f deploy/docker-compose.yml up -d --build",
     "openapi": "UPDATE_OPENAPI=1 vitest run apps/server/src/integrations.test.ts -t OpenAPI",
     "demo": "node scripts/demo/spacecraft.ts",
-    "samples:import": "node scripts/samples/make-import-samples.ts"
+    "samples:import": "node scripts/samples/make-import-samples.ts",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "typescript": "^7.0.2",
+    "vitepress": "^1.6.4",
     "vitest": "^5.0.4"
   },
   "license": "AGPL-3.0-only"

@@ -42,6 +42,7 @@ const app = await buildApp(db, {
   // DOMAIN is set when Caddy in deploy/docker-compose.yml serves the app over HTTPS.
   https: Boolean(process.env.DOMAIN),
   webRoot: process.env.WEB_ROOT ?? new URL("../../web/dist", import.meta.url).pathname,
+  helpRoot: process.env.HELP_ROOT ?? new URL("../../../docs/.vitepress/dist", import.meta.url).pathname,
 });
 if (smtpUrl) {
   const from = process.env.SMTP_FROM || `Requirements <noreply@${new URL(publicUrl).hostname}>`;

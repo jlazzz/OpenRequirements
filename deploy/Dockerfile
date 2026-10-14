@@ -9,7 +9,7 @@ COPY packages/importers/package.json packages/importers/
 COPY packages/reqif/package.json packages/reqif/
 RUN npm ci
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && DOCS_BASE=/help/ npm run docs:build && npm prune --omit=dev
 
 FROM node:26-slim
 WORKDIR /app
@@ -19,6 +19,8 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/server apps/server
 COPY --from=build /app/apps/web/dist apps/web/dist
 COPY --from=build /app/packages packages
+# The user guide, served at /help.
+COPY --from=build /app/docs/.vitepress/dist docs/.vitepress/dist
 # The attachments volume inherits this ownership, so the unprivileged user can write uploads.
 RUN mkdir -p /data/attachments && chown node:node /data/attachments
 USER node
