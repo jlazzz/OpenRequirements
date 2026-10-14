@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
 
   app:
+    # Built from this checkout by default. To run a published release instead, set APP_IMAGE and APP_VERSION in deploy/.env
+    # (see "Upgrade" in the install guide) and start without --build.
+    image: ${APP_IMAGE:-open-requirements-app}:${APP_VERSION:-latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile

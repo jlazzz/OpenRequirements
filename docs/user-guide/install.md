@@ -109,8 +109,28 @@ There are two kinds of backup. Use both.
 
 ## Upgrade
 
-1. Take a whole-server backup.
-2. Get the new version of the repository.
-3. Run the install command again. The database is upgraded when the app starts.
+Releases are numbered (`1.2.3`, [changelog](https://github.com/jlazzz/OpenRequirements/blob/development/CHANGELOG.md)). The running version is in the account dialog (click your name) and at `/api/version`.
 
-Upgrades only move forward. To go back to an older version, restore the backup from step 1.
+1. Read the changelog entries between your version and the new one. A step you must take is written there.
+2. Take a whole-server backup (see [Back up](#back-up)). Do not skip this: migrations only move forward, and the database is upgraded when the app starts.
+3. Move to the new version, by one of:
+   - **A published image** (recommended). Pin the version in `deploy/.env`, then pull and restart:
+
+     ```
+     APP_IMAGE=ghcr.io/<owner>/<repo>
+     APP_VERSION=1.2.3
+     ```
+
+     ```bash
+     docker compose -f deploy/docker-compose.yml pull app
+     docker compose -f deploy/docker-compose.yml up -d
+     ```
+
+   - **From the repository.** Get the new version of the repository and run `up -d --build` again. Leave `APP_IMAGE` and `APP_VERSION` unset.
+4. Open the app and check the version in the account dialog.
+
+Upgrades only move forward. To go back to an older version, restore the backup from step 2: an older image started on a newer database may fail or misread it.
+
+### Check an image's signature
+
+Release images are signed with [cosign](https://docs.sigstore.dev/) (keyless) and carry an SBOM. See [docs/RELEASING.md](https://github.com/jlazzz/OpenRequirements/blob/development/docs/RELEASING.md) for the command.

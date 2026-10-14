@@ -240,6 +240,10 @@ export async function buildApp(
 
   const mail = opts.mail ?? { enabled: false, publicUrl: "http://localhost:3000" };
 
+  // The release this server runs, read from the root package.json: the one source of the version (ADR 0020).
+  const version: string = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version;
+  app.get("/api/version", { config: { public: true } }, async () => ({ version }));
+
   app.get("/api/session", { config: { public: true } }, async (req) => {
     const user = await findUser(req);
     const needsSetup = !user && (await db.$count(users)) === 0;

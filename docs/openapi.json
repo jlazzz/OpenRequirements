@@ -5853,6 +5853,19 @@
         }
       }
     },
+    "/api/version": {
+      "get": {
+        "tags": [
+          "version"
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        },
+        "security": []
+      }
+    },
     "/api/webhooks/{webhookId}": {
       "delete": {
         "tags": [
