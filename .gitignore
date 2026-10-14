@@ -10,3 +10,4 @@ data/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 .claude/worktrees/
+junit.xml

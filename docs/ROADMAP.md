@@ -321,6 +321,8 @@ Added 2026-10-14. Companies with serious requirements (medical, automotive, aero
 
 **Exists:** append-only history and audit events, electronic signatures with password, status-only versions, permanent closing of reviews and cycles. J1 slice 3 plans account lockout, password expiry, inactivity timeout and a tamper-evident audit log.
 
+**Note, CI upload built:** `ci.yml` uploads its JUnit report and `@req` tags with `scripts/ci/upload-results.ts` once the secrets `REQ_URL` and `REQ_TOKEN` exist (see the verification guide). Waiting for a public instance and the owner's two secrets.
+
 **Slices (4 sessions):**
 
 1. **Anchored audit chain.** J1 slice 3 stores a SHA-256 of each audit row with the previous row's hash. A database administrator could still rewrite the whole chain, so: a daily job writes the latest hash to a place the database cannot change (an email to a configured address, a file on another volume, or an external log), and `GET /api/audit/verify` checks the chain against those anchors.
