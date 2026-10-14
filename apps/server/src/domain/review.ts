@@ -106,3 +106,48 @@ export function stillReviewed(later: { statusOnly: boolean }[]): boolean {
 export function opensAsInReview(current: unknown, options: string[] | null | undefined): boolean {
   return !!options?.includes("In review") && current !== "In review" && current !== "Approved";
 }
+
+/** True once there is at least one approver and every one of them has signed. */
+export function allApproversSigned(approvers: { signed: boolean }[]): boolean {
+  return approvers.length > 0 && approvers.every((a) => a.signed);
+}
+
+const CLOSED_AS: Record<Exclude<ReviewState, "open">, string> = {
+  approved: "approved",
+  rejected: "rejected",
+  closed: "closed without a decision",
+};
+
+/** The one-line notification for a review that has just been closed. */
+export function closingText(actor: string, review: string, state: Exclude<ReviewState, "open">): string {
+  return `${actor} closed “${review}”: ${CLOSED_AS[state]}`;
+}
+
+export type RecordSignature = {
+  name: string;
+  meaning: "approval" | "rejection";
+  signedAt: Date;
+  valid: boolean;
+};
+export type RecordItem = { uid: string; name: string; revision: number; outcome: ItemOutcome };
+
+/**
+ * The closed review as table rows for the Word record: the signature block first, a blank row, then each item's
+ * outcome. The first row of each block is its header. Rows are padded to one width.
+ */
+export function signedRecordRows(signatures: RecordSignature[], items: RecordItem[]): string[][] {
+  const at = (date: Date) => date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const rows: string[][] = [
+    ["Signed by", "Meaning", "Signed at", "Record"],
+    ...signatures.map((s) => [
+      s.name,
+      s.meaning === "approval" ? "Approval" : "Rejection",
+      at(s.signedAt),
+      s.valid ? "Intact" : "Changed after signing",
+    ]),
+  ];
+  if (signatures.length === 0) rows.push(["No signatures", "", "", ""]);
+  rows.push(["", "", "", ""], ["Item", "Name", "Version", "Outcome"]);
+  for (const item of items) rows.push([item.uid, item.name, String(item.revision), item.outcome]);
+  return rows;
+}

@@ -1,3 +1,4 @@
+import { toDocx } from "@app/importers";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { AppContext, Tx } from "./app.ts";
@@ -22,13 +23,16 @@ import {
 import { verifyPassword } from "./domain/password.ts";
 import {
   addParticipantError,
+  allApproversSigned,
   closedState,
+  closingText,
   itemOutcome,
   MARKS,
   type Mark,
   opensAsInReview,
   removeParticipantError,
   signatureDigest,
+  signedRecordRows,
   stillReviewed,
 } from "./domain/review.ts";
 import { roleAllows } from "./domain/roles.ts";
@@ -63,6 +67,7 @@ async function loadReview(db: Db | Tx, reviewId: string) {
       uid: nodes.uid,
       revisionId: itemRevisions.id,
       revision: itemRevisions.number,
+      name: itemRevisions.name,
       deleted: sql<boolean>`${nodes.deletedAt} is not null`,
     })
     .from(baselineEntries)
@@ -98,6 +103,24 @@ async function loadReview(db: Db | Tx, reviewId: string) {
   const decisionsOf = (userId: string) =>
     items.map((item) => ({ uid: item.uid ?? "", revision: item.revision, mark: markOf(item.id, userId) ?? "cleared" }));
   return { review, items, participants, marks, signed, markOf, approvers, decisionsOf };
+}
+
+type Loaded = NonNullable<Awaited<ReturnType<typeof loadReview>>>;
+
+/** False when what a signature covered no longer matches it: the record was altered afterwards. */
+function signatureValid(loaded: Loaded, userId: string, s: typeof signatures.$inferSelect) {
+  return (
+    s.digest ===
+    signatureDigest({
+      review: loaded.review.name,
+      baseline: loaded.review.baseline,
+      signerEmail: s.signerEmail,
+      signerName: s.signerName,
+      meaning: s.meaning,
+      signedAt: s.signedAt,
+      decisions: loaded.decisionsOf(userId),
+    })
+  );
 }
 
 /** Reviews: people look at a baseline's frozen items, comment, mark them reviewed, and approvers sign a decision on each. */
@@ -339,6 +362,16 @@ export function reviewRoutes({
           projectId,
           label: loaded.review.name,
         });
+        await notify(tx, mail, [
+          {
+            userId,
+            projectId,
+            kind: "review",
+            text: `${req.user?.name} asked you to ${role === "approver" ? "approve" : "review"} “${loaded.review.name}”`,
+            path: `/projects/${projectId}/reviews/${reviewId}`,
+            actorId: req.user?.id ?? null,
+          },
+        ]);
         return { ok: true as const };
       });
       if (!("ok" in result)) return reply.code(result.error[0]).send({ error: result.error[1] });
@@ -436,18 +469,7 @@ export function reviewRoutes({
               meaning: signature.meaning,
               signerName: signature.signerName,
               signedAt: signature.signedAt,
-              // False when what was signed no longer matches the signature: the record was altered afterwards.
-              valid:
-                signature.digest ===
-                signatureDigest({
-                  review: review.name,
-                  baseline: review.baseline,
-                  signerEmail: signature.signerEmail,
-                  signerName: signature.signerName,
-                  meaning: signature.meaning,
-                  signedAt: signature.signedAt,
-                  decisions: decisionsOf(person.userId),
-                }),
+              valid: signatureValid(loaded, person.userId, signature),
             },
           };
         }),
@@ -598,10 +620,90 @@ export function reviewRoutes({
         });
         await tx.insert(signatures).values({ reviewId, userId, ...signed, digest });
         await audit(tx, userId, `review.sign.${meaning}`, "review", reviewId, { projectId, label: loaded.review.name });
+        const after = loaded.approvers.map((a) => ({ signed: a.signed || a.userId === userId }));
+        if (allApproversSigned(after)) {
+          // Everyone has signed: whoever started the review can now close it.
+          const [owner] = await tx.select({ id: reviews.createdBy }).from(reviews).where(eq(reviews.id, reviewId));
+          if (owner) {
+            await notify(tx, mail, [
+              {
+                userId: owner.id,
+                projectId,
+                kind: "review",
+                text: `Every approver has signed “${loaded.review.name}”. It is ready to close`,
+                path: `/projects/${projectId}/reviews/${reviewId}`,
+                actorId: userId,
+              },
+            ]);
+          }
+        }
         return { meaning, signedAt: signed.signedAt };
       });
       if (result.error) return reply.code(result.error[0]).send({ error: result.error[1] });
       return reply.code(201).send(result);
+    },
+  );
+
+  // The closed review as a Word file: the signature block and each item's outcome.
+  app.get(
+    "/api/reviews/:reviewId/docx",
+    { onRequest: requireUser, schema: { params: idParam("reviewId") } },
+    async (req, reply) => {
+      const { reviewId } = req.params as { reviewId: string };
+      const projectId = await access(req, reply, { reviewId }, "viewer");
+      if (!projectId) return reply;
+      const loaded = await loadReview(db, reviewId);
+      if (!loaded) return reply.code(404).send({ error: "Review not found" });
+      if (loaded.review.state === "open") {
+        return reply.code(409).send({ error: "Close the review first: the record is made when it is closed" });
+      }
+      const closer = alias(users, "closer");
+      const [detail] = await db
+        .select({ project: projects.name, closedAt: reviews.closedAt, closedBy: closer.name })
+        .from(reviews)
+        .innerJoin(projects, eq(projects.id, reviews.projectId))
+        .leftJoin(closer, eq(closer.id, reviews.closedBy))
+        .where(eq(reviews.id, reviewId));
+      const { review, items, signed, markOf, approvers } = loaded;
+      const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : "");
+      const rows = signedRecordRows(
+        signed
+          .slice()
+          .sort((a, b) => a.signedAt.getTime() - b.signedAt.getTime())
+          .map((s) => ({
+            name: s.signerName,
+            meaning: s.meaning,
+            signedAt: s.signedAt,
+            valid: signatureValid(loaded, s.userId, s),
+          })),
+        items
+          .filter((i) => !i.deleted)
+          .map((i) => ({
+            uid: i.uid ?? "",
+            name: i.name,
+            revision: i.revision,
+            outcome: itemOutcome(approvers.map(({ userId }) => markOf(i.id, userId))),
+          })),
+      );
+      const bytes = await toDocx(
+        {
+          title: review.name,
+          lines: [
+            detail?.project ?? "",
+            `Review of baseline ${review.baseline}`,
+            `Closed ${day(detail?.closedAt)} by ${detail?.closedBy ?? ""}: ${review.state}`,
+          ],
+          header: `${detail?.project ?? ""} · Review ${review.name}`,
+        },
+        [],
+        new Map(),
+        rows,
+      );
+      const file = `${review.name.replace(/[^\w.-]+/g, "_").slice(0, 80) || "review"}.docx`;
+      return reply
+        .type("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        .header("content-disposition", `attachment; filename="${file}"`)
+        .send(Buffer.from(bytes));
     },
   );
 
@@ -641,6 +743,20 @@ export function reviewRoutes({
           .set({ state, closedBy: userId, closedAt: new Date(), statusSet })
           .where(eq(reviews.id, reviewId));
         await audit(tx, userId, `review.close.${state}`, "review", reviewId, { projectId, label: loaded.review.name });
+        const [owner] = await tx.select({ id: reviews.createdBy }).from(reviews).where(eq(reviews.id, reviewId));
+        const text = closingText(req.user?.name ?? "Someone", loaded.review.name, state);
+        await notify(
+          tx,
+          mail,
+          [...loaded.participants.map((p) => p.userId), ...(owner ? [owner.id] : [])].map((who) => ({
+            userId: who,
+            projectId,
+            kind: "review" as const,
+            text,
+            path: `/projects/${projectId}/reviews/${reviewId}`,
+            actorId: userId,
+          })),
+        );
         return { state, ...applied };
       });
       if ("error" in result) return reply.code(result.error[0]).send({ error: result.error[1] });

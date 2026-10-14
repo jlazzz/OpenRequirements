@@ -3274,3 +3274,39 @@ test("opening a review sets Status to In review; participants come and go while 
     "review.participant.remove",
   ]);
 });
+
+test("a review notifies on signing and closing, and a closed review downloads as a signed Word record", async () => {
+  const { cookie: owner, detail, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const a = (await add(sys.id, { kind: "item", name: "Speed" })).json().node.id;
+  const baselineId = (await post(`/api/projects/${projectId}/baselines`, { name: "1.0" }, owner)).json().id;
+  const rob = await person("Rob Reviewer", "reviewer");
+  const ann = await person("Ann Approver", "reviewer");
+  const texts = async (as: string) =>
+    ((await get("/api/notifications", as)).json().notifications as { text: string }[]).map((n) => n.text);
+
+  const reviewId = (
+    await post(
+      `/api/projects/${projectId}/reviews`,
+      { name: "R", baselineId, reviewers: [rob.id], approvers: [ann.id] },
+      owner,
+    )
+  ).json().id;
+  const docx = (as: string) => get(`/api/reviews/${reviewId}/docx`, as);
+  expect((await docx(owner)).statusCode, "open").toBe(409);
+  expect((await texts(rob.cookie)).some((t) => t.includes("asked you to review"))).toBe(true);
+
+  await post(`/api/reviews/${reviewId}/marks`, { itemIds: [a], mark: "approved" }, ann.cookie);
+  await post(`/api/reviews/${reviewId}/sign`, { password: admin.password }, ann.cookie);
+  expect((await texts(owner)).some((t) => t.includes("Every approver has signed"))).toBe(true);
+
+  await post(`/api/reviews/${reviewId}/close`, {}, owner);
+  for (const who of [rob, ann]) {
+    expect((await texts(who.cookie)).some((t) => t.includes("closed “R”: approved"))).toBe(true);
+  }
+  const file = await docx(owner);
+  expect(file.statusCode).toBe(200);
+  expect(file.headers["content-type"]).toContain("wordprocessingml");
+  expect(file.rawPayload.subarray(0, 2).toString()).toBe("PK");
+  expect((await docx((await person("Olga Outsider")).cookie)).statusCode).toBe(404);
+});
