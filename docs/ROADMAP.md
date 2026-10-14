@@ -20,42 +20,44 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 - Each uses its own test database: `TEST_DATABASE_URL=postgres://app:app@localhost:5432/app_<slice>_test npm test` (the name must end in `_test`; it is created on first use). Otherwise the sessions' tests clear each other's data.
 - At most one slice marked **DB** at a time: each adds a numbered migration, and two made at once collide.
 
-| Bundle | Slice | What | Model | Needs first | DB |
-|---|---|---|---|---|---|
-| I | J5 slice 1 | Editable item types, fields, relationship types | Opus | none | DB |
-| I | J5 slice 2 | Baseline to baseline compare | Sonnet | none | |
-| I | J5 slice 3 | Trace filters, project dashboard | Sonnet | none | |
-| I | J5 slice 4 | Child items | Opus | none | |
-| I | J5 slice 5 | Drag and drop, bulk edit | Sonnet | J5 slice 4 | |
-| I | J5 slice 6 | Exports of traceability and baselines | Sonnet | none | |
-| I | J5 slice 7 | Folders and the side bar | Sonnet | J5 slice 5 (same explorer code) | |
-| I | J5 slice 8 | Section home pages | Opus | J5 slices 2 and 7 | |
-| I | T7 slice 1 | Rich text in steps | Opus | none | |
-| I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | |
-| I | J1 slice 1 | Review participants and scope | Sonnet | none | DB |
-| I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | |
-| I | J1 slice 3 | Part 11 hardening | Opus | none | DB |
-| I | T6 | CI runs | Sonnet | none | DB |
-| J | A3 slice 1 | Security policy | Sonnet | none | |
-| J | A3 slice 2 | Releases | Opus | none | built (workflow not yet run) |
-| J | A3 slice 3 | Measured budgets | Sonnet | none | |
-| J | A5 slice 1 | Docs site | Sonnet | owner decision 4 | |
-| J | A5 slice 2 | Help in the app | Sonnet | A5 slice 1, J5 slice 8 | |
-| K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB |
-| K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | |
-| K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | |
-| K | A2 slice 4 | Customer test scripts | Sonnet | none | |
-| L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | |
-| L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |
-| L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |
-| none | Phase 1 | Playwright end-to-end tests | Sonnet | best after J5 slice 8, so screens stop moving | |
+| Bundle | Slice | What | Model | Needs first | DB | State |
+|---|---|---|---|---|---|---|
+| I | J5 slice 1 | Editable item types, fields, relationship types | Opus | none | DB | built, merged 2026-10-14 |
+| I | J5 slice 2 | Baseline to baseline compare | Sonnet | none | | built, merged 2026-10-14 |
+| I | J5 slice 3 | Trace filters, project dashboard | Sonnet | none | | built, merged 2026-10-14 |
+| I | J5 slice 4 | Child items | Opus | none | | built, merged 2026-10-14 |
+| I | J5 slice 5 | Drag and drop, bulk edit | Sonnet | J5 slice 4 | | built, merged 2026-10-14 |
+| I | J5 slice 6 | Exports of traceability and baselines | Sonnet | none | | built, merged 2026-10-14 |
+| I | J5 slice 7 | Folders and the side bar | Sonnet | J5 slice 5 (same explorer code) | |  |
+| I | J5 slice 8 | Section home pages | Opus | J5 slices 2 and 7 | |  |
+| I | T7 slice 1 | Rich text in steps | Opus | none | | built, merged 2026-10-14 |
+| I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | running |
+| I | J1 slice 1 | Review participants and scope | Sonnet | none | DB |  |
+| I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | |  |
+| I | J1 slice 3 | Part 11 hardening | Opus | none | DB | built, merged 2026-10-14 |
+| I | T6 | CI runs | Sonnet | none | DB | running |
+| J | A3 slice 1 | Security policy | Sonnet | none | |  |
+| J | A3 slice 2 | Releases | Opus | none | | built, merged 2026-10-14 (workflow not yet run) |
+| J | A3 slice 3 | Measured budgets | Sonnet | none | |  |
+| J | A5 slice 1 | Docs site | Sonnet | owner decision 4 | | built, merged 2026-10-14 |
+| J | A5 slice 2 | Help in the app | Sonnet | A5 slice 1, J5 slice 8 | |  |
+| K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB |  |
+| K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | running |
+| K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | |  |
+| K | A2 slice 4 | Customer test scripts | Sonnet | none | |  |
+| L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | |  |
+| L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |  |
+| L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |
+| none | Phase 1 | Playwright end-to-end tests | Sonnet | best after J5 slice 8, so screens stop moving | |  |
 
-Suggested waves for bundle I, each wave in parallel:
+Waves for bundle I and its neighbours (each wave in parallel):
 
-1. J5 slice 1 (DB), J5 slice 2, J5 slice 3, J5 slice 4, J5 slice 6, T7 slice 1
-2. J5 slice 5, T7 slice 2, J1 slice 1 (DB)
-3. J5 slice 7, J1 slice 2, J1 slice 3 (DB)
-4. J5 slice 8, T6 (DB)
+1. Done 2026-10-14: J5 slices 1 to 4 and 6, T7 slice 1, A5 slice 1 (docs site)
+2. Done 2026-10-14: J5 slice 5, J1 slice 3 (DB), A3 slice 2
+3. Running: T6 (DB), T7 slice 2, A2 slice 2
+4. Next: J1 slice 1 (DB), J5 slice 7, A3 slices 1 and 3
+5. Then: J1 slice 2, J5 slice 8, A2 slice 4, A5 slice 2
+6. Then: A2 slice 1 (DB), A2 slice 3, A1 slice 1; Playwright after J5 slice 8
 
 A3 slices 1 to 3 depend on nothing in bundle I and can run beside any wave.
 
