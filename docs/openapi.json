@@ -147,6 +147,38 @@
         }
       }
     },
+    "/api/baselines/{baselineId}/compare": {
+      "get": {
+        "tags": [
+          "baselines"
+        ],
+        "parameters": [
+          {
+            "name": "baselineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "with",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/baselines/{baselineId}/docx": {
       "get": {
         "tags": [

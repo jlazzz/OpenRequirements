@@ -190,7 +190,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] Multi-user: invitations, roles (Admin/Editor/Reviewer/Viewer), project-level permissions
 - [ ] Comments and mentions on items
 - [x] Concurrent-edit safety (optimistic locking, with conflict warnings): merge screen per field, "also editing" ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
-- [ ] Baselines: create, browse, compare any two baselines or a baseline vs. current
+- [x] Baselines: create, browse, compare any two baselines or a baseline vs. current
 - [x] Suspect links: automatic flagging and a review queue
 - [x] Coverage reports (e.g. requirements with no verifying test, orphan items)
 - [x] Impact analysis view (what's downstream of this item)

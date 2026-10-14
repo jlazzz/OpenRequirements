@@ -1,4 +1,5 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { compareBaseline } from "@app/shared";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import {
   baselineEntries,
@@ -179,6 +180,123 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
         links: frozenLinks,
         // By item id. Empty for a baseline made before status was frozen.
         verification: Object.fromEntries(statuses.map(({ itemId, ...status }) => [itemId, status])),
+      };
+    },
+  );
+
+  // Two baselines of one project: what differs in items, relationships (including suspect) and frozen verification.
+  // `from` is the older side by convention: "added" is in `with` only, "removed" in the path baseline only.
+  app.get(
+    "/api/baselines/:baselineId/compare",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: idParam("baselineId"),
+        querystring: { type: "object", required: ["with"], properties: { with: uuid } },
+      },
+    },
+    async (req, reply) => {
+      const { baselineId } = req.params as { baselineId: string };
+      const other = (req.query as { with: string }).with;
+      if (!(await access(req, reply, { baselineId }, "viewer"))) return reply;
+      const found = await db
+        .select({ id: baselines.id, name: baselines.name, projectId: baselines.projectId })
+        .from(baselines)
+        .where(inArray(baselines.id, [baselineId, other]));
+      const from = found.find((b) => b.id === baselineId);
+      const to = found.find((b) => b.id === other);
+      // A baseline of another project answers like a missing one, so its existence is not revealed.
+      if (!from || !to || from.projectId !== to.projectId) return reply.code(404).send({ error: "Baseline not found" });
+
+      const side = async (id: string) => {
+        const items = await db
+          .select({
+            id: nodes.id,
+            uid: nodes.uid,
+            name: sql<string>`coalesce(${itemRevisions.name}, ${baselineEntries.name}, '')`,
+            revision: itemRevisions.number,
+          })
+          .from(baselineEntries)
+          .innerJoin(nodes, eq(nodes.id, baselineEntries.nodeId))
+          .leftJoin(itemRevisions, eq(itemRevisions.id, baselineEntries.revisionId))
+          .where(and(eq(baselineEntries.baselineId, id), eq(nodes.kind, "item")));
+        const frozenLinks = await db
+          .select({
+            id: baselineLinks.linkId,
+            upstreamId: links.upstreamId,
+            downstreamId: links.downstreamId,
+            suspect: baselineLinks.suspect,
+          })
+          .from(baselineLinks)
+          .innerJoin(links, eq(links.id, baselineLinks.linkId))
+          .where(eq(baselineLinks.baselineId, id));
+        const statuses = await db
+          .select({
+            itemId: baselineVerification.itemId,
+            status: baselineVerification.status,
+            outOfDate: baselineVerification.outOfDate,
+          })
+          .from(baselineVerification)
+          .where(eq(baselineVerification.baselineId, id));
+        return { items, links: frozenLinks, verification: new Map(statuses.map((s) => [s.itemId, s])) };
+      };
+      const [a, b] = [await side(from.id), await side(to.id)];
+
+      const itemById = new Map([...a.items, ...b.items].map((i) => [i.id, i]));
+      const changes = compareBaseline(
+        a.items.map((i) => ({ id: i.id, revision: i.revision ?? 0 })),
+        b.items.map((i) => ({ id: i.id, revision: i.revision ?? 0 })),
+      );
+      const revisionOf = (side_: typeof a, id: string) => side_.items.find((i) => i.id === id)?.revision ?? null;
+      const itemChanges = [...changes].map(([id, change]) => ({
+        id,
+        uid: itemById.get(id)?.uid ?? "",
+        // The newer name when the item is in `with`, else the one it had in `from`.
+        name: (b.items.find((i) => i.id === id) ?? itemById.get(id))?.name ?? "",
+        change,
+        fromRevision: revisionOf(a, id),
+        toRevision: revisionOf(b, id),
+      }));
+
+      const uid = (id: string) => itemById.get(id)?.uid ?? "?";
+      const inA = new Map(a.links.map((l) => [l.id, l]));
+      const inB = new Map(b.links.map((l) => [l.id, l]));
+      const linkChanges = [
+        ...b.links.flatMap((l): (typeof l & { change: "added" | "suspect" | "unsuspect" })[] => {
+          const was = inA.get(l.id);
+          if (!was) return [{ ...l, change: "added" }];
+          // `suspect` is null for a baseline made before it was recorded: nothing to compare.
+          if (was.suspect !== null && l.suspect !== null && was.suspect !== l.suspect)
+            return [{ ...l, change: l.suspect ? "suspect" : "unsuspect" }];
+          return [];
+        }),
+        ...a.links.filter((l) => !inB.has(l.id)).map((l) => ({ ...l, change: "removed" as const })),
+      ].map((l) => ({
+        id: l.id,
+        upstreamUid: uid(l.upstreamId),
+        downstreamUid: uid(l.downstreamId),
+        change: l.change,
+      }));
+
+      const verification = [...a.verification].flatMap(([id, was]) => {
+        const now = b.verification.get(id);
+        if (!now || (was.status === now.status && was.outOfDate === now.outOfDate)) return [];
+        return [
+          {
+            id,
+            uid: uid(id),
+            name: itemById.get(id)?.name ?? "",
+            from: { status: was.status, outOfDate: was.outOfDate },
+            to: { status: now.status, outOfDate: now.outOfDate },
+          },
+        ];
+      });
+      return {
+        from: { id: from.id, name: from.name },
+        to: { id: to.id, name: to.name },
+        items: itemChanges,
+        links: linkChanges,
+        verification,
       };
     },
   );

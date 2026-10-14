@@ -891,6 +891,57 @@ test("each project role can do exactly what it should", async () => {
 });
 
 // Hard rule: every endpoint checks permissions. Covers every route with an id in its path, including future ones.
+test("two baselines compare in items, relationships including suspect, and frozen verification", async () => {
+  const { cookie, detail, un, sys, add } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const need = (await add(un.id, { kind: "item", name: "Need" })).json().node.id;
+  const keep = (await add(sys.id, { kind: "item", name: "Keep" })).json().node.id;
+  const gone = (await add(sys.id, { kind: "item", name: "Gone" })).json().node.id;
+  const typeId = (await get(`/api/projects/${projectId}/links`, cookie)).json().linkTypes[0].id;
+  const kept = (await post("/api/links", { upstreamId: need, downstreamId: keep, typeId }, cookie)).json().link.id;
+  const dropped = (await post("/api/links", { upstreamId: need, downstreamId: gone, typeId }, cookie)).json().link.id;
+  const make = async (name: string) =>
+    (await post(`/api/projects/${projectId}/baselines`, { name }, cookie)).json().id as string;
+  const first = await make("One");
+
+  await post(
+    `/api/items/${need}/revisions`,
+    { baseRevision: 1, name: "Need v2", description: textToDoc(""), attributes: {} },
+    cookie,
+  ); // makes both links suspect
+  await send("DELETE", `/api/nodes/${gone}`, cookie);
+  const fresh = (await add(sys.id, { kind: "item", name: "Fresh" })).json().node.id;
+  const added = (await post("/api/links", { upstreamId: need, downstreamId: fresh, typeId }, cookie)).json().link.id;
+  const second = await make("Two");
+
+  const res = await get(`/api/baselines/${first}/compare?with=${second}`, cookie);
+  expect(res.statusCode).toBe(200);
+  const body = res.json();
+  expect(body.from.name).toBe("One");
+  expect(body.to.name).toBe("Two");
+  const byId = (id: string) => body.items.find((i: { id: string }) => i.id === id);
+  expect(byId(need)).toMatchObject({ change: "changed", fromRevision: 1, toRevision: 2, name: "Need v2" });
+  expect(byId(fresh).change).toBe("added");
+  expect(byId(gone).change).toBe("removed");
+  expect(byId(keep)).toBeUndefined();
+  const linkChange = (id: string) => body.links.find((l: { id: string }) => l.id === id)?.change;
+  expect(linkChange(added)).toBe("added");
+  expect(linkChange(dropped)).toBe("removed");
+  expect(linkChange(kept)).toBe("suspect");
+  // Same baseline: nothing differs.
+  expect((await get(`/api/baselines/${first}/compare?with=${first}`, cookie)).json().items).toEqual([]);
+
+  // Permissions: a viewer may compare, an outsider and another project's baseline are not found.
+  const viewer = await person("Vera Viewer", "viewer");
+  expect((await get(`/api/baselines/${first}/compare?with=${second}`, viewer.cookie)).statusCode).toBe(200);
+  const outsider = await person("Olga Outsider");
+  expect((await get(`/api/baselines/${first}/compare?with=${second}`, outsider.cookie)).statusCode).toBe(404);
+  const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project.id;
+  const foreign = (await post(`/api/projects/${other}/baselines`, { name: "F" }, cookie)).json().id;
+  expect((await get(`/api/baselines/${first}/compare?with=${foreign}`, cookie)).statusCode).toBe(404);
+  expect((await get(`/api/baselines/${first}/compare`, cookie)).statusCode).toBe(400);
+});
+
 test("someone outside a project is refused on every route that names something in it", async () => {
   const { cookie: owner, detail, sys, add } = await projectWithSets();
   const projectId = (await detail()).project.id;

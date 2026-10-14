@@ -151,6 +151,84 @@ const BADGES: Record<BaselineChange, { color: string; label: string }> = {
   added: { color: "green", label: "Added since" },
 };
 
+type Comparison = {
+  from: { id: string; name: string };
+  to: { id: string; name: string };
+  items: { id: string; uid: string; name: string; change: BaselineChange }[];
+  links: {
+    id: string;
+    upstreamUid: string;
+    downstreamUid: string;
+    change: "added" | "removed" | "suspect" | "unsuspect";
+  }[];
+  verification: {
+    id: string;
+    uid: string;
+    name: string;
+    from: { status: string; outOfDate: boolean };
+    to: { status: string; outOfDate: boolean };
+  }[];
+};
+const LINK_CHANGE = { added: "Added", removed: "Removed", suspect: "Became suspect", unsuspect: "No longer suspect" };
+const state = (v: { status: string; outOfDate: boolean }) =>
+  `${v.status.replace("_", " ")}${v.outOfDate ? " (out of date)" : ""}`;
+
+/** Another baseline of the project picked from a list, and what differs between it and this one. */
+function CompareWith({ projectId, baselineId }: { projectId: string; baselineId: string }) {
+  const [other, setOther] = useState("");
+  const list = useQuery({
+    queryKey: ["projects", projectId, "baselines"],
+    queryFn: () => api<{ baselines: Baseline[] }>(`projects/${projectId}/baselines`),
+  });
+  const result = useQuery({
+    queryKey: ["baselines", baselineId, "compare", other],
+    queryFn: () => api<Comparison>(`baselines/${baselineId}/compare?with=${other}`),
+    enabled: other !== "",
+  });
+  const choices = (list.data?.baselines ?? []).filter((b) => b.id !== baselineId);
+  if (choices.length === 0) return null;
+  const data = result.data;
+  return (
+    <Stack gap="xs">
+      <NativeSelect
+        label="Compare with another baseline"
+        value={other}
+        onChange={(e) => setOther(e.currentTarget.value)}
+        data={[{ value: "", label: "None" }, ...choices.map((b) => ({ value: b.id, label: b.name }))]}
+        maw={360}
+      />
+      {result.isError && (
+        <Alert color="red" role="alert">
+          {result.error.message}
+        </Alert>
+      )}
+      {data && (
+        <Stack gap={4}>
+          <Text size="sm" c="dimmed">
+            From {data.from.name} to {data.to.name}:{" "}
+            {data.items.length + data.links.length + data.verification.length === 0 && "no differences."}
+          </Text>
+          {data.items.map((i) => (
+            <Text key={i.id} size="sm">
+              {i.uid} {i.name}: {{ added: "Added", removed: "Removed", changed: "Changed" }[i.change]}
+            </Text>
+          ))}
+          {data.links.map((l) => (
+            <Text key={l.id} size="sm">
+              {l.upstreamUid} → {l.downstreamUid}: {LINK_CHANGE[l.change]}
+            </Text>
+          ))}
+          {data.verification.map((v) => (
+            <Text key={v.id} size="sm">
+              {v.uid} {v.name}: verification {state(v.from)} → {state(v.to)}
+            </Text>
+          ))}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
 /** One baseline: what it froze, set by set, with each item marked where it differs from the project now. */
 export function BaselinePage() {
   const project = useProject().data;
@@ -253,6 +331,8 @@ export function BaselinePage() {
           <ExportMenu path={`baselines/${baseline.id}`} />
         </Group>
       </Group>
+
+      <CompareWith projectId={projectId} baselineId={baselineId} />
 
       {sections.map(({ set, changes, rows, total, statusField }) => (
         <section key={set.id}>
