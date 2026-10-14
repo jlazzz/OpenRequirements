@@ -1,4 +1,4 @@
-# 0020. Numbered releases with signed images
+# 0021. Numbered releases with signed images
 
 Date: 2026-10-14. Status: accepted.
 
