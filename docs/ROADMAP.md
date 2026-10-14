@@ -1,9 +1,9 @@
 # Roadmap plans
 
-Written 2026-10-13. Sixteen plans in three tracks:
+Written 2026-10-13. Seventeen plans in three tracks:
 
 - **Track J:** close the gap to Jama Connect (J1 to J5).
-- **Track T:** full test planning and execution (T1 to T6), allowed by [ADR 0011](adr/0011-test-planning-and-execution-in-scope.md).
+- **Track T:** full test planning and execution (T1 to T7), allowed by [ADR 0011](adr/0011-test-planning-and-execution-in-scope.md).
 - **Track A:** adoption by companies with serious requirements (A1 to A5), added 2026-10-14, after bundle I.
 
 Each plan lists what exists, the slices to build in order, the data model, and the decisions the owner must make. One slice is one working session: domain module and tests first, then API, then screen. Every slice keeps the hard rules in `CLAUDE.md`: soft delete, append-only history, audit on every write, a permission test per route.
@@ -19,7 +19,7 @@ Estimates are in sessions and are rough.
 | F | J3: HTTPS, edit conflicts, notifications, hardening | 5 | Two browsers edit one item; an email arrives for a mention |
 | G | J2: Word export, import upgrades, Word import, ReqIF | 7 | Export a spec to Word, re-import a ReqIF file |
 | H | J4: OpenAPI, webhooks, external references, OIDC | 6 | A webhook fires on a save; log in through an identity provider |
-| I | J1, J5, T6: review gaps, editable types, compare, dashboard, child items, CI runs | 9 | Add a field to an item type; compare two baselines; open one CI upload and see its results |
+| I | J1, J5, T6, T7: review gaps, editable types, compare, dashboard, child items, exports, navigation, CI runs, rich test steps | 14 | Add a field to an item type; compare two baselines; open one CI upload and see its results; run a test whose step has an image |
 | J | A3, A5: release and security basics, documentation site, in-app help | 5 | Install a numbered release from its signed image; open help from a screen |
 | K | A2: compliance evidence | 4 | Download the validation pack of a release; break the audit chain and see it reported |
 | L | A1: migration | 4 | Import a real DOORS or Jama export into a new project without setting it up first |
@@ -107,13 +107,23 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 **Exists:** fixed template with three item types, baseline compare against current only, Trace view without filters, items only under folders, reorder through a menu.
 
-**Slices (5 sessions):**
+**Slices (8 sessions):**
 
 1. **Editable item types, fields and relationship types.** An admin screen per project: add an item type, a set, a field, an enum option, a relationship type. Rename anything. Remove is soft (`archivedAt`): old versions keep their values. Add `item_types.role` (`test` or null) and `link_types.role` (`verifies` or null) so the name rules of ADR 0008 and 0009 can go. Jama users expect this more than anything else in this plan.
-2. **Baseline to baseline.** `compareBaseline` already takes two lists; add `GET /api/baselines/:baselineId/compare?with=` and a picker on the baseline page. Report suspect differences. Baseline export as CSV and Word (uses J2).
+2. **Baseline to baseline.** `compareBaseline` already takes two lists; add `GET /api/baselines/:baselineId/compare?with=` and a picker on the baseline page. Report suspect differences.
 3. **Trace filters and project dashboard.** Filter the Trace view by relationship type and Status, trace a baseline, cap rows with "show more". The project home page shows, per set: item count, not covered, suspect, verification status. This settles the home-screen point in `DESIGN.md` section 11.
 4. **Child items.** `nodes.parentId` may point at an item. Rules in `domain/tree.ts`: a child stays in its parent's set, a folder cannot sit under an item. Reading view numbers children under the parent.
 5. **Drag and drop, bulk edit.** Native HTML drag and drop in the explorer, calling the existing move route. Multi-select in List view with "set field" and "move". Multi-select fields editable in List view. A saved filter per user per set.
+
+Slices 6 to 8 added 2026-10-14 at the owner's request.
+
+6. **Exports of traceability and baselines.** The traceability matrix as CSV and Word, from the same rows the screen shows. A baseline as CSV, with each item's frozen verification status and suspect relationships; Word and ReqIF of a baseline exist already. The Trace view keeps its CSV export.
+7. **Folders and the side bar.** List view of a set or folder shows its direct sub-folders above the items, each with its item count, opening the folder; today it lists items only. In the side bar, Baselines, Reviews, Test plans and Reports open like folders: newest baselines, open reviews, the four reports. Test plans has two parts: **Test plans** (each plan, its open cycles under it) and **Test runs** (my runs, then open cycles). Each lists at most 10 with "All …" at the end. What is open is remembered per browser.
+8. **Section home pages.** Each page answers "what needs me" first:
+   - **Baselines:** newest first, with scope, author, item count, and the reviews and cycles on each, with their state. Tick two to compare (slice 2).
+   - **Reviews:** tabs "Waiting for me", "Open", "Closed". Each row shows progress: items reviewed and approved out of all.
+   - **Test plans:** one row per plan with its latest cycle's progress bar (passed, failed, blocked, not run) and "Start cycle".
+   - **Test runs:** new page. Runs in open cycles across plans, assigned to me first, filtered by cycle, assignee and state, each opening the execution screen. Needs one list route across cycles.
 
 ---
 
@@ -217,6 +227,17 @@ Added 2026-10-14, for bundle I. Automated tests run on every push and do not fit
 2. **"CI runs" page in the project.** List of uploads, newest first, with counts as a Mantine `Progress`, filterable by pipeline and branch. Opening one shows each reported test: its test case, outcome, the requirements it verifies, and the unmatched names. Linked from a result's "source" on the test case.
 
 **Later:** pass-rate trend per pipeline. A branch rule, so only results from the main branch set the verification status and feature-branch runs show but do not count.
+
+## T7. Rich test steps
+
+Added 2026-10-14 at the owner's request, for bundle I.
+
+**Exists:** a step is two plain-text strings, action and expected result (`packages/shared/src/steps.ts`). A step result has a plain-text actual result. Evidence files attach to a run and to one of its steps.
+
+**Slices (2 sessions):**
+
+1. **Rich text in steps.** Action and expected result become rich-text documents with the same editor as the description: formatting, tables, images. A stored plain string is read as one paragraph, so old versions stay as they were and no migration rewrites history. Update everything that reads steps: validation, the editor and view, the execution screen, the version compare (compares the text), Word and ReqIF export, spreadsheet import and export (text only).
+2. **Files in steps and in results.** A file node in rich text: any attachment shown as a download link, images shown inline, so a step can carry a drawing or a setup file. The actual result during a run uses the same editor, with pasted screenshots; it is stored as rich text, old plain results read as one paragraph. Step evidence stays as it is.
 
 ---
 

@@ -66,7 +66,7 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 2. Playwright end-to-end tests
 3. Dogfood: write this project's own requirements spec and import it
 
-After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, CI runs view), then J (releases, security basics, docs site, in-app help), K (compliance evidence), L (migration).
+After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, docs site, in-app help), K (compliance evidence), L (migration).
 
 Known gaps left for later milestones or owner decision:
 
