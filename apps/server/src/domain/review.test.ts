@@ -2,7 +2,9 @@ import { textToDoc } from "@app/shared";
 import { describe, expect, it, test } from "vitest";
 import {
   addParticipantError,
+  allApproversSigned,
   closedState,
+  closingText,
   itemOutcome,
   type Mark,
   onlyStatusChanged,
@@ -10,6 +12,7 @@ import {
   removeParticipantError,
   type Signed,
   signatureDigest,
+  signedRecordRows,
   stillReviewed,
 } from "./review.ts";
 
@@ -95,5 +98,29 @@ describe("participants", () => {
     expect(opensAsInReview("Approved", ["In review", "Approved"])).toBe(false);
     expect(opensAsInReview("In review", ["In review"])).toBe(false);
     expect(opensAsInReview("Draft", ["Draft"])).toBe(false);
+  });
+});
+
+describe("notifications and the signed record", () => {
+  it("knows when every approver has signed", () => {
+    expect(allApproversSigned([])).toBe(false);
+    expect(allApproversSigned([{ signed: true }, { signed: false }])).toBe(false);
+    expect(allApproversSigned([{ signed: true }, { signed: true }])).toBe(true);
+  });
+
+  it("words the closing", () => {
+    expect(closingText("Ana", "R1", "approved")).toBe("Ana closed “R1”: approved");
+    expect(closingText("Ana", "R1", "closed")).toContain("without a decision");
+  });
+
+  it("lays out signatures, a blank row, then items", () => {
+    const rows = signedRecordRows(
+      [{ name: "Ana", meaning: "approval", signedAt: new Date("2026-10-14T09:30:00Z"), valid: false }],
+      [{ uid: "SRS-001", name: "Speed", revision: 2, outcome: "approved" }],
+    );
+    expect(rows[1]).toEqual(["Ana", "Approval", "2026-10-14 09:30 UTC", "Changed after signing"]);
+    expect(rows[2]).toEqual(["", "", "", ""]);
+    expect(rows[4]).toEqual(["SRS-001", "Speed", "2", "approved"]);
+    expect(signedRecordRows([], [])[1]?.[0]).toBe("No signatures");
   });
 });

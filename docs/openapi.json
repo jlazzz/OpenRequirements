@@ -4789,6 +4789,29 @@
         }
       }
     },
+    "/api/reviews/{reviewId}/docx": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "parameters": [
+          {
+            "name": "reviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/reviews/{reviewId}/marks": {
       "post": {
         "tags": [

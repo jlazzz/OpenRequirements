@@ -38,6 +38,16 @@ The home page lists every open review you take part in, in all projects, with yo
 
 Your signature covers all your decisions. Its meaning is **Approval** if you approved every item, and **Rejection** otherwise. After signing you cannot change your decisions.
 
+## Who is told
+
+Notifications (the bell, and email if the person chose it):
+
+- Someone is invited, at the start or when added later.
+- The person who started the review hears when every approver has signed.
+- Everyone in the review, and its starter, hears when it is closed and how.
+
+Nobody is told of their own action.
+
 ## Close the review (Editor or Admin)
 
 Choose **Close review**. The state is decided at that moment and is permanent:
@@ -54,7 +64,7 @@ A version that only changes Status does not make relationships suspect and does 
 
 ## The record
 
-A closed review keeps who marked, decided and signed what, and when. **Print or save as PDF** gives a copy with the signatures.
+A closed review keeps who marked, decided and signed what, and when. **Print or save as PDF** gives a copy with the signatures. **Word record (.docx)**, on a closed review, downloads a document with a signature block (who signed, the meaning, when, and whether the record is intact) and each item's version and outcome.
 
 If a signed decision is altered in the database afterwards, the signature shows **Record changed after signing**.
 

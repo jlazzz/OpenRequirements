@@ -416,6 +416,11 @@ export function ReviewPage() {
           <Button variant="default" onClick={() => window.print()}>
             Print or save as PDF
           </Button>
+          {!open && (
+            <Button variant="default" component="a" href={`/api/reviews/${reviewId}/docx`} download>
+              Word record (.docx)
+            </Button>
+          )}
           {canMark && approver && undecided.length > 0 && (
             <Button
               variant="default"

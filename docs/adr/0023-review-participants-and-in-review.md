@@ -15,4 +15,4 @@ Date: 2026-10-14. Status: accepted. Extends [ADR 0010](0010-reviews-approvals-an
 
 - Backup format version 10. Older files restore, with every listed participant treated as present from the start.
 - A review closed as "closed" or "rejected" leaves items at "In review". Nothing puts them back; the owner can set Status by hand or in bulk.
-- No notification when someone is added or removed: J1 slice 2.
+- A person added later is notified like the first ones (J1 slice 2). Removal is not notified.

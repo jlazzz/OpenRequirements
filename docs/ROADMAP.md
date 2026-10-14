@@ -33,7 +33,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | I | T7 slice 1 | Rich text in steps | Opus | none | | built, merged 2026-10-14 |
 | I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | built, merged 2026-10-14 |
 | I | J1 slice 1 | Review participants and scope | Sonnet | none | DB | built, merged 2026-10-14 |
-| I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | |  |
+| I | J1 slice 2 | Review notifications and signed record | Sonnet | J1 slice 1 | | built 2026-10-14 |
 | I | J1 slice 3 | Part 11 hardening | Opus | none | DB | built, merged 2026-10-14 |
 | I | T6 | CI runs | Sonnet | none | DB | built, merged 2026-10-14 |
 | J | A3 slice 1 | Security policy | Sonnet | none | | built, merged 2026-10-14 |

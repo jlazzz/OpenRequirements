@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J1 slice 2, review notifications and signed record: a person added to an open review is notified; the review's starter hears when every approver has signed; participants and starter hear when it closes and how; a closed review downloads as Word (`GET /api/reviews/:reviewId/docx`: cover, signature block with an intact/changed flag, each item's version and outcome; 409 while open). Pure rules in `domain/review.ts`, no migration. Download button checked in a browser on the demo project; notification texts covered by a server test, the bell was not opened with a new notification. The Word file was not opened in Word (2026-10-14)
 - CI upload to the tool: `ci.yml` writes `junit.xml` and runs `scripts/ci/upload-results.ts` (JUnit with the `// @req` UID put in front of each test name, labelled with commit, branch and run URL; then the `@req` scanner) when the secrets `REQ_URL` and `REQ_TOKEN` exist, not on fork PRs. Tried against a scratch server with a real token; the workflow itself has never run on GitHub, and a local instance is unreachable from GitHub runners. Only tests with a `@req` tag match (2026-10-14)
 - A3 slice 3, measured budgets: `npm run perf` loads a project through the API (2,000 requirements, 500 tests, 200 needs, 4,000 relationships) and times opening a document, four searches, a trace and a baseline; exits 1 on a miss. `perf.yml` runs it on demand and nightly. Measured on an M4 MacBook Air: document 50 ms, search 6 ms, against budgets of 2,000 and 500 ms; table in the [install guide](docs/user-guide/install.md). Browser drawing time is not measured; the workflow has never run; no migration (2026-10-14)
 - A3 slice 1, security policy: `SECURITY.md` (GitHub private vulnerability reporting), [security overview](docs/user-guide/security.md) checked against the code with a "not protected" list, `npm audit --omit=dev --audit-level=high` in CI, Dependabot config. Runtime audit is clean; 6 dev-only findings (1 high) are left to Dependabot. The reporting link is not confirmed enabled on the repository (2026-10-14)
@@ -63,6 +64,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J1 slice 2 (review notifications, Word record): built, waiting for the owner's test.** Checkpoint: sign as the last approver, see the bell; close, download the Word record.
 - **J5 slice 7 (folders, side bar): built, waiting for the owner's test.** Checkpoint: open a folder that has sub-folders; open Test plans in the side bar.
 - **J1 slice 1 (review participants, In review status, My reviews): built, waiting for the owner's test.** Checkpoint: open a review, add and remove a person, see items go In review.
 - **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.
@@ -116,7 +118,7 @@ Known gaps left for later milestones or owner decision:
 - Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
 - Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
 - Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. Tokens do not expire and show no "last used" date.
-- Reviews: a review always covers its whole baseline, only the invitation is notified (not signing or closing), and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: the audit hash chain is not anchored outside the database (roadmap A2 slice 1), so a full rewrite or deleting the newest rows goes unseen; no password history or complexity rules.
+- Reviews: a review always covers its whole baseline, removing a person is not notified, and there is no "my reviews" list across projects. The signed copy is the browser's print. Part 11 gaps: the audit hash chain is not anchored outside the database (roadmap A2 slice 1), so a full rewrite or deleting the newest rows goes unseen; no password history or complexity rules.
 - Comparing two baselines lists differences only; it has no field-level diff.
 - Import updates items but never moves them, and an empty cell cannot clear a field. At most 5,000 folders and items per file. A folder name with "/" cannot be given in the Folder column.
 - List export is CSV only (Excel opens it). No .xlsx export.
