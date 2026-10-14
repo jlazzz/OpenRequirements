@@ -179,6 +179,29 @@
         }
       }
     },
+    "/api/baselines/{baselineId}/csv": {
+      "get": {
+        "tags": [
+          "baselines"
+        ],
+        "parameters": [
+          {
+            "name": "baselineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
+      }
+    },
     "/api/baselines/{baselineId}/docx": {
       "get": {
         "tags": [

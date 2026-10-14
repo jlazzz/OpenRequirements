@@ -269,3 +269,13 @@ test("a Word file's own styles, numbering, merged cells, links and tracked chang
   });
   expect(() => readDocx(new Map(), () => null)).toThrow("not a Word document");
 });
+
+test("a grid is written as one table after the cover", async () => {
+  const bytes = await toDocx({ title: "T", lines: [], header: "H" }, [], new Map(), [
+    ["Rows", "A"],
+    ["R1", "●"],
+  ]);
+  const xml = new TextDecoder().decode((await unzip(bytes)).get("word/document.xml"));
+  expect(xml).toContain("<w:tbl>");
+  expect(xml).toContain("●");
+});

@@ -26,6 +26,11 @@ export function ExportMenu({ path }: { path: string }) {
         <Menu.Item component="a" href={`/api/${path}/docx`} download>
           Word document (.docx)
         </Menu.Item>
+        {path.startsWith("baselines/") && (
+          <Menu.Item component="a" href={`/api/${path}/csv`} download>
+            Spreadsheet with verification and suspect relationships (.csv)
+          </Menu.Item>
+        )}
         <Menu.Item component="a" href={`/api/${path}/reqif?format=reqifz`} download>
           ReqIF with images (.reqifz)
         </Menu.Item>

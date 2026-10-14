@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ExportLink, type ExportNode, type ExportSet, imagesOf, toDocx, toReqif } from "@app/importers";
+import { type ExportLink, type ExportNode, type ExportSet, imagesOf, toCsv, toDocx, toReqif } from "@app/importers";
 import { serializeReqif, zip } from "@app/reqif";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyReply } from "fastify";
@@ -10,6 +10,7 @@ import {
   baselineEntries,
   baselineLinks,
   baselines,
+  baselineVerification,
   itemRevisions,
   itemTypes,
   links,
@@ -193,6 +194,68 @@ export function exportRoutes({ app, db, requireUser, access }: AppContext, dir: 
       baseline: baseline.createdAt,
     };
   }
+
+  /** One row per frozen item: its verification status then, and the relationships that were suspect then. */
+  app.get(
+    "/api/baselines/:baselineId/csv",
+    { onRequest: requireUser, schema: { params: schema("baselineId").params } },
+    async (req, reply) => {
+      const { baselineId } = req.params as { baselineId: string };
+      const projectId = await access(req, reply, { baselineId }, "viewer");
+      if (!projectId) return reply;
+      const content = await ofBaseline(baselineId, projectId);
+      if (!content) return reply.code(404).send({ error: "Baseline not found" });
+      const status = new Map(
+        (await db.select().from(baselineVerification).where(eq(baselineVerification.baselineId, baselineId))).map(
+          (v) => [v.itemId, v],
+        ),
+      );
+      const typeNames = new Map(
+        (
+          await db
+            .select({ id: linkTypes.id, name: linkTypes.name })
+            .from(linkTypes)
+            .where(eq(linkTypes.projectId, projectId))
+        ).map((t) => [t.id, t.name]),
+      );
+      const uids = new Map(content.sets.flatMap((s) => s.nodes.map((n) => [n.id, n.uid ?? ""] as const)));
+      const suspect = new Map<string, string[]>();
+      const frozenSuspect = await db
+        .select({ typeId: links.linkTypeId, upstreamId: links.upstreamId, downstreamId: links.downstreamId })
+        .from(baselineLinks)
+        .innerJoin(links, eq(links.id, baselineLinks.linkId))
+        .where(and(eq(baselineLinks.baselineId, baselineId), eq(baselineLinks.suspect, true)));
+      for (const l of frozenSuspect) {
+        const type = typeNames.get(l.typeId) ?? "";
+        for (const [from, to] of [
+          [l.upstreamId, l.downstreamId],
+          [l.downstreamId, l.upstreamId],
+        ] as const) {
+          suspect.set(from, [...(suspect.get(from) ?? []), `${uids.get(to) ?? ""} (${type})`]);
+        }
+      }
+      const label = { not_covered: "Not covered", not_run: "Not run", passing: "Passing", failing: "Failing" };
+      const rows: string[][] = [["Set", "ID", "Name", "Verification", "Out of date", "Suspect relationships"]];
+      for (const set of content.sets) {
+        for (const n of set.nodes) {
+          if (n.kind !== "item") continue;
+          const v = status.get(n.id);
+          rows.push([
+            set.name,
+            n.uid ?? "",
+            n.name,
+            v ? label[v.status] : "",
+            v?.outOfDate ? "Yes" : "",
+            (suspect.get(n.id) ?? []).join("; "),
+          ]);
+        }
+      }
+      return reply
+        .type("text/csv; charset=utf-8")
+        .header("content-disposition", disposition(content.title, "csv"))
+        .send(toCsv(rows));
+    },
+  );
 
   for (const kind of ["reqif", "docx"] as const) {
     app.get(`/api/sets/:setId/${kind}`, { onRequest: requireUser, schema: schema("setId") }, async (req, reply) => {

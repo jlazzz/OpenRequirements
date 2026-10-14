@@ -83,7 +83,13 @@ export type DocxCover = { title: string; lines: string[]; header: string };
  * of its own. `images` holds the bytes of the images to embed, by attachment id; any other image becomes its
  * alternative text. Tables keep column spans; row spans are flattened.
  */
-export async function toDocx(cover: DocxCover, sets: ExportSet[], images: Map<string, DocxImage>): Promise<Uint8Array> {
+export async function toDocx(
+  cover: DocxCover,
+  sets: ExportSet[],
+  images: Map<string, DocxImage>,
+  /** Plain rows (first row is the header) written as one table after the sets, e.g. a traceability matrix. */
+  grid?: string[][],
+): Promise<Uint8Array> {
   const rels: XmlElement[] = [];
   const media: { name: string; data: Uint8Array }[] = [];
   const relId = (type: string, target: string, external = false) => {
@@ -329,6 +335,36 @@ export async function toDocx(cover: DocxCover, sets: ExportSet[], images: Map<st
       }
     };
     write(null, 0);
+  }
+
+  if (grid && grid.length > 0) {
+    const columns = Math.max(1, ...grid.map((r) => r.length));
+    const width = Math.floor(9000 / columns);
+    body.push(
+      el("w:tbl", {}, [
+        el("w:tblPr", {}, [val("w:tblStyle", "TableGrid"), el("w:tblW", { "w:w": "0", "w:type": "auto" })]),
+        el(
+          "w:tblGrid",
+          {},
+          Array.from({ length: columns }, () => el("w:gridCol", { "w:w": String(width) })),
+        ),
+        ...grid.map((row, index) =>
+          el("w:tr", {}, [
+            ...(index === 0 ? [el("w:trPr", {}, [el("w:tblHeader")])] : []),
+            ...Array.from({ length: columns }, (_, c) =>
+              el("w:tc", {}, [
+                el("w:tcPr", {}, [
+                  el("w:tcW", { "w:w": String(width), "w:type": "dxa" }),
+                  ...(index === 0 ? [el("w:shd", { "w:val": "clear", "w:color": "auto", "w:fill": "E7E6E6" })] : []),
+                ]),
+                paragraph([textRun(row[c] ?? "", index === 0 ? [{ type: "bold" }] : [])], { indent: 0 }),
+              ]),
+            ),
+          ]),
+        ),
+      ]),
+      paragraph([], { indent: 0 }),
+    );
   }
 
   const header = relId("header", "header1.xml");

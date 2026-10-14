@@ -2688,6 +2688,12 @@ test("a set and a baseline export to Word with folders as headings, items, field
   expect(frozen.files.has("word/media/image1.png")).toBe(true);
   expect(frozen.xml).toContain("Approved");
   expect(frozen.xml).toContain("Baseline of ");
+
+  const csv = await get(`/api/baselines/${baselineId}/csv`, cookie);
+  expect(csv.statusCode).toBe(200);
+  expect(csv.headers["content-disposition"]).toBe('attachment; filename="Release_1.csv"');
+  expect(csv.body).toContain("Set,ID,Name,Verification,Out of date,Suspect relationships");
+  expect(csv.body).toContain("System Requirements,SYS-001,Supply voltage,");
 });
 
 test("evidence files of several kinds are attached to results, to runs and their steps, and to a CI report", async () => {

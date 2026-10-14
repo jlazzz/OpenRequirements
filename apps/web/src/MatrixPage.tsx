@@ -1,6 +1,7 @@
-import { Alert, Group, Select, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
+import { toCsv, toDocx } from "@app/importers";
+import { Alert, Button, Group, Select, Stack, Table, Text, Title, Tooltip } from "@mantine/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { isSuspect, isTestSet, type LiveLink, type ProjectSet, type TreeNode } from "./api.ts";
+import { download, isSuspect, isTestSet, type LiveLink, type ProjectSet, type TreeNode } from "./api.ts";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
@@ -47,6 +48,33 @@ export function MatrixPage() {
   const item = (node: TreeNode) =>
     ({ to: "/projects/$projectId/items/$nodeId", params: { projectId: project.project.id, nodeId: node.id } }) as const;
 
+  // The same rows the screen shows: "●" linked, "⚠" suspect.
+  const grid = [
+    [rowSet.name, ...cols.map((c) => `${c.uid} ${c.name}`.trim())],
+    ...rows.map((row) => [
+      `${row.uid} ${row.name}`.trim(),
+      ...cols.map((col) => (suspect(row, col) ? "⚠" : linked(row, col) ? "●" : "")),
+    ]),
+  ];
+  const fileBase = `Matrix ${rowSet.name} x ${colSet.name}`.replace(/[^\w.-]+/g, "_");
+  const exportCsv = () => download(`${fileBase}.csv`, new Blob([toCsv(grid)], { type: "text/csv;charset=utf-8" }));
+  const exportWord = async () => {
+    const title = `Traceability matrix: ${rowSet.name} against ${colSet.name}`;
+    const day = new Date().toISOString().slice(0, 10);
+    const bytes = await toDocx(
+      { title, lines: [project.project.name, `Exported ${day}`, "● linked. ⚠ suspect."], header: title },
+      [],
+      new Map(),
+      grid,
+    );
+    download(
+      `${fileBase}.docx`,
+      new Blob([bytes as BlobPart], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+    );
+  };
+
   return (
     <Stack gap="sm">
       <Title order={1} size="h2">
@@ -55,6 +83,16 @@ export function MatrixPage() {
       <Group>
         <Select label="Rows" data={options} value={rowSet.id} onChange={choose("rows")} allowDeselect={false} />
         <Select label="Columns" data={options} value={colSet.id} onChange={choose("cols")} allowDeselect={false} />
+        {rows.length > 0 && cols.length > 0 && (
+          <Group gap="xs" align="end">
+            <Button variant="default" onClick={exportCsv}>
+              Export CSV
+            </Button>
+            <Button variant="default" onClick={exportWord}>
+              Export Word
+            </Button>
+          </Group>
+        )}
       </Group>
       {links.isError && (
         <Alert color="red" role="alert">

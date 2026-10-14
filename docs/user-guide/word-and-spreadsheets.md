@@ -45,3 +45,8 @@ Editors see **Import** on a set or folder.
 - Old `.doc` files cannot be read. Save them as `.docx` first.
 
 Nothing is written before **Import**, and an import makes all its changes or none. One import holds up to 5,000 folders and items.
+
+## Matrix and baseline exports
+
+- **Traceability matrix:** on the Matrix page, **Export CSV** and **Export Word** save the grid as shown, with ● for linked and ⚠ for suspect.
+- **Baseline:** on the baseline page, **Export** has a spreadsheet entry (.csv). Each item gets the verification status and out-of-date flag frozen in the baseline, and the relationships that were suspect then. Test cases carry no verification status.
