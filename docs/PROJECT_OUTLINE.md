@@ -220,7 +220,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Webhooks for external automation ([ADR 0016](adr/0016-api-webhooks-references-oidc.md))
 - [ ] SSO: OIDC and SAML; LDAP. OpenID Connect built 2026-10-14 ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)); SAML and LDAP wait for a request
 - [ ] Backup/restore tooling and upgrade documentation
-- [ ] Security hardening: dependency scanning, rate limiting, security headers, a third-party review if possible
+- [x] Security hardening: dependency scanning, rate limiting, security headers, a third-party review if possible
 
 **Exit criteria:** A design partner uses it as their system of record for an audited project, or completes a mock audit with it.
 
