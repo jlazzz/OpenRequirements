@@ -44,7 +44,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | K | A2 slice 1 | Anchored audit chain | Opus | J1 slice 3 | DB |  |
 | K | A2 slice 2 | The tool's own requirements in the tool | Sonnet | none | | built, merged 2026-10-14 |
 | K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | |  |
-| K | A2 slice 4 | Customer test scripts | Sonnet | none | |  |
+| K | A2 slice 4 | Customer test scripts | Sonnet | none | | built 2026-10-14 |
 | L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | |  |
 | L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |  |
 | L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |

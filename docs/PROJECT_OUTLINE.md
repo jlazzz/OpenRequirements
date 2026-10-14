@@ -238,7 +238,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [ ] SysML v2 model links (stretch goal)
 - [ ] Plugin/extension system
 - [ ] Hosted cloud offering
-- [ ] Validation package / tool qualification kit (IQ/OQ/PQ documentation)
+- [ ] Validation package / tool qualification kit (IQ/OQ/PQ documentation); customer IQ/OQ test scripts done (A2 slice 4), validation pack open
 
 ---
 

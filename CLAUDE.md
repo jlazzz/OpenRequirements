@@ -29,6 +29,7 @@ npm run up           # build and start the full stack in Docker on :3000
 npm run docs:dev     # user guide with live reload; docs:build writes docs/.vitepress/dist (served at /help)
 npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
 npm run perf         # time a 2,000-item project against the performance budgets on a scratch instance (PERF_URL, PERF_EMAIL, PERF_PASSWORD, PERF_ITEMS); exits 1 on a miss
+npm run qualification # load the IQ/OQ test scripts and their plan into an instance (QUAL_URL, QUAL_EMAIL, QUAL_PASSWORD); safe to re-run
 npm run dogfood      # load this tool's own requirements into an instance (DOGFOOD_URL, DOGFOOD_EMAIL, DOGFOOD_PASSWORD); safe to re-run
 npm run openapi      # rewrite docs/openapi.json after changing a route (a test fails while it is stale)
 ```
@@ -133,6 +134,7 @@ deploy/             Dockerfile and docker-compose.yml
 scripts/demo/       `npm run demo`: builds the Kestrel-EO demo project through the API
 scripts/perf/       `npm run perf`: loads a scaled project through the API and times the budgets
 scripts/dogfood/    `npm run dogfood`: this tool's own requirements as data, and the loader
+scripts/qualification/  `npm run qualification`: customer IQ/OQ test scripts as data, and the loader
 scripts/samples/    `npm run samples:import`: writes the synthetic import files
 samples/import/     Synthetic DOORS, Polarion, Jama and Word files for testing import
 e2e/                Playwright tests (empty)
