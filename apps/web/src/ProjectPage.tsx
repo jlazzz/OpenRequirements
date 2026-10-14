@@ -7,6 +7,7 @@ import { api, canEdit, isSuspect, type ProjectDetail, type TreeNode } from "./ap
 import { useNodeDrag } from "./dragdrop.ts";
 import { RouterAnchor, RouterNavLink } from "./links.tsx";
 import { useLinks } from "./Relationships.tsx";
+import { SideBarSections } from "./SideBar.tsx";
 import { KindIcon, StatusDot } from "./Status.tsx";
 import { useVerification } from "./Verification.tsx";
 
@@ -225,38 +226,11 @@ export function ProjectPage() {
           pl={26}
           py={4}
         />
-        <RouterNavLink
-          to="/projects/$projectId/baselines"
-          params={{ projectId: info.id }}
-          label="Baselines"
-          pl={26}
-          py={4}
-        />
-        <RouterNavLink
-          to="/projects/$projectId/reviews"
-          params={{ projectId: info.id }}
-          label="Reviews"
-          pl={26}
-          py={4}
-        />
-        <RouterNavLink
-          to="/projects/$projectId/test-plans"
-          params={{ projectId: info.id }}
-          label="Test plans"
-          pl={26}
-          py={4}
-        />
+        <SideBarSections projectId={info.id} toggled={toggled} toggle={toggle} />
         <RouterNavLink
           to="/projects/$projectId/ci-runs"
           params={{ projectId: info.id }}
           label="CI runs"
-          pl={26}
-          py={4}
-        />
-        <RouterNavLink
-          to="/projects/$projectId/reports"
-          params={{ projectId: info.id }}
-          label="Reports"
           pl={26}
           py={4}
         />

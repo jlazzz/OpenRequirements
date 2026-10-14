@@ -28,7 +28,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | I | J5 slice 4 | Child items | Opus | none | | built, merged 2026-10-14 |
 | I | J5 slice 5 | Drag and drop, bulk edit | Sonnet | J5 slice 4 | | built, merged 2026-10-14 |
 | I | J5 slice 6 | Exports of traceability and baselines | Sonnet | none | | built, merged 2026-10-14 |
-| I | J5 slice 7 | Folders and the side bar | Sonnet | J5 slice 5 (same explorer code) | |  |
+| I | J5 slice 7 | Folders and the side bar | Sonnet | J5 slice 5 (same explorer code) | | built 2026-10-14 |
 | I | J5 slice 8 | Section home pages | Opus | J5 slices 2 and 7 | |  |
 | I | T7 slice 1 | Rich text in steps | Opus | none | | built, merged 2026-10-14 |
 | I | T7 slice 2 | Files in steps and in results | Sonnet | T7 slice 1 | | built, merged 2026-10-14 |

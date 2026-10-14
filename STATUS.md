@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (J5 slice 7)
 Last updated: 2026-10-14 (J1 slice 1)
 Last updated: 2026-10-14 (A2 slice 2)
 Last updated: 2026-10-14 (bundle I, T7 slice 2)
@@ -14,6 +15,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- J5 slice 7, folders and the side bar: List view of a set or folder shows its sub-folders above the items with item counts; Baselines, Reviews, Test plans (plans with open cycles under them), Test runs (my runs, open cycles) and Reports open like folders in the side bar, 10 each with "All …", open state remembered per browser (`SideBar.tsx`). No route or migration. Checked in a browser on the demo project. "Test runs" has no page of its own yet (J5 slice 8); the Reports rows for cycle summary and plan history open Test plans (2026-10-14)
 - J1 slice 1, review participants: add or remove a participant on an open review (`review_participants` rows kept with `removedAt`; a signer and the last person stay), opening a review sets Status to "In review" as a status-only version (closing still approves, as status-only versions are not edits), "My reviews" on the home page. Migration 0021, backup format version 10, [ADR 0023](docs/adr/0023-review-participants-and-in-review.md). Checked in a browser on a scratch instance: add, remove, My reviews (2026-10-14)
 - A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)
 - T7 slice 2, files in steps and in results: a `file` node in rich text (any uploaded attachment, a download link; images stay `image`), added with **Image / file**, paste or drop in every rich-text box; the actual result of a step is rich text (stored as the document's JSON in the existing `actual` column, plain text still reads as one paragraph; backup limit 100,000 characters). Word and ReqIF write a file as its name. No migration, no new file type. Checked in a browser on a scratch instance: a file in an actual result survives a reload; the read-only view and the Word export of a file were not looked at (2026-10-14)
@@ -63,6 +65,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **J5 slice 7 (folders, side bar): built, waiting for the owner's test.** Checkpoint: open a folder that has sub-folders; open Test plans in the side bar.
 - **J1 slice 1 (review participants, In review status, My reviews): built, waiting for the owner's test.** Checkpoint: open a review, add and remove a person, see items go In review.
 - **T7 slice 2 (files in steps, rich actual results): built, waiting for the owner's test.** Checkpoint: run a test, paste a screenshot and add a log file in a step's actual result, reload.
 - **T6 CI runs: built, waiting for the owner's test.** Checkpoint: upload a JUnit report with `?pipeline=&branch=`, open it under CI runs.

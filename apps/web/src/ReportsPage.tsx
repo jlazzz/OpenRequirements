@@ -124,7 +124,7 @@ export function ReportsPage() {
 
       <Stack gap="xs">
         <Group justify="space-between">
-          <Title order={2} size="h4">
+          <Title order={2} size="h4" id="verification">
             Requirement verification
           </Title>
           <Button size="compact-sm" variant="default" onClick={exportVerification} disabled={!report.data}>
@@ -214,7 +214,7 @@ export function ReportsPage() {
       <Stack gap="xs">
         <Group justify="space-between">
           <div>
-            <Title order={2} size="h4">
+            <Title order={2} size="h4" id="flaky">
               Flaky tests
             </Title>
             <Text c="dimmed" size="sm">
