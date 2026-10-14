@@ -9,6 +9,7 @@ const ran = (outcome: Outcome, revision = 1, recordedAt = after) => ({
   result: { outcome, revision, recordedAt },
 });
 
+// @req VER-024
 test("a requirement with no verifying test is not covered", () => {
   expect(verificationStatus(revised, [])).toEqual({ status: "not_covered", outOfDate: false });
 });

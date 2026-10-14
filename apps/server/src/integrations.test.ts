@@ -87,6 +87,7 @@ async function setup() {
   return { owner, projectId: project.id as string, person, item };
 }
 
+// @req VER-039
 test("the API is described as OpenAPI, and docs/openapi.json is up to date", async () => {
   const res = await get("/api/openapi.json");
   expect(res.statusCode).toBe(200);

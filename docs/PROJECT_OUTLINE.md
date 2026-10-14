@@ -178,7 +178,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] CSV/Excel import (with column mapping) and export
 - [x] JSON full-project export/import (backup and portability)
 - [ ] Docker Compose install with docs
-- [ ] **Dogfood:** import this project's own requirements spec
+- [x] **Dogfood:** import this project's own requirements spec (`npm run dogfood`)
 
 **Exit criteria:** You manage this project's requirements in it daily; a design partner imports a real spreadsheet successfully.
 

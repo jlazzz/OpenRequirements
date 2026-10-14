@@ -1,5 +1,6 @@
 # Status
 
+Last updated: 2026-10-14 (A2 slice 2)
 Last updated: 2026-10-14 (bundle I, T7 slice 2)
 Last updated: 2026-10-14 (bundle I, T6 slice 1 and 2)
 Last updated: 2026-10-14 (bundle I, J1 slice 3)
@@ -12,6 +13,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- A2 slice 2, own requirements in the tool: `npm run dogfood` loads 14 needs, 78 requirements and 57 test cases (`scripts/dogfood/requirements.ts`) into the Standard template through the import route by external id; re-running updates, never duplicates. Eight test files carry `@req VER-nnn` tags. Run against a scratch instance twice. Not yet: results for the test cases (needs the JUnit names to carry UIDs), the scanner run against it, 100+ requirements target of the roadmap (2026-10-14)
 - T7 slice 2, files in steps and in results: a `file` node in rich text (any uploaded attachment, a download link; images stay `image`), added with **Image / file**, paste or drop in every rich-text box; the actual result of a step is rich text (stored as the document's JSON in the existing `actual` column, plain text still reads as one paragraph; backup limit 100,000 characters). Word and ReqIF write a file as its name. No migration, no new file type. Checked in a browser on a scratch instance: a file in an actual result survives a reload; the read-only view and the Word export of a file were not looked at (2026-10-14)
 - T6 CI runs: each JUnit upload is a `ci_runs` row (pipeline, branch, commit, build URL, counts, unmatched names) that its results point at; "CI runs" page with filters and a run page with results, requirements and unmatched names; link from a result on the test case; backup format version 9, migration 0020, [ADR 0022](docs/adr/0022-ci-runs.md), [user guide](docs/user-guide/verification.md). Checked in a browser on a scratch instance with the demo project (2026-10-14)
 - A3 slice 2, releases: version in root `package.json`, shown at `GET /api/version` and in the account dialog; `release.yml` on a `vX.Y.Z` tag checks notes, lint, types and tests, pushes the image to GHCR, attaches a CycloneDX SBOM, signs with cosign keyless; `CHANGELOG.md`, [docs/RELEASING.md](docs/RELEASING.md), compose `APP_IMAGE`/`APP_VERSION`, upgrade section of the install guide, [ADR 0021](docs/adr/0021-numbered-releases-signed-images.md). The workflow has never run; actions are pinned by major tag, not SHA; upgrade test not built (2026-10-14)
@@ -87,7 +89,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
 1. Playwright end-to-end tests
-2. Dogfood: write this project's own requirements spec and import it
+2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
