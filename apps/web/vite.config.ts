@@ -3,5 +3,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  server: { proxy: { "/api": `http://localhost:${process.env.API_PORT ?? 3000}` } },
+  server: {
+    proxy: Object.fromEntries(
+      ["/api", "/help"].map((path) => [path, `http://localhost:${process.env.API_PORT ?? 3000}`]),
+    ),
+  },
 });

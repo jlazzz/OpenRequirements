@@ -238,6 +238,10 @@ function Shell({ user }: { user: User }) {
           <RouterAnchor to="/api-docs" c="white" size="sm" ml="lg">
             API
           </RouterAnchor>
+          {/* The user guide is a separate static site served by the API server, so a plain link, not the router. */}
+          <Anchor href="/help/" target="_blank" c="white" size="sm" ml="lg">
+            Help
+          </Anchor>
         </nav>
         <Group gap="xs" ml="auto" wrap="nowrap">
           <NotificationBell />
