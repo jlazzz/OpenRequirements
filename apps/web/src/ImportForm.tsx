@@ -232,7 +232,7 @@ function SpreadsheetSource({ place, onDone }: { place: ImportPlace; onDone: () =
       const next = await readTable(file);
       if (next.length < 2) throw new Error("The file needs a header row and at least one more row.");
       setTable(next);
-      setTargets(guessTargets(next[0] ?? [], fields));
+      setTargets(guessTargets(next[0] ?? [], fields, next.slice(1), place.uids));
     } catch (error) {
       setProblem(`Could not read the file: ${(error as Error).message}`);
     }

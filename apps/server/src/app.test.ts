@@ -1,7 +1,7 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { guessReqifMapping, mapReqif, readDocx, summarizeReqif } from "@app/importers";
+import { guessReqifMapping, guessTargets, mapReqif, mapRows, parseCsv, readDocx, summarizeReqif } from "@app/importers";
 import { parseReqif, type ReqifAttribute, type ReqifNode, type ReqifValue, unzip, writeXml } from "@app/reqif";
 import { textToDoc } from "@app/shared";
 import { sql } from "drizzle-orm";
@@ -2884,4 +2884,28 @@ test("many items of a set are edited, moved or deleted in one request, all or no
   expect((await bulk({ action: "delete", itemIds: [a] })).statusCode).toBe(400);
   expect((await add(sys.id, { kind: "item", name: "Next" })).json().node.uid).toBe("SYS-004");
   expect(await auditActions()).toEqual(expect.arrayContaining(["item.delete", "item.move", "item.revise"]));
+});
+
+test("the Jama sample spreadsheet imports with the guessed mapping, its HTML descriptions formatted", async () => {
+  const { cookie, detail, sys } = await projectWithSets();
+  const projectId = (await detail()).project.id;
+  const fields = (await get(`/api/sets/${sys.id}/items`, cookie)).json().fields;
+  const csv = readFileSync(new URL("../../../samples/import/jama-customer-requirements.csv", import.meta.url), "utf8");
+  const [header = [], ...rows] = parseCsv(csv);
+  const mapped = mapRows(rows, guessTargets(header, fields, rows, new Set()), fields);
+  expect(mapped.errors).toEqual([]);
+  const imported = await post(
+    `/api/projects/${projectId}/import`,
+    { sets: [{ setId: sys.id, nodes: mapped.nodes }], links: [] },
+    cookie,
+  );
+  expect(imported.statusCode).toBe(201);
+  expect(imported.json().created.items).toBe(rows.length);
+  const items = (await get(`/api/sets/${sys.id}/items`, cookie)).json().items as {
+    name: string;
+    description: unknown;
+  }[];
+  expect(JSON.stringify(items.find((n) => n.name === "Land coverage")?.description)).toContain(
+    '"marks":[{"type":"bold"}]',
+  );
 });

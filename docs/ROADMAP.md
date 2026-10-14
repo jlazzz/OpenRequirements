@@ -219,8 +219,8 @@ Added 2026-10-14. Companies with serious requirements (medical, automotive, aero
 
 **Found by the sample files:**
 
-- A Jama export has an "ID" column. The spreadsheet import guesses it is our UID, so the first import fails ("CUST-2 is not in this set") until the user skips that column. Guess UID only when the values carry this set's prefix.
-- Jama writes rich text as HTML in its Excel cells. The spreadsheet import keeps the tags as text (`<p>… <b>shall</b> …</p>`). Read a cell that starts with an HTML tag through `xhtmlToDoc`, as ReqIF does.
+- Fixed 2026-10-14: a Jama export has an "ID" column. The spreadsheet import guessed it was our UID, so the first import failed ("CUST-2 is not in this set"). It now guesses UID only when every value is a UID of the set.
+- Fixed 2026-10-14: Jama writes rich text as HTML in its Excel cells. A description cell that starts with a tag is now read through `xhtmlToDoc`, as ReqIF does; HTML that is not well-formed keeps its text without the tags.
 - Word heading mode makes a heading with paragraphs under it one item, sub-headings included. Expected, but worth a line in the guide.
 
 **Slices (4 sessions):**

@@ -1,7 +1,7 @@
-import { textToDoc } from "@app/shared";
+import { docToText, textToDoc } from "@app/shared";
 import { expect, test } from "vitest";
 import { parseCsv, toCsv } from "./csv.ts";
-import { guessTargets, mapRows } from "./mapping.ts";
+import { cellToDoc, guessTargets, mapRows } from "./mapping.ts";
 
 test("CSV parsing handles quotes, embedded separators and line breaks, and other separators", () => {
   expect(parseCsv('\uFEFFName,Text\r\n"Voltage, supply","He said ""5 V""\nexactly"\r\n\r\nLast,\n')).toEqual([
@@ -39,15 +39,10 @@ const fields = [
 ];
 
 test("column headers are matched to the name, the description and fields of the same name", () => {
-  expect(guessTargets(["Title", " STATUS ", "Text", "Owner", "Name", "ID", "Folder"], fields)).toEqual([
-    "name",
-    "f-status",
-    "description",
-    "",
-    "",
-    "uid",
-    "folder",
-  ]);
+  const row = ["", "", "", "", "", "REQ-001", ""];
+  expect(
+    guessTargets(["Title", " STATUS ", "Text", "Owner", "Name", "ID", "Folder"], fields, [row], new Set(["REQ-001"])),
+  ).toEqual(["name", "f-status", "description", "", "", "uid", "folder"]);
 });
 
 test("rows become items with typed field values; bad cells are reported by spreadsheet row", () => {
@@ -132,4 +127,62 @@ test("a Folder column builds folders, reusing existing ones; a UID column names 
   ]);
   // Paths start at the folder imported into.
   expect(mapRows([["Supply", "X"]], ["folder", "name"], [], existing, "f1").nodes[0]).toMatchObject({ id: "f2" });
+});
+
+// Rows of samples/import/jama-customer-requirements.csv.
+const JAMA = [
+  ["ID", "Global ID", "Item Type", "Name", "Description", "Status", "Priority", "Location", "Folder"],
+  [
+    "CUST-2",
+    "GID-88215",
+    "Stakeholder Requirement",
+    "Land coverage",
+    "<p>The system <b>shall</b> image all land between 82° S and 82° N.</p>",
+    "Approved",
+    "High",
+    "Customer Requirements/Imaging",
+    "Imaging",
+  ],
+  [
+    "CUST-4",
+    "GID-88217",
+    "Stakeholder Requirement",
+    "Ground sampling distance",
+    "<p>Images <b>shall</b> resolve 4 m on the ground.</p><p>Measured at nadir.</p>",
+    "Approved",
+    "High",
+    "Customer Requirements/Imaging",
+    "Imaging",
+  ],
+];
+
+test("an ID column of another tool's ids is not taken as the UID; one of this set's UIDs is", () => {
+  const [header = [], ...rows] = JAMA;
+  expect(guessTargets(header, fields, rows, new Set(["STK-001"]))[0]).toBe("");
+  expect(guessTargets(header, fields, rows, new Set(["CUST-2", "CUST-4"]))[0]).toBe("uid");
+  expect(guessTargets(["ID", "Name"], fields, [["", "New"]], new Set())[0]).toBe("");
+});
+
+test("a description cell in HTML becomes formatted text; broken HTML keeps its text", () => {
+  const [header = [], ...rows] = JAMA;
+  const { nodes, errors } = mapRows(rows, guessTargets(header, fields, rows, new Set()), fields);
+  expect(errors).toEqual([]);
+  expect(nodes[0]).toMatchObject({ kind: "folder", name: "Imaging" });
+  expect(nodes[0]?.children?.[1]?.description).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Images " },
+          { type: "text", text: "shall", marks: [{ type: "bold" }] },
+          { type: "text", text: " resolve 4 m on the ground." },
+        ],
+      },
+      { type: "paragraph", content: [{ type: "text", text: "Measured at nadir." }] },
+    ],
+  });
+  expect(docToText(cellToDoc("<p>One<br>two&nbsp;three</p>"))).toBe("One\ntwo three");
+  expect(cellToDoc("<p>Open <b>bold</p>")).toEqual(textToDoc("Open bold"));
+  expect(cellToDoc("a < b")).toEqual(textToDoc("a < b"));
 });

@@ -15,7 +15,7 @@ Files for trying the import screens. They are **synthetic**: written by `scripts
 Known results (2026-10-14):
 
 - Every ReqIF file imports with no warnings.
-- Jama files: skip the **ID** column when mapping. The import guesses it is our UID and refuses the file otherwise. Descriptions come in with their HTML tags as text. Both are listed in roadmap A1.
+- Jama files import with the guessed mapping. The **ID** column is skipped, because its values (`CUST-2`) are not UIDs of the set. Descriptions written as HTML come in formatted: paragraphs, bold and the rest (fixed 2026-10-14).
 
 To make the files again after changing the generator:
 

@@ -1,4 +1,6 @@
+import { parseXml } from "@app/reqif";
 import { type RichNode, textToDoc } from "@app/shared";
+import { xhtmlToDoc } from "./reqif.ts";
 
 export type ImportField = { id: string; name: string; type: string; options: string[] | null };
 
@@ -44,8 +46,11 @@ export const nameFromText = (text: string) => {
  */
 export type Target = string;
 
-/** Matches each header cell to "name", "description", "uid", "folder" or the field of that name. The rest is skipped. */
-export function guessTargets(header: string[], fields: ImportField[]): Target[] {
+/**
+ * Matches each header cell to "name", "description", "uid", "folder" or the field of that name. The rest is skipped.
+ * An "ID" or "UID" column is the UID only when its values are UIDs of the set (`uids`): other tools write their own ids there.
+ */
+export function guessTargets(header: string[], fields: ImportField[], rows: string[][], uids: Set<string>): Target[] {
   const used = new Set<string>();
   const words: Record<string, string> = {
     name: "name",
@@ -56,10 +61,14 @@ export function guessTargets(header: string[], fields: ImportField[]): Target[] 
     uid: "uid",
     folder: "folder",
   };
-  return header.map((cell) => {
+  return header.map((cell, column) => {
     const title = cell.trim().toLowerCase();
     const target = words[title] ?? fields.find((f) => f.name.toLowerCase() === title)?.id ?? "";
     if (!target || used.has(target)) return "";
+    if (target === "uid") {
+      const values = rows.map((row) => (row[column] ?? "").trim()).filter(Boolean);
+      if (values.length === 0 || !values.every((value) => uids.has(value))) return "";
+    }
     used.add(target);
     return target;
   });
@@ -95,6 +104,26 @@ export function coerce(field: ImportField, text: string): { value: unknown } | {
     }
     default:
       return { value: text };
+  }
+}
+
+/**
+ * A cell's text as rich text. Tools such as Jama write HTML in a cell: one that starts with a tag is read as XHTML,
+ * and when it is not well-formed its tags are dropped and the text is kept.
+ */
+export function cellToDoc(text: string): RichNode {
+  if (!/^<[a-z]/i.test(text)) return textToDoc(text);
+  // HTML's &nbsp; and unclosed <br> are not XML; the rest of a broken cell falls back to plain text.
+  const xml = text.replace(/&nbsp;/g, "&#160;").replace(/<br\s*>/gi, "<br/>");
+  try {
+    return xhtmlToDoc(parseXml(`<div>${xml}</div>`), () => null).doc;
+  } catch {
+    return textToDoc(
+      text
+        .replace(/<[^>]*>/g, " ")
+        .replace(/ {2,}/g, " ")
+        .trim(),
+    );
   }
 }
 
@@ -147,7 +176,7 @@ export function mapRows(
       const text = (row[column] ?? "").trim();
       if (!target || text === "") continue;
       if (target === "name") item.name = text;
-      else if (target === "description") item.description = textToDoc(text);
+      else if (target === "description") item.description = cellToDoc(text);
       else if (target === "uid") item.uid = text;
       // shortcut: a folder name that holds a "/" is split in two, quote it if anyone needs such names
       else if (target === "folder")
