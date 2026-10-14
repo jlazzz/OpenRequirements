@@ -1030,6 +1030,14 @@ test("someone outside a project is refused on every route that names something i
     itemTypeId: (await get(`/api/projects/${projectId}/types`, owner)).json().itemTypes[0].id,
     fieldId: (await get(`/api/projects/${projectId}/types`, owner)).json().itemTypes[0].fields[0].id,
     linkTypeId: typeId,
+    ciRunId: (
+      await app.inject({
+        method: "POST",
+        url: `/api/projects/${projectId}/verification-results/junit`,
+        payload: '<testsuite><testcase name="x"/></testsuite>',
+        headers: { cookie: owner, "content-type": "application/xml" },
+      })
+    ).json().ciRunId,
     integrationId: (
       await post(`/api/projects/${projectId}/integrations`, { kind: "github", baseUrl: "http://127.0.0.1:9" }, owner)
     ).json().id,
@@ -1365,7 +1373,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 8, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 9, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1532,7 +1540,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 9 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 10 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
@@ -1837,6 +1845,7 @@ test("a JUnit report from CI records results on the test cases it names by UID",
   const res = await upload(report, ci, "text/xml");
   expect(res.statusCode).toBe(201);
   expect(res.json()).toEqual({
+    ciRunId: expect.any(String),
     recorded: [
       { uid: "VER-001", outcome: "pass" },
       { uid: "VER-002", outcome: "fail" },
@@ -1857,6 +1866,72 @@ test("a JUnit report from CI records results on the test cases it names by UID",
   );
   const feed = (await get(`/api/projects/${projectId}/activity`, cookie)).json().events as { action: string }[];
   expect(feed.filter((e) => e.action.startsWith("junit")).map((e) => e.action)).toEqual(["junit.import"]);
+});
+
+test("a CI upload is kept as a run that lists its results, requirements and unmatched names", async () => {
+  const { cookie, projectId, req, t1, t2 } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const outsider = await person("Olga Outsider");
+  const upload = (query: string, body: string) =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/verification-results/junit${query}`,
+      payload: body,
+      headers: { "content-type": "application/xml", cookie },
+    });
+  const report = `<testsuite>
+    <testcase name="VER-001 occlusion"/>
+    <testcase name="VER-002 alarm"><failure message="no sound"/></testcase>
+    <testcase name="VER-001 later"><skipped/></testcase>
+    <testcase name="unrelated"/>
+  </testsuite>`;
+  const first = (
+    await upload("?pipeline=build&branch=main&commit=abc123&buildUrl=https%3A%2F%2Fci.example.com%2F812", report)
+  ).json();
+  await upload("?pipeline=nightly&branch=feature", '<testsuite><testcase name="VER-001 x"/></testsuite>');
+
+  const list = (await get(`/api/projects/${projectId}/ci-runs`, viewer.cookie)).json();
+  expect(list.runs.map((r: { pipeline: string }) => r.pipeline)).toEqual(["nightly", "build"]);
+  expect(list.pipelines).toEqual(["build", "nightly"]);
+  expect(list.branches).toEqual(["feature", "main"]);
+  const only = (await get(`/api/projects/${projectId}/ci-runs?branch=main`, cookie)).json().runs;
+  expect(only).toEqual([
+    expect.objectContaining({ branch: "main", commit: "abc123", passed: 1, failed: 1, skipped: 1, unmatched: 1 }),
+  ]);
+
+  const detail = (await get(`/api/ci-runs/${first.ciRunId}`, viewer.cookie)).json();
+  expect(detail.run).toMatchObject({
+    pipeline: "build",
+    buildUrl: "https://ci.example.com/812",
+    unmatchedNames: ["unrelated"],
+  });
+  expect(detail.results).toEqual([
+    expect.objectContaining({
+      itemId: t1,
+      uid: "VER-001",
+      outcome: "pass",
+      requirements: [expect.objectContaining({ id: req })],
+    }),
+    expect.objectContaining({ itemId: t2, uid: "VER-002", outcome: "fail", note: "no sound" }),
+  ]);
+  // The result on the test case points back at its run.
+  expect((await get(`/api/items/${t2}/results`, cookie)).json().results[0].ciRunId).toBe(first.ciRunId);
+  expect(await auditActions()).toContain("ci_run.create");
+
+  expect((await get(`/api/ci-runs/${first.ciRunId}`, outsider.cookie)).statusCode).toBe(404);
+  expect((await get(`/api/projects/${projectId}/ci-runs`, outsider.cookie)).statusCode).toBe(404);
+
+  // Backup and restore keep the runs and the results' pointers.
+  const backup = (await get(`/api/projects/${projectId}/backup`, cookie)).json();
+  expect(backup.ciRuns).toHaveLength(2);
+  const restored = await post("/api/projects/restore", backup, cookie);
+  expect(restored.statusCode).toBe(201);
+  const copy = (await get(`/api/projects/${restored.json().project.id}/ci-runs`, cookie)).json().runs;
+  expect(copy).toHaveLength(2);
+  const copyDetail = (
+    await get(`/api/ci-runs/${copy.find((r: { branch: string }) => r.branch === "main").id}`, cookie)
+  ).json();
+  expect(copyDetail.results).toHaveLength(2);
 });
 
 test("a test case holds steps, which are checked, searched and kept per version", async () => {

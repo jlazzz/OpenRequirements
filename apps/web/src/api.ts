@@ -208,6 +208,8 @@ export type Result = {
   source: "manual" | "junit" | "run";
   /** Set on the result of a test run. */
   runId: string | null;
+  /** Set on a result that came from a CI upload. */
+  ciRunId?: string | null;
   /** Where the defect of a failed run is tracked, in an external tool. */
   defectUrl: string | null;
   recordedBy: string;

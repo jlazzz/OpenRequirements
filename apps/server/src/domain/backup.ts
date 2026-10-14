@@ -9,13 +9,14 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // Version 6 added attachments.name, resultAttachments (which replace verificationResults.attachmentId), baselineVerification
 // and testCycles.baselineId. Version 7 added externalReferences. Version 8 added archivedAt on itemTypes,
 // attributeDefinitions, sets and linkTypes, attributeDefinitions.archivedOptions and linkTypes.role.
+// Version 9 added ciRuns and verificationResults.ciRunId.
 // Older files are still restored.
-export const BACKUP_VERSION = 8;
+export const BACKUP_VERSION = 9;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | typeof BACKUP_VERSION;
   exportedAt: string;
   project: { id: string; name: string; createdAt: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
@@ -99,6 +100,22 @@ export type Backup = {
     recordedBy: string;
     runId: string | null;
     defectUrl: string | null;
+    ciRunId: string | null;
+    createdAt: string;
+  }[];
+  /** One row per CI upload; results point at it. */
+  ciRuns: {
+    id: string;
+    pipeline: string;
+    branch: string;
+    commit: string;
+    buildUrl: string;
+    passed: number;
+    failed: number;
+    skipped: number;
+    unmatched: number;
+    unmatchedNames: string[];
+    createdBy: string;
     createdAt: string;
   }[];
   /** Evidence files: of a result, or of a run and optionally one of its steps. */
@@ -246,6 +263,8 @@ const REFERENCES: [Collection, string, Collection][] = [
   ["verificationResults", "attachmentId", "attachments"],
   ["verificationResults", "recordedBy", "users"],
   ["verificationResults", "runId", "testRuns"],
+  ["verificationResults", "ciRunId", "ciRuns"],
+  ["ciRuns", "createdBy", "users"],
   ["resultAttachments", "resultId", "verificationResults"],
   ["resultAttachments", "runId", "testRuns"],
   ["resultAttachments", "attachmentId", "attachments"],

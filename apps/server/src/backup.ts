@@ -12,6 +12,7 @@ import {
   baselineLinks,
   baselines,
   baselineVerification,
+  ciRuns,
   comments,
   externalReferences,
   itemRevisions,
@@ -63,7 +64,7 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, 4, 5, 6, 7, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, 5, 6, 7, 8, BACKUP_VERSION] },
     exportedAt: when,
     project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
@@ -203,6 +204,8 @@ const backupSchema = {
           // The next two are not in files older than version 5.
           runId: { ...idOrNull, default: null },
           defectUrl: { ...textOrNull(2000), default: null },
+          // Not in files older than version 9.
+          ciRunId: { ...idOrNull, default: null },
           createdAt: when,
         }),
         required: [
@@ -218,6 +221,24 @@ const backupSchema = {
           "createdAt",
         ],
       },
+      default: [],
+    },
+    // Not in files older than version 9.
+    ciRuns: {
+      ...rows({
+        id,
+        pipeline: text(200),
+        branch: text(200),
+        commit: text(100),
+        buildUrl: text(2000),
+        passed: { type: "integer", minimum: 0 },
+        failed: { type: "integer", minimum: 0 },
+        skipped: { type: "integer", minimum: 0 },
+        unmatched: { type: "integer", minimum: 0 },
+        unmatchedNames: { type: "array", maxItems: 200, items: { type: "string", maxLength: 2000 } },
+        createdBy: id,
+        createdAt: when,
+      }),
       default: [],
     },
     // Not in files older than version 6.
@@ -407,6 +428,7 @@ const backupSchema = {
 const ADDED_LATER = [
   "linkRevisions",
   "verificationResults",
+  "ciRuns",
   "resultAttachments",
   "baselineVerification",
   "reviews",
@@ -539,6 +561,10 @@ export function backupRoutes(
         verificationResults: (
           await db.select().from(verificationResults).where(inArray(verificationResults.itemId, nodeIds))
         ).map((r) => ({ ...r, attachmentId: null, runAt: iso(r.runAt), createdAt: iso(r.createdAt) })),
+        ciRuns: (await db.select().from(ciRuns).where(inProject(ciRuns))).map(({ projectId: _, ...run }) => ({
+          ...run,
+          createdAt: iso(run.createdAt),
+        })),
         // Evidence whose file has gone missing is left out with it, so the result itself still restores.
         resultAttachments: (
           await db
@@ -619,6 +645,7 @@ export function backupRoutes(
           backup.links.map((l) => l.createdBy),
           backup.linkRevisions.map((r) => r.confirmedBy),
           backup.verificationResults.map((r) => r.recordedBy),
+          backup.ciRuns.map((r) => r.createdBy),
           backup.resultAttachments.map((a) => a.createdBy),
           backup.testPlans.map((p) => p.createdBy),
           backup.testCycles.flatMap((c) => (c.closedBy ? [c.createdBy, c.closedBy] : [c.createdBy])),
@@ -868,6 +895,9 @@ export function backupRoutes(
           for (const part of parts(backup.testRuns)) await tx.insert(testRuns).values(part);
           for (const part of parts(backup.stepResults)) {
             await tx.insert(stepResults).values(part.map((s) => ({ ...s, createdAt: date(s.createdAt) })));
+          }
+          for (const part of parts(backup.ciRuns)) {
+            await tx.insert(ciRuns).values(part.map((r) => ({ ...r, projectId, createdAt: date(r.createdAt) })));
           }
           // After the test runs, because a result may point at its run.
           for (const part of parts(backup.verificationResults)) {

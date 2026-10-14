@@ -4,6 +4,7 @@ import type { AppContext, Tx } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import {
   attachments,
+  ciRuns,
   itemRevisions,
   itemTypes,
   linkTypes,
@@ -197,6 +198,8 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
           runAt: verificationResults.runAt,
           note: verificationResults.note,
           source: verificationResults.source,
+          // Set on a result that came from a CI upload.
+          ciRunId: verificationResults.ciRunId,
           // Set on the result of a test run.
           runId: verificationResults.runId,
           defectUrl: verificationResults.defectUrl,
@@ -391,12 +394,30 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
       bodyLimit: MAX_REPORT_BYTES,
       schema: {
         params: param("projectId"),
-        querystring: { type: "object", properties: { testCycleId: uuid, attachmentId: uuid } },
+        querystring: {
+          type: "object",
+          properties: {
+            testCycleId: uuid,
+            attachmentId: uuid,
+            // Where the report came from, kept on the CI run.
+            pipeline: { type: "string", maxLength: 200 },
+            branch: { type: "string", maxLength: 200 },
+            commit: { type: "string", maxLength: 100 },
+            buildUrl: { type: "string", maxLength: 2000 },
+          },
+        },
       },
     },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
-      const { testCycleId, attachmentId } = req.query as { testCycleId?: string; attachmentId?: string };
+      const {
+        testCycleId,
+        attachmentId,
+        pipeline = "",
+        branch = "",
+        commit = "",
+        buildUrl = "",
+      } = req.query as Record<string, string | undefined>;
       if (!(await access(req, reply, { projectId }, "editor"))) return reply;
       const userId = req.user?.id as string;
       if (attachmentId && !(await areUploadsOf(db, projectId, [attachmentId]))) {
@@ -433,6 +454,23 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
             .where(and(eq(testRuns.cycleId, testCycleId), isNull(verificationResults.id)));
           for (const { itemId, ...run } of open) runs.set(itemId, run);
         }
+        const [ciRun] = await tx
+          .insert(ciRuns)
+          .values({
+            projectId,
+            pipeline,
+            branch,
+            commit,
+            buildUrl,
+            passed: results.filter((r) => r.outcome === "pass").length,
+            failed: results.filter((r) => r.outcome === "fail").length,
+            skipped: reported.filter((t) => t.outcome === "skipped").length,
+            unmatched: unmatched.length,
+            unmatchedNames: unmatched.slice(0, 200),
+            createdBy: userId,
+          })
+          .returning({ id: ciRuns.id });
+        if (!ciRun) throw new Error("ci run insert returned no row");
         for (const result of results) {
           const item = testCases.get(result.uid);
           if (!item) continue;
@@ -448,6 +486,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
               source: "junit",
               recordedBy: userId,
               runId: run?.id ?? null,
+              ciRunId: ciRun.id,
             })
             .returning({ id: verificationResults.id });
           if (!row) throw new Error("result insert returned no row");
@@ -461,10 +500,15 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
           projectId,
           label: `${results.length} ${results.length === 1 ? "result" : "results"}`,
         });
-        return { runs: new Set(runs.keys()) };
+        await audit(tx, userId, "ci_run.create", "ci_run", ciRun.id, {
+          projectId,
+          label: pipeline || branch || "CI run",
+        });
+        return { runs: new Set(runs.keys()), ciRunId: ciRun.id };
       });
       if (filled.error) return reply.code(filled.error[0]).send({ error: filled.error[1] });
       return reply.code(201).send({
+        ciRunId: filled.ciRunId,
         // `run: true` says the result finished a run of the cycle.
         recorded: results.map(({ uid, outcome }) => ({
           uid,
@@ -475,6 +519,137 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
         unmatched: unmatched.slice(0, 200),
         unmatchedCount: unmatched.length,
       });
+    },
+  );
+
+  // CI runs of a project, newest first, optionally of one pipeline or branch.
+  app.get(
+    "/api/projects/:projectId/ci-runs",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: param("projectId"),
+        querystring: {
+          type: "object",
+          properties: { pipeline: { type: "string" }, branch: { type: "string" } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { projectId } = req.params as { projectId: string };
+      const { pipeline, branch } = req.query as { pipeline?: string; branch?: string };
+      if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
+      const mine = eq(ciRuns.projectId, projectId);
+      const runs = await db
+        .select({
+          id: ciRuns.id,
+          pipeline: ciRuns.pipeline,
+          branch: ciRuns.branch,
+          commit: ciRuns.commit,
+          buildUrl: ciRuns.buildUrl,
+          passed: ciRuns.passed,
+          failed: ciRuns.failed,
+          skipped: ciRuns.skipped,
+          unmatched: ciRuns.unmatched,
+          createdBy: users.name,
+          createdAt: ciRuns.createdAt,
+        })
+        .from(ciRuns)
+        .innerJoin(users, eq(users.id, ciRuns.createdBy))
+        .where(
+          and(
+            mine,
+            pipeline === undefined ? undefined : eq(ciRuns.pipeline, pipeline),
+            branch === undefined ? undefined : eq(ciRuns.branch, branch),
+          ),
+        )
+        .orderBy(desc(ciRuns.createdAt))
+        .limit(200);
+      // For the filters: every pipeline and branch the project has seen.
+      const names = await db
+        .selectDistinct({ pipeline: ciRuns.pipeline, branch: ciRuns.branch })
+        .from(ciRuns)
+        .where(mine);
+      return {
+        runs,
+        pipelines: [...new Set(names.map((n) => n.pipeline))].sort(),
+        branches: [...new Set(names.map((n) => n.branch))].sort(),
+      };
+    },
+  );
+
+  // One upload: the results it recorded, each with the requirements its test case verifies, and the unmatched names.
+  app.get(
+    "/api/ci-runs/:ciRunId",
+    { onRequest: requireUser, schema: { params: param("ciRunId") } },
+    async (req, reply) => {
+      const { ciRunId } = req.params as { ciRunId: string };
+      const projectId = await access(req, reply, { ciRunId }, "viewer");
+      if (!projectId) return reply;
+      const [run] = await db
+        .select({
+          id: ciRuns.id,
+          pipeline: ciRuns.pipeline,
+          branch: ciRuns.branch,
+          commit: ciRuns.commit,
+          buildUrl: ciRuns.buildUrl,
+          passed: ciRuns.passed,
+          failed: ciRuns.failed,
+          skipped: ciRuns.skipped,
+          unmatched: ciRuns.unmatched,
+          unmatchedNames: ciRuns.unmatchedNames,
+          createdBy: users.name,
+          createdAt: ciRuns.createdAt,
+        })
+        .from(ciRuns)
+        .innerJoin(users, eq(users.id, ciRuns.createdBy))
+        .where(eq(ciRuns.id, ciRunId));
+      if (!run) return reply.code(404).send({ error: "CI run not found" });
+      const rows = await db
+        .select({
+          id: verificationResults.id,
+          itemId: verificationResults.itemId,
+          outcome: verificationResults.outcome,
+          revision: verificationResults.revision,
+          note: verificationResults.note,
+        })
+        .from(verificationResults)
+        .where(eq(verificationResults.ciRunId, ciRunId))
+        .orderBy(verificationResults.createdAt);
+      const items = new Map((await currentItems(db, projectId)).map((i) => [i.id, i]));
+      const types = await db
+        .select({ id: linkTypes.id })
+        .from(linkTypes)
+        .where(and(eq(linkTypes.projectId, projectId), eq(linkTypes.role, "verifies")));
+      const verifying = new Set(types.map((t) => t.id));
+      const tested = new Set(rows.map((r) => r.itemId));
+      const requirementsOf = new Map<string, string[]>();
+      for (const link of await liveLinks(db, projectId)) {
+        if (!verifying.has(link.typeId) || !tested.has(link.downstreamId) || !items.has(link.upstreamId)) continue;
+        requirementsOf.set(link.downstreamId, [...(requirementsOf.get(link.downstreamId) ?? []), link.upstreamId]);
+      }
+      const wanted = [...new Set([...tested, ...[...requirementsOf.values()].flat()])];
+      const names = wanted.length
+        ? await db
+            .selectDistinctOn([itemRevisions.itemId], { itemId: itemRevisions.itemId, name: itemRevisions.name })
+            .from(itemRevisions)
+            .where(inArray(itemRevisions.itemId, wanted))
+            .orderBy(itemRevisions.itemId, desc(itemRevisions.number))
+        : [];
+      const nameOf = new Map(names.map((n) => [n.itemId, n.name]));
+      return {
+        run,
+        results: rows.map((r) => ({
+          ...r,
+          uid: items.get(r.itemId)?.uid ?? null,
+          name: nameOf.get(r.itemId) ?? "",
+          requirements: [...new Set(requirementsOf.get(r.itemId) ?? [])].map((id) => ({
+            id,
+            uid: items.get(id)?.uid ?? null,
+            name: nameOf.get(id) ?? "",
+          })),
+        })),
+      };
     },
   );
 }

@@ -8,6 +8,7 @@ import {
   attributeDefinitions,
   auditEvents,
   baselines,
+  ciRuns,
   comments,
   externalReferences,
   integrations,
@@ -53,6 +54,7 @@ export type Where = {
   itemTypeId?: string;
   fieldId?: string;
   linkTypeId?: string;
+  ciRunId?: string;
 };
 
 async function projectOf(db: Reader, where: Where): Promise<string | undefined> {
@@ -119,6 +121,9 @@ async function projectOf(db: Reader, where: Where): Promise<string | undefined> 
   }
   if (where.webhookId) {
     return (await db.select({ id: webhooks.projectId }).from(webhooks).where(eq(webhooks.id, where.webhookId)))[0]?.id;
+  }
+  if (where.ciRunId) {
+    return (await db.select({ id: ciRuns.projectId }).from(ciRuns).where(eq(ciRuns.id, where.ciRunId)))[0]?.id;
   }
   if (where.integrationId) {
     return (
@@ -195,9 +200,11 @@ export function whereFromParams(params: Record<string, string | undefined>): Whe
                                   ? { fieldId: params.fieldId }
                                   : params.linkTypeId
                                     ? { linkTypeId: params.linkTypeId }
-                                    : params.projectId
-                                      ? { projectId: params.projectId }
-                                      : null;
+                                    : params.ciRunId
+                                      ? { ciRunId: params.ciRunId }
+                                      : params.projectId
+                                        ? { projectId: params.projectId }
+                                        : null;
   return where && Object.values(where).every((id) => UUID.test(id)) ? where : null;
 }
 
