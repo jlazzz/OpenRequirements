@@ -34,7 +34,7 @@ export type ImportResult = {
 
 /** A long first line, cut to fit an item name. Requirements often have no heading: the start of the text names them. */
 export const nameFromText = (text: string) => {
-  const line = text.trim().split("\n")[0]?.trim() ?? "";
+  const line = text.trim().split("\n")[0]?.replace(/\s+/g, " ").trim() ?? "";
   return line.length > 100 ? `${line.slice(0, 99)}…` : line;
 };
 

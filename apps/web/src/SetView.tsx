@@ -43,7 +43,7 @@ import { RouterAnchor } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
 import { childrenOf, itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
-import { ReqifExport } from "./Reqif.tsx";
+import { ExportMenu } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
 import { TraceView } from "./TraceView.tsx";
@@ -84,7 +84,8 @@ function Container({ data, set, folder, title }: ContainerProps) {
 
   return (
     <Stack gap="sm">
-      <Group justify="space-between" align="flex-start">
+      {/* Printed Reading view has its own cover page instead. */}
+      <Group justify="space-between" align="flex-start" className={view === "reading" ? "print-hide" : undefined}>
         <div>
           <Title order={1} size="h2">
             {title}
@@ -112,7 +113,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
               { value: "trace", label: "Trace" },
             ]}
           />
-          {!folder && <ReqifExport path={`sets/${set.id}/reqif`} />}
+          {!folder && <ExportMenu path={`sets/${set.id}`} />}
           {editor && folder && <NodeActions data={data} node={folder} />}
           {editor && (
             <Button variant="default" onClick={() => setAdding("folder")}>
@@ -135,7 +136,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
       )}
       {count === 0 && <Text c="dimmed">No items here yet.</Text>}
       {count > 0 && list.data && view === "reading" && (
-        <ReadingView data={data} list={list.data} containerId={folder?.id ?? set.id} />
+        <ReadingView data={data} list={list.data} containerId={folder?.id ?? set.id} title={title} />
       )}
       {count > 0 && view === "trace" && (
         <TraceView data={data} set={set} containerId={folder?.id ?? set.id} title={title} />
@@ -166,6 +167,9 @@ function Container({ data, set, folder, title }: ContainerProps) {
             setId={set.id}
             parentId={folder?.id}
             fields={list.data.fields}
+            folders={data.nodes.filter((n) => n.setId === set.id && n.kind === "folder")}
+            uids={new Set(list.data.items.map((i) => i.uid))}
+            texts={new Map(list.data.items.map((i) => [i.uid, docToText(i.description)]))}
             onDone={() => setImporting(false)}
           />
         )}
@@ -175,8 +179,20 @@ function Container({ data, set, folder, title }: ContainerProps) {
 }
 
 /** Reads like a document: folder names as headings, then each item's name and description in order. */
-function ReadingView({ data, list, containerId }: { data: ProjectDetail; list: SetItems; containerId: string }) {
+function ReadingView({
+  data,
+  list,
+  containerId,
+  title,
+}: {
+  data: ProjectDetail;
+  list: SetItems;
+  containerId: string;
+  title: string;
+}) {
   const projectId = data.project.id;
+  // The running header of printed pages. A CSS string: backslashes and quotes escaped.
+  const header = `${data.project.name} · ${title}`.replace(/[\\"]/g, "\\$&").replace(/\s+/g, " ");
   const details = new Map(list.items.map((item) => [item.id, item]));
   const level = (id: string, depth: number) =>
     childrenOf(data.nodes, id).map((node) =>
@@ -189,7 +205,7 @@ function ReadingView({ data, list, containerId }: { data: ProjectDetail; list: S
         </section>
       ) : (
         <article key={node.id} style={{ marginBottom: 16 }}>
-          <Group gap="xs" wrap="nowrap" align="baseline">
+          <Group gap="xs" wrap="nowrap" align="baseline" className="print-keep-next">
             <Text fw={600}>
               <RouterAnchor to="/projects/$projectId/items/$nodeId" params={{ projectId, nodeId: node.id }} inherit>
                 {node.uid}
@@ -211,6 +227,12 @@ function ReadingView({ data, list, containerId }: { data: ProjectDetail; list: S
         border: "1px solid var(--mantine-color-default-border)",
       }}
     >
+      <style>{`@media print { @page { @top-center { content: "${header}"; } } }`}</style>
+      <div className="print-only print-cover">
+        <Title order={1}>{title}</Title>
+        <Text size="lg">{data.project.name}</Text>
+        <Text c="dimmed">Printed {new Date().toLocaleDateString()}</Text>
+      </div>
       {level(containerId, 0)}
     </div>
   );
@@ -413,12 +435,23 @@ function ListTable({
   const itemCount = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
   const things = itemCount(bulkItems.length);
 
+  // The folders between the shown container and an item, as an import reads them back: "Power / Supply".
+  const folderPath = (id: string) => {
+    const names: string[] = [];
+    for (let at = data.nodes.find((n) => n.id === id)?.parentId; at && at !== containerId; ) {
+      const folder = data.nodes.find((n) => n.id === at);
+      names.unshift(folder?.name ?? "");
+      at = folder?.parentId;
+    }
+    return names.join(" / ");
+  };
   // Exports what the table shows now: the filtered, sorted rows and the chosen columns, plus each description as text.
   const exportCsv = () => {
     const csv = toCsv([
-      ["ID", "Name", "Description", ...shown.map((c) => c.label)],
+      ["ID", "Folder", "Name", "Description", ...shown.map((c) => c.label)],
       ...rows.map((r) => [
         r.item.uid,
+        folderPath(r.item.id),
         r.name,
         docToText(r.item.description),
         ...shown.map((c) => {

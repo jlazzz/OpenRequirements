@@ -1,13 +1,64 @@
 /* biome-ignore-all lint/complexity/noImportantStyles: these must win over the inline styles the components set */
 /* Printing, which is also how a page is saved as a PDF: only the content, flowing over as many pages as it needs. */
+.print-only {
+  display: none;
+}
 @media print {
+  @page {
+    margin: 2cm 1.8cm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 9pt;
+      color: #595959;
+    }
+  }
+  /* The cover page has no running header or page number. */
+  @page :first {
+    @top-center {
+      content: none;
+    }
+    @bottom-right {
+      content: none;
+    }
+  }
+  @page {
+    @top-center {
+      font-size: 9pt;
+      color: #595959;
+    }
+  }
   .print-hide {
     display: none !important;
+  }
+  .print-only {
+    display: block !important;
   }
   .print-flow {
     height: auto !important;
     overflow: visible !important;
     display: block !important;
     padding: 0 !important;
+  }
+  .print-cover {
+    padding-top: 30vh;
+    break-after: page;
+  }
+  /* A heading or an item's title is never the last line of a page. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .print-keep-next {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+  tr,
+  img {
+    break-inside: avoid;
+  }
+  img {
+    max-width: 100%;
   }
 }

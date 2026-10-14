@@ -1,6 +1,7 @@
 import {
   guessReqifMapping,
   guessReqifTargets,
+  type ImportResult,
   mapReqif,
   type ReqifMapping,
   type ReqifTargetSet,
@@ -14,36 +15,39 @@ import { api, canEdit, type SetItems, uploadImage } from "./api.ts";
 import { useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 
-/** Downloads a set or a baseline as ReqIF. `path` is the API path without the format. */
-export function ReqifExport({ path }: { path: string }) {
+/** Downloads a set or a baseline as Word or ReqIF. `path` is "sets/<id>" or "baselines/<id>". */
+export function ExportMenu({ path }: { path: string }) {
   return (
     <Menu>
       <Menu.Target>
-        <Button variant="default">Export ReqIF</Button>
+        <Button variant="default">Export</Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item component="a" href={`/api/${path}?format=reqifz`} download>
-          .reqifz, with images
+        <Menu.Item component="a" href={`/api/${path}/docx`} download>
+          Word document (.docx)
         </Menu.Item>
-        <Menu.Item component="a" href={`/api/${path}`} download>
-          .reqif, text only
+        <Menu.Item component="a" href={`/api/${path}/reqif?format=reqifz`} download>
+          ReqIF with images (.reqifz)
+        </Menu.Item>
+        <Menu.Item component="a" href={`/api/${path}/reqif`} download>
+          ReqIF, text only (.reqif)
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>
   );
 }
 
-const IMAGE_TYPES: Record<string, string> = {
+export const IMAGE_TYPES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   gif: "image/gif",
   webp: "image/webp",
 };
-const MAX_IMAGE = 5 * 1024 * 1024;
+export const MAX_IMAGE = 5 * 1024 * 1024;
 const MAX_NODES = 5000;
 // Stands in for an image while the mapping is previewed; nothing is uploaded until the import runs.
-const PLACEHOLDER = "/api/attachments/00000000-0000-4000-8000-000000000000";
+export const PLACEHOLDER = "/api/attachments/00000000-0000-4000-8000-000000000000";
 
 /** A chosen file: its content, the files beside it in a .reqifz archive, and the folder the .reqif file sat in. */
 type Loaded = { reqif: Reqif; files: Map<string, Uint8Array>; folder: string; notes: string[] };
@@ -149,11 +153,8 @@ export function ReqifImportPage() {
         );
       }
       const final = mapReqif(loaded.reqif, mapping, targets, (data) => stored.get(locate(loaded, data) ?? "") ?? null);
-      const result = await api<{ created: { items: number; folders: number; links: number } }>(
-        `projects/${projectId}/import`,
-        final.body,
-      );
-      return { ...result.created, warnings: final.warnings };
+      const result = await api<ImportResult>(`projects/${projectId}/import`, final.body);
+      return { ...result.created, changed: result.changed, unchanged: result.unchanged, warnings: final.warnings };
     },
     onSuccess: () => {
       setLoaded(null);
@@ -177,7 +178,7 @@ export function ReqifImportPage() {
         </Title>
         <Text c="dimmed" size="sm">
           Reads a .reqif or .reqifz file from DOORS, Polarion or another tool. Nothing is created until you press
-          Import. Items are added; existing items are never changed.
+          Import. Items this project imported or exported before are found again: a changed one gets a new version.
         </Text>
       </div>
       <FileInput
@@ -197,7 +198,8 @@ export function ReqifImportPage() {
       {run.isSuccess && (
         <Alert color="green" title="Imported" role="status">
           Created {plural(run.data.items, "item")}, {plural(run.data.folders, "folder")} and{" "}
-          {plural(run.data.links, "relationship")}.
+          {plural(run.data.links, "relationship")}. Changed {plural(run.data.changed, "item")}; {run.data.unchanged}{" "}
+          already as in the file.
           {run.data.warnings.map((warning) => (
             <Text key={warning} size="sm">
               {warning}
@@ -352,8 +354,8 @@ export function ReqifImportPage() {
             <Text size="sm">Choose a set for at least one specification.</Text>
           ) : (
             <Text size="sm">
-              This will create {plural(preview.items, "item")}, {plural(preview.folders, "folder")} and{" "}
-              {plural(preview.body.links.length, "relationship")}.
+              The file maps to {plural(preview.items, "item")}, {plural(preview.folders, "folder")} and{" "}
+              {plural(preview.body.links.length, "relationship")}. Those already here are updated, not added again.
             </Text>
           )}
           {tooMany && (

@@ -31,7 +31,7 @@ import {
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
-import { ReqifExport } from "./Reqif.tsx";
+import { ExportMenu } from "./Reqif.tsx";
 import { RichView } from "./RichView.tsx";
 import { StatusBadge } from "./Status.tsx";
 import { useVerification, VerificationBadge } from "./Verification.tsx";
@@ -250,7 +250,7 @@ export function BaselinePage() {
             checked={differencesOnly}
             onChange={(e) => setDifferencesOnly(e.currentTarget.checked)}
           />
-          <ReqifExport path={`baselines/${baseline.id}/reqif`} />
+          <ExportMenu path={`baselines/${baseline.id}`} />
         </Group>
       </Group>
 
