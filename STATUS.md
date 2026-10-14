@@ -12,6 +12,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 - J5 slice 2, baseline to baseline: `GET /api/baselines/:baselineId/compare?with=` reports item, relationship (added, removed, became or stopped being suspect) and frozen verification differences; a "Compare with another baseline" picker on the baseline page (server test) (2026-10-14)
 - J5 slice 6, exports: the traceability matrix exports as CSV and Word from the rows on screen, a baseline exports as CSV with each item's frozen verification status and suspect relationships (new route `/api/baselines/:baselineId/csv`, entry in the baseline Export menu). `toDocx` takes an optional table. No new dependency (2026-10-14)
+- J5 slice 3: Trace view filters by relationship type and Status, traces a baseline (relationships and suspect flags as frozen), and draws 100 items at a time with "Show more". The project home page lists per set: items, not covered, suspect, verification. No new route or migration (2026-10-14)
 - Jama spreadsheet import fixed: an ID column is guessed as the UID only when its values are UIDs of the set, and HTML description cells come in as formatted text. The Jama sample CSV imports with the guessed mapping (server test) (2026-10-14)
 - Adoption planning and demo: roadmap track A (migration, compliance evidence, enterprise IT gates, owner's work, documentation) as bundles J, K, L after I. "Spacecraft" project template. Kestrel-EO demo project built through the API by `npm run demo` (364 items, 499 relationships, baselines, signed and open reviews, cycles with evidence, CI results with a flaky test), [user guide](docs/user-guide/demo-project.md). Synthetic DOORS, DOORS Next, Polarion, Jama and Word files in `samples/import`, imported through the import route: ReqIF and re-import work; Jama's "ID" column and HTML cells needed fixes (roadmap A1, since fixed) (2026-10-14)
 - Bundle H built: OpenAPI document at `/api/openapi.json` and an API page, token expiry and "last used", webhooks fed by every audited write with signed JSON and retries, references from items to Jira, GitHub, GitLab and documents with open or closed read through per-project connections, `@req` tag scanner for CI (`packages/cli`), sign-in through OpenID Connect, signing a review by signing in again at the provider, backup format version 7, [ADR 0016](docs/adr/0016-api-webhooks-references-oidc.md), [user guide](docs/user-guide/integrations.md), [install guide](docs/user-guide/install.md) updated. No new dependency. Checked in a browser on a scratch instance with a fake identity provider, receiver and GitHub: SSO sign-in, webhook deliveries, a reference turning Open, token expiry, the API page; the scanner run twice against it (2026-10-14)
@@ -49,6 +50,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 - J5 slice 2 (baseline to baseline compare): built, waiting for the owner's test. Checkpoint: pick another baseline on a baseline page.
 - **J5 slice 6 (matrix and baseline exports): built, waiting for the owner's test.** Not checked in a browser.
+- **J5 slice 3 (trace filters, project dashboard): built, waiting for the owner's test.** Checkpoint: filter a trace by type and Status, trace a baseline, read the project home page.
 - **Bundle H (API docs, webhooks, references, connections, OIDC): built, waiting for the owner's test.** Checkpoint: a webhook fires on a save; log in through an identity provider. Bundle I does not start before that feedback. Built at the owner's request before their test of bundles F and G.
 - Bundle G (Word, import upgrades, ReqIF re-import): built, waiting for the owner's test. Checkpoint: export a spec to Word, re-import a ReqIF file.
 - Bundle F (HTTPS, edit conflicts, notifications, email, account recovery): built, waiting for the owner's test. Checkpoint: two browsers edit one item; an email arrives for a mention.
@@ -87,7 +89,7 @@ Known gaps left for later milestones or owner decision:
 - Edit conflicts: a description both people changed is kept whole from one side; there is no merge inside rich text.
 - Equations are typed as LaTeX in a browser prompt. Multi-select fields are not editable in List view.
 - Suspect links: no notification when a link becomes suspect, no "suspect only" filter in List view, and baseline compare does not report suspect differences. The review page links to the changed item; its version compare is opened from there by hand.
-- Trace view: no filter by relationship type or state, no trace of a baseline, rows are not capped for very densely linked sets. Coverage is not shown on the project home page.
+- Trace view: tracing a baseline shows current names and states, and drops items deleted since. The server still walks every item of the set; "show more" only limits the rows drawn.
 - Evidence: cannot be removed once attached, by design. File names keep only letters, digits and `. ( ) -`; other characters become `_`. Not checked in a browser: the file chooser buttons (drop and paste were).
 - Bulk actions: at most 500 items per request. No bulk change of multi-select or Steps fields. No bulk action across sets.
 - Verification: a result goes out of date on any new version of the requirement, with no "still valid" confirmation. The relationship type is found by the name "Verified by". Tokens do not expire and show no "last used" date.
@@ -101,6 +103,7 @@ Known gaps left for later milestones or owner decision:
 ## Open decisions
 
 - Project name
+- Project home screen: a per-set dashboard was built (J5 slice 3); the owner confirms it or asks for another at the checkpoint, then DESIGN.md section 11 is settled
 - One design detail in [docs/DESIGN.md](docs/DESIGN.md) section 11: the home screen
 - Beachhead confirmation after interviews
 - Hosting for a public demo instance

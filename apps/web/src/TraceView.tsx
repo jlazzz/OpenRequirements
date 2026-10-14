@@ -3,6 +3,7 @@ import { tracePaths } from "@app/shared";
 import { Alert, Button, Group, NativeSelect, Table, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   api,
   download,
@@ -22,6 +23,7 @@ import { OutcomeBadge, STATUSES, statusText, useVerification, VerificationBadge 
 
 type Props = { data: ProjectDetail; set: ProjectSet; containerId: string; title: string };
 const LEVELS = ["0", "1", "2", "3", "4"];
+const PAGE = 100;
 
 /**
  * Trace view: one block of rows per item, its upstream items in columns to the left and its downstream items
@@ -34,21 +36,56 @@ export function TraceView({ data, set, containerId, title }: Props) {
   const up = search.up ?? 1;
   const down = search.down ?? 2;
   const trace = useQuery({
-    queryKey: ["projects", projectId, "trace", set.id, up, down, search.target],
-    queryFn: () =>
-      api<SetTrace>(`sets/${set.id}/trace?up=${up}&down=${down}${search.target ? `&target=${search.target}` : ""}`),
+    queryKey: ["projects", projectId, "trace", set.id, up, down, search.target, search.linkType, search.baseline],
+    queryFn: () => {
+      const q = new URLSearchParams({ up: String(up), down: String(down) });
+      if (search.target) q.set("target", search.target);
+      if (search.linkType) q.set("linkTypeId", search.linkType);
+      if (search.baseline) q.set("baselineId", search.baseline);
+      return api<SetTrace>(`sets/${set.id}/trace?${q}`);
+    },
   });
+  const baselines = useQuery({
+    queryKey: ["projects", projectId, "baselines"],
+    queryFn: () => api<{ baselines: { id: string; name: string }[] }>(`projects/${projectId}/baselines`),
+  });
+  const [shown, setShown] = useState(PAGE);
   const links = useLinks(projectId);
   const verification = useVerification(projectId).data;
   const testSets = new Set(data.sets.filter(isTestSet).map((s) => s.id));
-  const go = (change: { up?: number; down?: number; target?: string }) =>
-    navigate({ to: ".", search: { view: "trace", up, down, target: search.target, ...change } });
+  const go = (change: {
+    up?: number;
+    down?: number;
+    target?: string;
+    linkType?: string;
+    baseline?: string;
+    status?: string;
+  }) => {
+    setShown(PAGE);
+    navigate({
+      to: ".",
+      search: {
+        view: "trace",
+        up,
+        down,
+        target: search.target,
+        linkType: search.linkType,
+        baseline: search.baseline,
+        status: search.status,
+        ...change,
+      },
+    });
+  };
 
   const nodeOf = new Map(data.nodes.map((n) => [n.id, n]));
-  const suspect = new Set((links.data?.links ?? []).filter(isSuspect).map((l) => l.id));
+  // Tracing a baseline uses what was suspect then, not now.
+  const suspect = new Set(trace.data?.suspectLinkIds ?? (links.data?.links ?? []).filter(isSuspect).map((l) => l.id));
   const traced = new Map((trace.data?.rows ?? []).map((r) => [r.itemId, r]));
   // Explorer order, and only the items of the folder when a folder is open.
-  const blocks = itemsWithin(data.nodes, containerId).flatMap((item) => {
+  const allItems = itemsWithin(data.nodes, containerId);
+  const statuses = [...new Set(allItems.map((i) => i.status).filter((x): x is string => Boolean(x)))].sort();
+  const blocks = allItems.flatMap((item) => {
+    if (search.status && item.status !== search.status) return [];
     const row = traced.get(item.id);
     if (!row) return [];
     const upstream = tracePaths(row.upstream);
@@ -167,6 +204,30 @@ export function TraceView({ data, set, containerId, title }: Props) {
           value={target?.id ?? ""}
           onChange={(e) => go({ target: e.currentTarget.value })}
         />
+        <NativeSelect
+          label="Relationship type"
+          data={[
+            { value: "", label: "All" },
+            ...(links.data?.linkTypes ?? []).map((t) => ({ value: t.id, label: t.name })),
+          ]}
+          value={search.linkType ?? ""}
+          onChange={(e) => go({ linkType: e.currentTarget.value || undefined })}
+        />
+        <NativeSelect
+          label="Status"
+          data={[{ value: "", label: "Any" }, ...statuses]}
+          value={search.status ?? ""}
+          onChange={(e) => go({ status: e.currentTarget.value || undefined })}
+        />
+        <NativeSelect
+          label="Trace of"
+          data={[
+            { value: "", label: "Current state" },
+            ...(baselines.data?.baselines ?? []).map((b) => ({ value: b.id, label: b.name })),
+          ]}
+          value={search.baseline ?? ""}
+          onChange={(e) => go({ baseline: e.currentTarget.value || undefined })}
+        />
         <Button variant="default" onClick={exportCsv} disabled={!trace.data}>
           Export CSV
         </Button>
@@ -205,7 +266,7 @@ export function TraceView({ data, set, containerId, title }: Props) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {blocks.flatMap((b) => {
+                {blocks.slice(0, shown).flatMap((b) => {
                   const upstream = padded(b.upstream, b.height);
                   const downstream = padded(b.downstream, b.height);
                   return Array.from({ length: b.height }, (_, i) => (
@@ -224,6 +285,11 @@ export function TraceView({ data, set, containerId, title }: Props) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+          {blocks.length > shown && (
+            <Button variant="default" className="print-hide" onClick={() => setShown(shown + PAGE)}>
+              Show more ({shown} of {blocks.length} items shown)
+            </Button>
+          )}
         </>
       )}
     </>

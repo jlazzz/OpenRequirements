@@ -731,6 +731,17 @@ test("trace view, coverage and impact analysis follow relationships across sets 
   const other = (await post("/api/projects", { name: "Other", templateId: "standard" }, cookie)).json().project;
   const foreign = (await get(`/api/projects/${other.id}`, cookie)).json().sets[0].id;
   expect((await get(`/api/sets/${sys.id}/trace?target=${foreign}`, cookie)).statusCode).toBe(400);
+
+  // Filter by relationship type; trace a baseline, which keeps the relationships it froze.
+  const types = (await get(`/api/projects/${project.id}/links`, cookie)).json().linkTypes;
+  const otherType = types.find((t: { id: string }) => t.id !== typeId);
+  expect((await trace(un.id, `?linkTypeId=${typeId}`)).coverage.noDownstream).toBe(0);
+  if (otherType) expect((await trace(un.id, `?linkTypeId=${otherType.id}`)).coverage.noDownstream).toBe(1);
+  const frozen = (await post(`/api/projects/${project.id}/baselines`, { name: "Trace" }, cookie)).json().id;
+  await send("DELETE", `/api/links/${nr1}`, cookie);
+  expect((await trace(un.id, `?baselineId=${frozen}`)).rows[0].downstream).toHaveLength(2);
+  expect((await trace(un.id)).rows[0].downstream).toHaveLength(1);
+  expect((await get(`/api/sets/${un.id}/trace?baselineId=${crypto.randomUUID()}`, cookie)).statusCode).toBe(400);
 });
 
 test("an image can be uploaded, embedded in a description and read back; other files are refused", async () => {

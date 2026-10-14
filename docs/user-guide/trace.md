@@ -34,3 +34,11 @@ A project made from the Standard template starts with Verification Tests as that
 **Downstream** lists everything that may need to change if this item changes, at any depth, as a tree. **Upstream** lists everything the item derives from. Each line shows the item's set, the relationship type, its state and whether the relationship is suspect.
 
 An item reached by more than one route is expanded the first time only, and marked "shown above" after that.
+
+## Filters, baselines and long traces
+
+Above the Trace view, **Relationship type** follows one type only, **Status** keeps the items in that state, and **Trace of** shows the relationships a baseline froze, with the suspect marks it had then. The view draws 100 items at a time; choose **Show more** for the next 100. The filters are in the address, so a trace can be shared as a link.
+
+## Project home
+
+The project home page lists each set with its item count, how many items are not covered, how many relationships are suspect, and its verification status.

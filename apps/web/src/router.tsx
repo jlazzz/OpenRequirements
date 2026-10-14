@@ -41,11 +41,22 @@ const level = (value: unknown) =>
 // The Trace view keeps its levels and coverage target in the URL, so a trace can be shared as a link.
 const viewSearch = (
   search: Record<string, unknown>,
-): { view?: "reading" | "trace"; up?: number; down?: number; target?: string } => ({
+): {
+  view?: "reading" | "trace";
+  up?: number;
+  down?: number;
+  target?: string;
+  linkType?: string;
+  baseline?: string;
+  status?: string;
+} => ({
   view: search.view === "reading" || search.view === "trace" ? search.view : undefined,
   up: level(search.up),
   down: level(search.down),
   target: typeof search.target === "string" ? search.target : undefined,
+  linkType: typeof search.linkType === "string" ? search.linkType : undefined,
+  baseline: typeof search.baseline === "string" ? search.baseline : undefined,
+  status: typeof search.status === "string" ? search.status : undefined,
 });
 const projectChildren = [
   createRoute({ ...inProject, path: "/", component: ProjectHome }),

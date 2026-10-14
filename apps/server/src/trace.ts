@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
-import { itemTypes, nodes, sets } from "./db/schema.ts";
+import { baselineEntries, baselineLinks, baselines, itemTypes, links, nodes, sets } from "./db/schema.ts";
 import { traceGraph } from "./domain/trace.ts";
 import { liveLinks } from "./links.ts";
 
@@ -28,13 +28,26 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
           type: "object",
           additionalProperties: false,
           // `target` is the set that counts as "tested". Left out, it is the first set of test cases.
-          properties: { up: { ...levels, default: 1 }, down: { ...levels, default: 2 }, target: uuid },
+          // `linkTypeId` follows one relationship type only. `baselineId` traces the relationships and items of a baseline.
+          properties: {
+            up: { ...levels, default: 1 },
+            down: { ...levels, default: 2 },
+            target: uuid,
+            linkTypeId: uuid,
+            baselineId: uuid,
+          },
         },
       },
     },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
-      const query = req.query as { up: number; down: number; target?: string };
+      const query = req.query as {
+        up: number;
+        down: number;
+        target?: string;
+        linkTypeId?: string;
+        baselineId?: string;
+      };
       const projectId = await access(req, reply, { setId }, "viewer");
       if (!projectId) return reply;
 
@@ -49,9 +62,43 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
         : projectSets.find((s) => s.role === "test");
       if (query.target && !target) return reply.code(400).send({ error: "The target set is not in this project" });
 
-      const items = await liveItems(projectId);
+      let items = await liveItems(projectId);
+      let traced: { id: string; typeId: string; upstreamId: string; downstreamId: string }[] = await liveLinks(
+        db,
+        projectId,
+      );
+      let suspectLinkIds: string[] | null = null;
+      if (query.baselineId) {
+        const [baseline] = await db.select().from(baselines).where(eq(baselines.id, query.baselineId));
+        if (baseline?.projectId !== projectId)
+          return reply.code(400).send({ error: "The baseline is not in this project" });
+        const inBaseline = new Set(
+          (
+            await db
+              .select({ id: baselineEntries.nodeId })
+              .from(baselineEntries)
+              .where(eq(baselineEntries.baselineId, baseline.id))
+          ).map((e) => e.id),
+        );
+        items = items.filter((i) => inBaseline.has(i.id));
+        // What the baseline froze, including relationships deleted since.
+        const frozen = await db
+          .select({
+            id: links.id,
+            typeId: links.linkTypeId,
+            upstreamId: links.upstreamId,
+            downstreamId: links.downstreamId,
+            suspect: baselineLinks.suspect,
+          })
+          .from(baselineLinks)
+          .innerJoin(links, eq(links.id, baselineLinks.linkId))
+          .where(eq(baselineLinks.baselineId, baseline.id));
+        suspectLinkIds = frozen.filter((l) => l.suspect).map((l) => l.id);
+        traced = frozen.filter((l) => inBaseline.has(l.upstreamId) && inBaseline.has(l.downstreamId));
+      }
+      if (query.linkTypeId) traced = traced.filter((l) => l.typeId === query.linkTypeId);
       const targets = new Set(items.filter((i) => i.setId === target?.id).map((i) => i.id));
-      const graph = traceGraph(await liveLinks(db, projectId));
+      const graph = traceGraph(traced);
       // shortcut: every route to an item is listed in full, which is fine for 4 levels; cap the rows if a set is linked densely enough to matter
       const rows = items
         .filter((i) => i.setId === setId)
@@ -64,6 +111,7 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
         }));
       return {
         targetSetId: target?.id ?? null,
+        suspectLinkIds,
         coverage: {
           items: rows.length,
           noDownstream: rows.filter((r) => !r.hasDownstream).length,

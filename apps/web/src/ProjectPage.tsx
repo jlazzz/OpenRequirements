@@ -1,12 +1,13 @@
-import { ActionIcon, Alert, Box, Button, Flex, Group, Stack, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Alert, Box, Button, Flex, Group, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { useLocalStorage } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { api, canEdit, isSuspect, type ProjectDetail, type TreeNode } from "./api.ts";
-import { RouterNavLink } from "./links.tsx";
+import { RouterAnchor, RouterNavLink } from "./links.tsx";
 import { useLinks } from "./Relationships.tsx";
 import { KindIcon, StatusDot } from "./Status.tsx";
+import { useVerification } from "./Verification.tsx";
 
 export function useProject() {
   const { projectId } = useParams({ from: "/projects/$projectId" });
@@ -281,6 +282,73 @@ export function ProjectPage() {
   );
 }
 
+/** Per set: how many items, how many are not covered, how many relationships are suspect, and verification status. */
+function Dashboard({ data }: { data: ProjectDetail }) {
+  const links = useLinks(data.project.id).data;
+  const verification = useVerification(data.project.id).data;
+  const rows = data.sets.map((set) => {
+    const items = data.nodes.filter((n) => n.setId === set.id && n.kind === "item");
+    const ids = new Set(items.map((i) => i.id));
+    const count = (status: string) => items.filter((i) => verification?.requirements[i.id]?.status === status).length;
+    const tests = verification ? items.filter((i) => verification.tests[i.id]) : [];
+    const suspect = (links?.links ?? []).filter(
+      (l) => isSuspect(l) && (ids.has(l.upstreamId) || ids.has(l.downstreamId)),
+    ).length;
+    return {
+      set,
+      items: items.length,
+      suspect,
+      tests: tests.length,
+      notCovered: count("not_covered"),
+      notRun: count("not_run"),
+      passing: count("passing"),
+      failing: count("failing"),
+    };
+  });
+  return (
+    <Table.ScrollContainer minWidth={560}>
+      <Table withTableBorder aria-label="Sets of this project">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Set</Table.Th>
+            <Table.Th>Items</Table.Th>
+            <Table.Th>Not covered</Table.Th>
+            <Table.Th>Suspect</Table.Th>
+            <Table.Th>Verification</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((r) => {
+            const verified = r.notCovered + r.notRun + r.passing + r.failing > 0;
+            return (
+              <Table.Tr key={r.set.id}>
+                <Table.Td>
+                  <RouterAnchor
+                    to="/projects/$projectId/sets/$setId"
+                    params={{ projectId: data.project.id, setId: r.set.id }}
+                  >
+                    {r.set.name}
+                  </RouterAnchor>
+                </Table.Td>
+                <Table.Td>{r.items}</Table.Td>
+                <Table.Td>{verified ? r.notCovered : "–"}</Table.Td>
+                <Table.Td c={r.suspect > 0 ? "orange.8" : undefined}>{r.suspect}</Table.Td>
+                <Table.Td>
+                  {verified
+                    ? `${r.passing} passing, ${r.failing} failing, ${r.notRun} not run`
+                    : r.tests > 0
+                      ? `${r.tests} with results`
+                      : "–"}
+                </Table.Td>
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
+
 export function ProjectHome() {
   const project = useProject();
   return (
@@ -289,6 +357,7 @@ export function ProjectHome() {
         {project.data?.project.name}
       </Title>
       <Text c="dimmed">Choose a set in the explorer on the left.</Text>
+      {project.data && <Dashboard data={project.data} />}
       {project.data?.role === "admin" && (
         <div>
           <Button

@@ -106,6 +106,8 @@ export type TraceNode = { itemId: string; linkId: string; children: TraceNode[];
 export type SetTrace = {
   /** The set whose items count as tests for coverage, if the project has one. */
   targetSetId: string | null;
+  /** Set when tracing a baseline: the relationships that were suspect then. */
+  suspectLinkIds: string[] | null;
   rows: {
     itemId: string;
     upstream: TraceNode[];
