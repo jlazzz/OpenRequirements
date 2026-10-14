@@ -1,4 +1,4 @@
-# 0024: Structure from the import file
+# 0025: Structure from the import file
 
 Date: 2026-10-14
 Status: Accepted

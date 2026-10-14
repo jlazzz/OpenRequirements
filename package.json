@@ -22,6 +22,7 @@
     "openapi": "UPDATE_OPENAPI=1 vitest run apps/server/src/integrations.test.ts -t OpenAPI",
     "demo": "node scripts/demo/spacecraft.ts",
     "dogfood": "node scripts/dogfood/dogfood.ts",
+    "qualification": "node scripts/qualification/qualification.ts",
     "perf": "node scripts/perf/perf.ts",
     "validation-pack": "node scripts/validation-pack/validation-pack.ts",
     "samples:import": "node scripts/samples/make-import-samples.ts",
