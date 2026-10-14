@@ -217,7 +217,7 @@ export function memberRoutes({
           // Takes over an account that a restored backup created; any other existing account stays untouched.
           .onConflictDoUpdate({
             target: users.email,
-            set: { name: body.name.trim(), passwordHash },
+            set: { name: body.name.trim(), passwordHash, passwordChangedAt: new Date() },
             setWhere: eq(users.passwordHash, NO_PASSWORD),
           })
           .returning({ id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin });

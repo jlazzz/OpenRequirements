@@ -86,6 +86,23 @@ ALLOW_PRIVATE_URLS=true
 
 Without `ALLOW_PRIVATE_URLS`, the server refuses to call `localhost`, `10.x`, `172.16–31.x`, `192.168.x` and similar addresses, so a project admin cannot reach inside your network through it.
 
+## Sign-in limits
+
+Three optional rules for regulated teams. Set them in the app's environment (`deploy/.env`); each is off when unset or `0`, which is how the app behaved before.
+
+| Variable | Effect |
+|---|---|
+| `LOGIN_LOCKOUT_ATTEMPTS` | Lock an account after this many failed sign-ins in a row |
+| `LOGIN_LOCKOUT_MINUTES` | How long the lock lasts. Default 15 |
+| `PASSWORD_MAX_AGE_DAYS` | Passwords expire after this many days. The person sets a new one with **Forgot password?**, or an administrator sends a reset link. Single sign-on accounts are not affected |
+| `SESSION_IDLE_MINUTES` | Sign people out after this many minutes without activity |
+
+A locked account gets the same "Wrong email or password" answer, even for the right password. A password reset unlocks it. With lockout on, failed sign-ins appear in the audit log.
+
+### Check the audit log
+
+Every audited change is chained to the one before it with a SHA-256 hash. As an administrator, open **Users**, then **Verify audit log**. It reports "Intact", or the first event that was changed or is missing. Events written before this feature existed, and events restored from a project backup, are counted but not covered. A person with full database access could still rewrite the whole chain; anchoring it outside the database is planned.
+
 ## Add people
 
 1. As the administrator, open **Users** and create an invitation for the person's email address.

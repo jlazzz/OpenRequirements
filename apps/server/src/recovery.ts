@@ -128,7 +128,7 @@ export function recoveryRoutes({
         if (!used) return null;
         const [row] = await tx
           .update(users)
-          .set({ passwordHash })
+          .set({ passwordHash, passwordChangedAt: new Date(), failedLogins: 0, lockedUntil: null })
           .where(and(eq(users.id, used.userId), isNull(users.deactivatedAt)))
           .returning({ id: users.id, email: users.email, name: users.name, isAdmin: users.isAdmin });
         if (!row) return null;

@@ -32,7 +32,17 @@ const oidc =
       }
     : undefined;
 
+// Each is off when unset or 0. See "Sign-in limits" in docs/user-guide/install.md.
+const num = (value: string | undefined) => Number(value) || 0;
+const security = {
+  lockoutAttempts: num(env.LOGIN_LOCKOUT_ATTEMPTS),
+  lockoutMinutes: num(env.LOGIN_LOCKOUT_MINUTES) || 15,
+  passwordMaxAgeDays: num(env.PASSWORD_MAX_AGE_DAYS),
+  idleMinutes: num(env.SESSION_IDLE_MINUTES),
+};
+
 const app = await buildApp(db, {
+  security,
   mail,
   oidc,
   outbound,
