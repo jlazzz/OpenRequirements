@@ -40,6 +40,7 @@ import {
   type TreeNode,
 } from "./api.ts";
 import { useNodeDrag } from "./dragdrop.ts";
+import { EmptyState } from "./help.tsx";
 import { ImportForm } from "./ImportForm.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { NodeActions } from "./NodeActions.tsx";
@@ -171,7 +172,11 @@ function Container({ data, set, folder, title }: ContainerProps) {
         </Alert>
       )}
       {view === undefined && <SubFolders data={data} containerId={folder?.id ?? set.id} />}
-      {count === 0 && subfolders === 0 && <Text c="dimmed">No items here yet.</Text>}
+      {count === 0 && subfolders === 0 && (
+        <EmptyState page="getting-started" label="About sets and items">
+          No items here yet. Add an item or folder above, or import a file.
+        </EmptyState>
+      )}
       {count > 0 && list.data && view === "reading" && (
         <ReadingView data={data} list={list.data} containerId={folder?.id ?? set.id} title={title} />
       )}

@@ -29,6 +29,7 @@ import {
   type SetItems,
   type TreeNode,
 } from "./api.ts";
+import { EmptyState } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
@@ -102,7 +103,11 @@ export function BaselinesPage() {
           {(list.error ?? create.error)?.message}
         </Alert>
       )}
-      {list.data?.baselines.length === 0 && <Text c="dimmed">No baselines yet.</Text>}
+      {list.data?.baselines.length === 0 && (
+        <EmptyState page="getting-started" label="About baselines">
+          No baselines yet. Name one above to freeze a set or the whole project.
+        </EmptyState>
+      )}
       {list.data && list.data.baselines.length > 0 && (
         <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Baselines">
           <Table.Thead>
