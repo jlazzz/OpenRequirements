@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-15 (owner decisions, wave 6 started, bundle M planned)
+Last updated: 2026-10-15 (A5 slice 2, help in the app)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -11,6 +11,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 ## Done
 
 - A1 slice 3, migration guide: [Moving from another tool](docs/user-guide/import-from-another-tool.md) plus a page each for DOORS Classic, DOORS Next, Polarion and Jama, every number taken from importing the synthetic files in `samples/import` into a scratch instance. Found and written down as gaps, not fixed: a second ReqIF import with "create structure" on makes a second set (" 2") and duplicates; DOORS Next's `ReqIF.Description` becomes a plain text field, not the item's body (workaround on its page); a second spreadsheet import without our UID duplicates rows. Vendor export menus are from documentation, not tried. No code, no migration (2026-10-15)
+- A5 slice 2, help in the app: a "?" in the top bar opens the guide page for the screen showing (`help.tsx`, mapped by path; replaces the plain Help link); empty states (projects, sets and folders, baselines, reviews, test plans, test runs, CI runs) say what to do first and link to the guide; new page [getting started](docs/user-guide/getting-started.md). "Load the demo project" is not a button: the builder signs in with an admin password and makes thousands of calls, so on an empty instance an admin sees the `npm run demo` command and a link to the demo guide. Checked in a browser on a scratch instance (empty Projects page, the "?" link, /help pages); other empty states by lint and types only (2026-10-15)
 - A2 slice 4, customer test scripts: `npm run qualification` loads 12 IQ/OQ test cases (install check, sign in, project, versions, delete and restore, suspect relationships, baseline, review and signature, test run, backup and restore, audit log verify, upgrade check) and a test plan into a project by external id; [user guide](docs/user-guide/qualification.md). Run twice against a scratch instance (second run changes nothing). Followed by API: versions, delete and restore, baseline, audit verify; suspect, review signing, backup restore and the browser wording were not followed by hand. No migration (2026-10-14)
 - A2 slice 3, validation pack: `npm run validation-pack` builds a zip for a release through the API (baseline `vX.Y.Z` made if missing; Word, ReqIF and CSV of it, traceability matrix, per-requirement verification with the CI run of each result, manifest with image digest and SBOM hash); `release.yml` job `validation-pack` attaches it when `REQ_URL` and `REQ_TOKEN` exist; [user guide](docs/user-guide/validation-pack.md). Tried against a scratch instance loaded by `npm run dogfood`; the workflow job has never run. No browser versions, known-gaps list, or Postgres version in it; no route or migration (2026-10-14)
 - A2 slice 1, anchored audit chain: `audit_anchors` (migration 0022, hash-linked, HMAC-signed with `ANCHOR_KEY`), scheduled daily and on demand ("Anchor now" on Users), optional `ANCHOR_FILE`, download and verify of a saved copy; `GET /api/audit/verify` reports a rewritten history, a deleted tail or tampered anchors. [ADR 0024](docs/adr/0024-anchored-audit-chain.md). Server tests only; the Users page buttons not checked in a browser (2026-10-14)
@@ -71,6 +72,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **A5 slice 2 (help in the app): built, waiting for the owner's test.** Checkpoint: open a few screens and click "?"; on an empty instance read the Projects page.
 - **J1 slice 2 (review notifications, Word record): built, waiting for the owner's test.** Checkpoint: sign as the last approver, see the bell; close, download the Word record.
 - **A1 slice 1 (structure from the file): built, waiting for the owner's test.** Checkpoint: on a new project, import `samples/import/doors-classic-launcher-icd.reqif` as admin; see the sets and fields appear, then import it again.
 - **J5 slice 8 (section home pages): built, waiting for the owner's test.** Checkpoint: tick two baselines and compare; open Reviews, Test plans and Test runs from the side bar.

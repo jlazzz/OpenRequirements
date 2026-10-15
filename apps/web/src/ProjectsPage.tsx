@@ -1,6 +1,8 @@
 import {
   Alert,
+  Anchor,
   Button,
+  Code,
   Container,
   FileButton,
   Group,
@@ -17,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { FormEvent } from "react";
 import { api, type Project, type RunSummary, type Template } from "./api.ts";
+import { EmptyState, helpUrl } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { useSession } from "./Root.tsx";
 import { RunStateBadge } from "./TestPages.tsx";
@@ -85,7 +88,23 @@ export function ProjectsPage() {
         </Alert>
       )}
       {projects.data?.projects.length === 0 && (
-        <Text c="dimmed">No projects yet.{isAdmin ? " Create the first one with “New project”." : ""}</Text>
+        <Stack gap="xs" align="flex-start">
+          <EmptyState page="getting-started" label="Getting started">
+            No projects yet.
+            {isAdmin
+              ? " Create the first one with “New project”, or restore a backup."
+              : " Ask an administrator to add you to one."}
+          </EmptyState>
+          {isAdmin && (
+            <Text size="sm">
+              To look around first, load the demo project: run <Code>npm run demo</Code> against this server, then
+              reload.{" "}
+              <Anchor href={helpUrl("demo-project")} target="_blank" rel="noopener">
+                Demo project guide
+              </Anchor>
+            </Text>
+          )}
+        </Stack>
       )}
       {projects.data && projects.data.projects.length > 0 && (
         <Table highlightOnHover withTableBorder bg="var(--mantine-color-body)">

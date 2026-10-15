@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { api, type Session, type User } from "./api.ts";
+import { HelpButton } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { EmailSetting, NotificationBell } from "./Notifications.tsx";
 import { Tokens } from "./Tokens.tsx";
@@ -238,12 +239,9 @@ function Shell({ user }: { user: User }) {
           <RouterAnchor to="/api-docs" c="white" size="sm" ml="lg">
             API
           </RouterAnchor>
-          {/* The user guide is a separate static site served by the API server, so a plain link, not the router. */}
-          <Anchor href="/help/" target="_blank" c="white" size="sm" ml="lg">
-            Help
-          </Anchor>
         </nav>
         <Group gap="xs" ml="auto" wrap="nowrap">
+          <HelpButton />
           <NotificationBell />
           <ColorSchemeToggle />
         </Group>

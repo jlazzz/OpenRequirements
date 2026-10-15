@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, type Outcome } from "./api.ts";
+import { EmptyState } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { useProject } from "./ProjectPage.tsx";
 
@@ -89,9 +90,9 @@ export function CiRunsPage() {
         />
       </Group>
       {runs.data?.runs.length === 0 && (
-        <Text c="dimmed">
+        <EmptyState page="verification" label="How to send CI results">
           No CI uploads yet. Send a JUnit report to <code>/api/projects/{projectId}/verification-results/junit</code>.
-        </Text>
+        </EmptyState>
       )}
       <Table>
         <Table.Tbody>

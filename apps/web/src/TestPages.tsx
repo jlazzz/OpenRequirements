@@ -39,6 +39,7 @@ import {
   uploadFile,
   uploadImage,
 } from "./api.ts";
+import { EmptyState } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
@@ -382,7 +383,11 @@ export function TestPlansPage() {
           {(list.error ?? create.error)?.message}
         </Alert>
       )}
-      {list.data?.plans.length === 0 && <Text c="dimmed">No test plans yet.</Text>}
+      {list.data?.plans.length === 0 && (
+        <EmptyState page="test-plans" label="About test plans">
+          No test plans yet. Make one above, then add test cases to it.
+        </EmptyState>
+      )}
       {list.data && list.data.plans.length > 0 && (
         <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test plans">
           <Table.Thead>
@@ -541,9 +546,15 @@ export function TestRunsPage() {
           data={[{ value: "", label: "Any" }, ...STATES.map((value) => ({ value, label: RUN_STATE[value].label }))]}
         />
       </Group>
-      {list.data && shown.length === 0 && (
-        <Text c="dimmed">{all.length === 0 ? "No runs in open cycles." : "No run matches."}</Text>
-      )}
+      {list.data &&
+        shown.length === 0 &&
+        (all.length === 0 ? (
+          <EmptyState page="test-plans" label="About cycles and runs">
+            No runs in open cycles. Start a cycle from a test plan.
+          </EmptyState>
+        ) : (
+          <Text c="dimmed">No run matches.</Text>
+        ))}
       {shown.length > 0 && (
         <Table withTableBorder bg="var(--mantine-color-body)" aria-label="Test runs">
           <Table.Thead>

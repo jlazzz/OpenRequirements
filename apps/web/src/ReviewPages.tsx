@@ -33,6 +33,7 @@ import {
   type SetItems,
   type TreeNode,
 } from "./api.ts";
+import { EmptyState } from "./help.tsx";
 import { RouterAnchor } from "./links.tsx";
 import { itemsWithin, useProject } from "./ProjectPage.tsx";
 import { RichView } from "./RichView.tsx";
@@ -151,7 +152,11 @@ export function ReviewsPage() {
           {(list.error ?? create.error)?.message}
         </Alert>
       )}
-      {list.data?.reviews.length === 0 && <Text c="dimmed">No reviews yet.</Text>}
+      {list.data?.reviews.length === 0 && (
+        <EmptyState page="reviews" label="About reviews">
+          No reviews yet. Open a baseline and start a review from it.
+        </EmptyState>
+      )}
       {list.data && list.data.reviews.length > 0 && (
         <Tabs value={tab} onChange={setPicked}>
           <Tabs.List>
