@@ -109,7 +109,7 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 1. ~~Playwright end-to-end tests~~ done (2026-10-15)
 2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
-Wave 6 (help in the app, migration guide, Playwright) runs before the owner's test of bundle I, by the owner's choice. Then bundle M (Word export options, CI branch rule, OpenAPI responses).
+Wave 6 (help in the app, migration guide, Playwright) merged 2026-10-15, before the owner's test of bundle I. Next: bundle M (Word export options, CI branch rule, OpenAPI responses).
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
