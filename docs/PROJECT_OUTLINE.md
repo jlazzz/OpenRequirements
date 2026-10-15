@@ -165,19 +165,19 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 > Phase 1 scope and the data model were revised on 2026-10-12. See [DESIGN.md](DESIGN.md), which wins where it disagrees with this outline.
 **Goal:** A single user can author, organize, link, and export requirements.
 
-- [ ] Local user accounts and login
-- [ ] Projects and documents (create, rename, archive)
+- [x] Local user accounts and login
+- [x] Projects and documents (create, rename, archive)
 - [x] Document tree: headings and requirements, drag-to-reorder, nesting
-- [ ] Requirement editor: rich text (tables, images), auto-generated UIDs
+- [x] Requirement editor: rich text (tables, images), auto-generated UIDs
 - [x] Custom attribute definitions (text, number, enum, multi-enum, date, boolean). Editable per project by its admin, 2026-10-14
-- [ ] Per-item revision history with a diff view
+- [x] Per-item revision history with a diff view
 - [x] Link types (configurable) and links between items, including across documents. Types editable per project, 2026-10-14
-- [ ] Views: document view (reads like a spec), table/grid view with filters, item detail
-- [ ] Traceability matrix (document A × document B)
-- [ ] Basic full-text search
+- [x] Views: document view (reads like a spec), table/grid view with filters, item detail
+- [x] Traceability matrix (document A × document B)
+- [x] Basic full-text search
 - [x] CSV/Excel import (with column mapping) and export
 - [x] JSON full-project export/import (backup and portability)
-- [ ] Docker Compose install with docs
+- [x] Docker Compose install with docs
 - [x] **Dogfood:** import this project's own requirements spec (`npm run dogfood`)
 
 **Exit criteria:** You manage this project's requirements in it daily; a design partner imports a real spreadsheet successfully.
@@ -187,8 +187,8 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 ### Phase 2: Team-Ready, "A small team can collaborate" (3–4 months)
 **Goal:** Real teams can work together and produce review-ready specs.
 
-- [ ] Multi-user: invitations, roles (Admin/Editor/Reviewer/Viewer), project-level permissions
-- [ ] Comments and mentions on items
+- [x] Multi-user: invitations, roles (Admin/Editor/Reviewer/Viewer), project-level permissions
+- [x] Comments and mentions on items
 - [x] Concurrent-edit safety (optimistic locking, with conflict warnings): merge screen per field, "also editing" ([ADR 0014](adr/0014-https-edit-conflicts-notifications-email.md))
 - [x] Baselines: create, browse, compare any two baselines or a baseline vs. current
 - [x] Suspect links: automatic flagging and a review queue
@@ -219,7 +219,7 @@ Time estimates assume solo, part-time work. Each phase has a goal, a scope, and 
 - [x] Integrations: Jira issue links, GitHub/GitLab issue and commit links (with live status) ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)). Code references link files on a branch, not single commits
 - [x] Webhooks for external automation ([ADR 0016](adr/0016-api-webhooks-references-oidc.md))
 - [ ] SSO: OIDC and SAML; LDAP. OpenID Connect built 2026-10-14 ([ADR 0016](adr/0016-api-webhooks-references-oidc.md)); SAML and LDAP wait for a request
-- [ ] Backup/restore tooling and upgrade documentation
+- [x] Backup/restore tooling and upgrade documentation
 - [x] Security hardening: dependency scanning, rate limiting, security headers, a third-party review if possible
 
 **Exit criteria:** A design partner uses it as their system of record for an audited project, or completes a mock audit with it.

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (wave 5 merged)
+Last updated: 2026-10-15 (owner decisions, wave 6 started, bundle M planned)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -105,6 +105,8 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 1. Playwright end-to-end tests
 2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
+Wave 6 (help in the app, migration guide, Playwright) runs before the owner's test of bundle I, by the owner's choice. Then bundle M (Word export options, CI branch rule, OpenAPI responses).
+
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
 Known gaps left for later milestones or owner decision:
@@ -137,9 +139,9 @@ Known gaps left for later milestones or owner decision:
 
 - Project name
 - Project home screen: a per-set dashboard was built (J5 slice 3); the owner confirms it or asks for another at the checkpoint, then DESIGN.md section 11 is settled
-- One design detail in [docs/DESIGN.md](docs/DESIGN.md) section 11: the home screen
-- Beachhead confirmation after interviews
-- Hosting for a public demo instance
+- Beachhead: left open until the interviews are done (owner, 2026-10-15)
+- Public demo instance: none for now (owner, 2026-10-15). The owner's test instance is 192.168.0.10, reached over Tailscale
+- CLA text: needed before any outside contribution is merged
 
 ## Not started (Phase 0, non-code)
 

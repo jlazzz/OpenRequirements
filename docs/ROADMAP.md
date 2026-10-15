@@ -49,6 +49,9 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |  |
 | L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |
 | none | Phase 1 | Playwright end-to-end tests | Sonnet | best after J5 slice 8, so screens stop moving | |  |
+| M | J2 slice 8 | Word export options: which fields, UID before or after the name, cover on or off | Sonnet | none | |  |
+| M | T6 slice 2 | CI branch rule (only the project's main branch sets verification status) and pass-rate trend per pipeline | Sonnet | none | DB |  |
+| M | J4 slice 7 | Response schemas in the OpenAPI document | Sonnet | none | |  |
 
 Waves for bundle I and its neighbours (each wave in parallel):
 
@@ -57,7 +60,8 @@ Waves for bundle I and its neighbours (each wave in parallel):
 3. Done 2026-10-14: T6 (DB), T7 slice 2, A2 slice 2
 4. Done 2026-10-14: J1 slice 1 (DB), J5 slice 7, A3 slices 1 and 3, GitHub CI upload of results
 5. Done 2026-10-14: J1 slice 2, J5 slice 8, A2 slice 1 (DB), A2 slice 3, A2 slice 4, A1 slice 1
-6. Left: A5 slice 2 (help in the app), A1 slices 3 and 4, Playwright end-to-end tests
+6. Started 2026-10-15, before the owner's test of bundle I (owner's choice: none of it changes features): A5 slice 2 (help in the app), A1 slice 3, Playwright end-to-end tests. A1 slice 4 waits for a design partner's files.
+7. Added 2026-10-15 by the owner as bundle M: J2 slice 8, T6 slice 2 (DB), J4 slice 7. Mandatory change reasons were offered and not chosen.
 
 A3 slices 1 to 3 depend on nothing in bundle I and can run beside any wave.
 
