@@ -33,7 +33,7 @@ jobs:
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_DIR: ${{ secrets.SERVER_DIR }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: tailscale/github-action@v3
         with:
