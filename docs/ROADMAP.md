@@ -46,7 +46,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | K | A2 slice 3 | Validation pack | Sonnet | A2 slice 2, A3 slice 2 | | built 2026-10-14 |
 | K | A2 slice 4 | Customer test scripts | Sonnet | none | | built, merged 2026-10-14 |
 | L | A1 slice 1 | Structure from the file | Opus | J5 slice 1 | | built 2026-10-14, waiting for the owner's test |
-| L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | |  |
+| L | A1 slice 3 | Migration guide | Sonnet | A1 slice 1 | | built 2026-10-15: five pages in the user guide, followed on the synthetic samples |
 | L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |
 | none | Phase 1 | Playwright end-to-end tests | Sonnet | best after J5 slice 8, so screens stop moving | |  |
 | M | J2 slice 8 | Word export options: which fields, UID before or after the name, cover on or off | Sonnet | none | |  |

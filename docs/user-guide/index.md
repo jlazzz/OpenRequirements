@@ -8,6 +8,7 @@ Pick a page from the list on the left, or use the search box at the top.
 - [Qualification scripts (IQ/OQ)](qualification.md)
 - [Validation pack](validation-pack.md)
 - [Work together: comments, notifications, email](working-together.md)
+- [Moving from DOORS, Polarion or Jama](import-from-another-tool.md)
 - [Verification and test plans](verification.md)
 - [Reviews and signatures](reviews.md)
 - [Integrations and the API](integrations.md)
