@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-15 (owner decisions, wave 6 started, bundle M planned)
+Last updated: 2026-10-15 (Playwright end-to-end tests built)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -10,6 +10,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## Done
 
+- Playwright end-to-end tests: `npm run e2e` (Chromium) starts the API and web app on a fresh `app_e2e_test` database and runs four specs in `e2e/`: first-run setup and sign in; project from a template, folder, item, Save version and history; relationship in the matrix, baseline, review signed; plan, cycle, run passed and the requirement turns Passing. Setup goes through the API. CI job `e2e` in `ci.yml` (has never run on GitHub). No snapshots; Chromium only; not covered: import, ReqIF, Word, notifications, drag and drop (2026-10-15)
 - A2 slice 4, customer test scripts: `npm run qualification` loads 12 IQ/OQ test cases (install check, sign in, project, versions, delete and restore, suspect relationships, baseline, review and signature, test run, backup and restore, audit log verify, upgrade check) and a test plan into a project by external id; [user guide](docs/user-guide/qualification.md). Run twice against a scratch instance (second run changes nothing). Followed by API: versions, delete and restore, baseline, audit verify; suspect, review signing, backup restore and the browser wording were not followed by hand. No migration (2026-10-14)
 - A2 slice 3, validation pack: `npm run validation-pack` builds a zip for a release through the API (baseline `vX.Y.Z` made if missing; Word, ReqIF and CSV of it, traceability matrix, per-requirement verification with the CI run of each result, manifest with image digest and SBOM hash); `release.yml` job `validation-pack` attaches it when `REQ_URL` and `REQ_TOKEN` exist; [user guide](docs/user-guide/validation-pack.md). Tried against a scratch instance loaded by `npm run dogfood`; the workflow job has never run. No browser versions, known-gaps list, or Postgres version in it; no route or migration (2026-10-14)
 - A2 slice 1, anchored audit chain: `audit_anchors` (migration 0022, hash-linked, HMAC-signed with `ANCHOR_KEY`), scheduled daily and on demand ("Anchor now" on Users), optional `ANCHOR_FILE`, download and verify of a saved copy; `GET /api/audit/verify` reports a rewritten history, a deleted tail or tampered anchors. [ADR 0024](docs/adr/0024-anchored-audit-chain.md). Server tests only; the Users page buttons not checked in a browser (2026-10-14)
@@ -102,7 +103,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
-1. Playwright end-to-end tests
+1. ~~Playwright end-to-end tests~~ done (2026-10-15)
 2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
 Wave 6 (help in the app, migration guide, Playwright) runs before the owner's test of bundle I, by the owner's choice. Then bundle M (Word export options, CI branch rule, OpenAPI responses).

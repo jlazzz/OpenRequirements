@@ -26,6 +26,7 @@ npm run dev:server   # API on :3000, restarts on change
 npm run dev:web      # Vite on :5173, proxies /api to :3000
 npm run db:generate  # new SQL migration after editing apps/server/src/db/schema.ts
 npm run up           # build and start the full stack in Docker on :3000
+npm run e2e         # Playwright, Chromium: starts the API (:3100) and web app (:5273) on a fresh app_e2e_test database; needs `npm run db:up` and `npx playwright install chromium` once
 npm run docs:dev     # user guide with live reload; docs:build writes docs/.vitepress/dist (served at /help)
 npm run demo         # load the Kestrel-EO demo project (DEMO_URL, DEMO_EMAIL, DEMO_PASSWORD)
 npm run perf         # time a 2,000-item project against the performance budgets on a scratch instance (PERF_URL, PERF_EMAIL, PERF_PASSWORD, PERF_ITEMS); exits 1 on a miss
@@ -37,7 +38,7 @@ npm run openapi      # rewrite docs/openapi.json after changing a route (a test 
 
 Before calling work done: `npm run lint && npm run typecheck && npm test`. CI runs the same.
 
-Not set up yet: Playwright. Add each command here when it lands.
+Add each new command here when it lands.
 
 ## Hard rules
 
@@ -86,7 +87,7 @@ Rows marked *proposed* are from the outline and not yet in the code.
 | File storage | Local disk (`ATTACHMENTS_DIR`, a Docker volume). Images, PDF, text, CSV and zip, type checked by content in `domain/filetype.ts`; only images are ever shown, the rest is a download. Limit `MAX_ATTACHMENT_MB`, default 25. S3-compatible later. | in use |
 | Deployment | One app image (API + built web app) + Postgres, `deploy/docker-compose.yml`. HTTPS by a Caddy service under the Compose profile `https`, set by `DOMAIN` ([ADR 0014](docs/adr/0014-https-edit-conflicts-notifications-email.md)) | in use |
 | Email | `nodemailer` over `SMTP_URL`, sent from the `outbox` table by a loop in the server process; nothing is sent without it | in use |
-| End-to-end tests | Playwright | proposed |
+| End-to-end tests | Playwright (Chromium) in `e2e/`, run by `npm run e2e` and the CI job `e2e` | in use |
 
 License: AGPL-3.0-only with a CLA ([ADR 0001](docs/adr/0001-license-agpl-3.0.md)). No `CLA.md` yet; do not merge an outside contribution until it exists.
 
@@ -138,7 +139,7 @@ scripts/dogfood/    `npm run dogfood`: this tool's own requirements as data, and
 scripts/qualification/  `npm run qualification`: customer IQ/OQ test scripts as data, and the loader
 scripts/samples/    `npm run samples:import`: writes the synthetic import files
 samples/import/     Synthetic DOORS, Polarion, Jama and Word files for testing import
-e2e/                Playwright tests (empty)
+e2e/                Playwright tests: `*.spec.ts` by flow, `api.ts` for setup through the API, `server.ts` resets the database
 ```
 
 - Tests sit next to the code as `*.test.ts`.
