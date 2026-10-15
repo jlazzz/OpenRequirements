@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-15 (A5 slice 2, help in the app)
+Last updated: 2026-10-15 (wave 6 merged: help in the app, migration guide, Playwright)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -12,6 +12,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 - A1 slice 3, migration guide: [Moving from another tool](docs/user-guide/import-from-another-tool.md) plus a page each for DOORS Classic, DOORS Next, Polarion and Jama, every number taken from importing the synthetic files in `samples/import` into a scratch instance. Found and written down as gaps, not fixed: a second ReqIF import with "create structure" on makes a second set (" 2") and duplicates; DOORS Next's `ReqIF.Description` becomes a plain text field, not the item's body (workaround on its page); a second spreadsheet import without our UID duplicates rows. Vendor export menus are from documentation, not tried. No code, no migration (2026-10-15)
 - A5 slice 2, help in the app: a "?" in the top bar opens the guide page for the screen showing (`help.tsx`, mapped by path; replaces the plain Help link); empty states (projects, sets and folders, baselines, reviews, test plans, test runs, CI runs) say what to do first and link to the guide; new page [getting started](docs/user-guide/getting-started.md). "Load the demo project" is not a button: the builder signs in with an admin password and makes thousands of calls, so on an empty instance an admin sees the `npm run demo` command and a link to the demo guide. Checked in a browser on a scratch instance (empty Projects page, the "?" link, /help pages); other empty states by lint and types only (2026-10-15)
+- Playwright end-to-end tests: `npm run e2e` (Chromium) starts the API and web app on a fresh `app_e2e_test` database and runs four specs in `e2e/`: first-run setup and sign in; project from a template, folder, item, Save version and history; relationship in the matrix, baseline, review signed; plan, cycle, run passed and the requirement turns Passing. Setup goes through the API. CI job `e2e` in `ci.yml` (has never run on GitHub). No snapshots; Chromium only; not covered: import, ReqIF, Word, notifications, drag and drop (2026-10-15)
 - A2 slice 4, customer test scripts: `npm run qualification` loads 12 IQ/OQ test cases (install check, sign in, project, versions, delete and restore, suspect relationships, baseline, review and signature, test run, backup and restore, audit log verify, upgrade check) and a test plan into a project by external id; [user guide](docs/user-guide/qualification.md). Run twice against a scratch instance (second run changes nothing). Followed by API: versions, delete and restore, baseline, audit verify; suspect, review signing, backup restore and the browser wording were not followed by hand. No migration (2026-10-14)
 - A2 slice 3, validation pack: `npm run validation-pack` builds a zip for a release through the API (baseline `vX.Y.Z` made if missing; Word, ReqIF and CSV of it, traceability matrix, per-requirement verification with the CI run of each result, manifest with image digest and SBOM hash); `release.yml` job `validation-pack` attaches it when `REQ_URL` and `REQ_TOKEN` exist; [user guide](docs/user-guide/validation-pack.md). Tried against a scratch instance loaded by `npm run dogfood`; the workflow job has never run. No browser versions, known-gaps list, or Postgres version in it; no route or migration (2026-10-14)
 - A2 slice 1, anchored audit chain: `audit_anchors` (migration 0022, hash-linked, HMAC-signed with `ANCHOR_KEY`), scheduled daily and on demand ("Anchor now" on Users), optional `ANCHOR_FILE`, download and verify of a saved copy; `GET /api/audit/verify` reports a rewritten history, a deleted tail or tampered anchors. [ADR 0024](docs/adr/0024-anchored-audit-chain.md). Server tests only; the Users page buttons not checked in a browser (2026-10-14)
@@ -105,7 +106,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 can be called complete:
 
-1. Playwright end-to-end tests
+1. ~~Playwright end-to-end tests~~ done (2026-10-15)
 2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
 Wave 6 (help in the app, migration guide, Playwright) runs before the owner's test of bundle I, by the owner's choice. Then bundle M (Word export options, CI branch rule, OpenAPI responses).

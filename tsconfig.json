@@ -13,6 +13,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["apps/*/src", "apps/*/test", "apps/*/*.ts", "packages/*/src", "scripts", "*.ts"],
+  "include": ["apps/*/src", "apps/*/test", "apps/*/*.ts", "packages/*/src", "scripts", "e2e", "*.ts"],
   "exclude": ["apps/web"]
 }

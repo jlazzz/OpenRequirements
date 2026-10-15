@@ -38,3 +38,32 @@ jobs:
           REQ_URL: ${{ secrets.REQ_URL }}
           REQ_TOKEN: ${{ secrets.REQ_TOKEN }}
         run: node scripts/ci/upload-results.ts
+
+  # Browser tests of the core flows (e2e/). Starts the API and the web app on a fresh app_e2e_test database.
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results
