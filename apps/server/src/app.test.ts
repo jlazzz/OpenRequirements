@@ -2860,6 +2860,13 @@ test("a set and a baseline export to Word with folders as headings, items, field
   expect(frozen.xml).toContain("Approved");
   expect(frozen.xml).toContain("Baseline of ");
 
+  // Options: no cover, no field tables, ID after the name. A bad value is refused.
+  const plain = await read(`/api/baselines/${baselineId}/docx?cover=false&fields=&uid=after`);
+  expect(plain.xml).not.toContain("Baseline of ");
+  expect(plain.xml).not.toContain("Approved");
+  expect(plain.xml).toContain("Supply voltage SYS-001");
+  expect((await get(`/api/sets/${sys.id}/docx?uid=middle`, cookie)).statusCode).toBe(400);
+
   const csv = await get(`/api/baselines/${baselineId}/csv`, cookie);
   expect(csv.statusCode).toBe(200);
   expect(csv.headers["content-disposition"]).toBe('attachment; filename="Release_1.csv"');

@@ -414,7 +414,10 @@ export function BaselinePage() {
             checked={differencesOnly}
             onChange={(e) => setDifferencesOnly(e.currentTarget.checked)}
           />
-          <ExportMenu path={`baselines/${baseline.id}`} />
+          <ExportMenu
+            path={`baselines/${baseline.id}`}
+            fields={[...new Set(current.flatMap((q) => q.data?.fields.map((f) => f.name) ?? []))]}
+          />
         </Group>
       </Group>
 

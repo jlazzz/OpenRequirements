@@ -19,6 +19,7 @@ import {
   Group,
   List,
   Menu,
+  Modal,
   NativeSelect,
   Paper,
   Stack,
@@ -32,17 +33,53 @@ import { api, canEdit, type SetItems, uploadImage } from "./api.ts";
 import { useProject } from "./ProjectPage.tsx";
 import { useLinks } from "./Relationships.tsx";
 
+/** Asks for the Word options, then downloads. `fields` are the names the item tables can hold. */
+function WordOptions({ path, fields, onClose }: { path: string; fields: string[]; onClose: () => void }) {
+  const [chosen, setChosen] = useState(fields);
+  const [uid, setUid] = useState("before");
+  const [cover, setCover] = useState(true);
+  const query = new URLSearchParams({ uid, cover: String(cover), fields: chosen.join(",") });
+  return (
+    <Modal opened onClose={onClose} title="Word export">
+      <Stack>
+        <Checkbox label="Cover page" checked={cover} onChange={(e) => setCover(e.currentTarget.checked)} />
+        <NativeSelect
+          label="ID"
+          value={uid}
+          onChange={(e) => setUid(e.currentTarget.value)}
+          data={[
+            { value: "before", label: "Before the name" },
+            { value: "after", label: "After the name" },
+          ]}
+        />
+        {fields.length > 0 && (
+          <Checkbox.Group label="Fields in each item's table" value={chosen} onChange={setChosen}>
+            <Stack gap={4} mt={4}>
+              {fields.map((name) => (
+                <Checkbox key={name} value={name} label={name} />
+              ))}
+            </Stack>
+          </Checkbox.Group>
+        )}
+        <Button component="a" href={`/api/${path}/docx?${query}`} download onClick={onClose}>
+          Download
+        </Button>
+      </Stack>
+    </Modal>
+  );
+}
+
 /** Downloads a set or a baseline as Word or ReqIF. `path` is "sets/<id>" or "baselines/<id>". */
-export function ExportMenu({ path }: { path: string }) {
+export function ExportMenu({ path, fields = [] }: { path: string; fields?: string[] }) {
+  const [word, setWord] = useState(false);
   return (
     <Menu>
+      {word && <WordOptions path={path} fields={fields} onClose={() => setWord(false)} />}
       <Menu.Target>
         <Button variant="default">Export</Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item component="a" href={`/api/${path}/docx`} download>
-          Word document (.docx)
-        </Menu.Item>
+        <Menu.Item onClick={() => setWord(true)}>Word document (.docx)…</Menu.Item>
         {path.startsWith("baselines/") && (
           <Menu.Item component="a" href={`/api/${path}/csv`} download>
             Spreadsheet with verification and suspect relationships (.csv)

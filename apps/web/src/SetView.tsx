@@ -150,7 +150,7 @@ function Container({ data, set, folder, title }: ContainerProps) {
               { value: "trace", label: "Trace" },
             ]}
           />
-          {!folder && <ExportMenu path={`sets/${set.id}`} />}
+          {!folder && <ExportMenu path={`sets/${set.id}`} fields={list.data?.fields.map((f) => f.name)} />}
           {editor && folder && <NodeActions data={data} node={folder} />}
           {editor && (
             <Button variant="default" onClick={() => setAdding("folder")}>

@@ -3,10 +3,12 @@
 ## Export to Word
 
 1. Open a set, or open a baseline from **Baselines**.
-2. Choose **Export**, then **Word document (.docx)**.
+2. Choose **Export**, then **Word document (.docx)…**.
+3. Choose the options and press **Download**: cover page on or off, the ID before or after the name, and which fields go in each item's table (all by default).
 
 The document has a cover page, then each folder as a heading and each item with its ID and name, its description, and a small table of its fields. Pages show the project and set (or baseline) at the top and "Page n of m" at the bottom.
 
+- The API takes the same options as query parameters on `/api/sets/:setId/docx` and `/api/baselines/:baselineId/docx`: `cover=false`, `uid=after`, `fields=Status,Priority` (`fields=` for no tables).
 - A set exports its items as they are now. A baseline exports what it froze.
 - PNG, JPEG and GIF images are included. WebP images appear as their description.
 

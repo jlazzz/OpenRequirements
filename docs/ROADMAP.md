@@ -111,7 +111,7 @@ D comes first because it is the owner's stated priority and it depends on nothin
 
 ## J2. Document export and import
 
-**Built 2026-10-14 as bundle G** ([ADR 0015](adr/0015-word-export-import-and-reimport.md)): slices 1 to 6. Slice 7 waits for vendor sample files. Word export options (fields, UID position, cover) were left out.
+**Built 2026-10-14 as bundle G** ([ADR 0015](adr/0015-word-export-import-and-reimport.md)): slices 1 to 6. Slice 7 waits for vendor sample files. Word export options (fields, UID position, cover) built 2026-10-16 as J2 slice 8.
 
 **Existed before:** CSV import with column mapping, `.xlsx` read in the browser, CSV export, browser print to PDF from Reading view, JSON backup.
 

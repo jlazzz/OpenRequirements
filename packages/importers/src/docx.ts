@@ -76,6 +76,8 @@ function valueText(field: ImportField, value: unknown): string {
 
 export type DocxImage = { data: Uint8Array; type: string };
 export type DocxCover = { title: string; lines: string[]; header: string };
+/** `fields`: names of the fields in each item's table (all when absent). `uid`: where the UID sits in the title. */
+export type DocxOptions = { fields?: string[]; uid?: "before" | "after"; cover?: boolean };
 
 /**
  * Sets as a Word document: a cover page, folders as headings, each item as an "Item Title" paragraph with its UID and
@@ -89,7 +91,9 @@ export async function toDocx(
   images: Map<string, DocxImage>,
   /** Plain rows (first row is the header) written as one table after the sets, e.g. a traceability matrix. */
   grid?: string[][],
+  options: DocxOptions = {},
 ): Promise<Uint8Array> {
+  const withCover = options.cover !== false;
   const rels: XmlElement[] = [];
   const media: { name: string; data: Uint8Array }[] = [];
   const relId = (type: string, target: string, external = false) => {
@@ -294,6 +298,7 @@ export async function toDocx(
 
   const fieldTable = (fields: ImportField[], attributes: Record<string, unknown> | null): XmlElement[] => {
     const rows = fields
+      .filter((field) => !options.fields || options.fields.includes(field.name))
       .map((field) => [field.name, valueText(field, attributes?.[field.id])] as const)
       .filter(([, text]) => text !== "");
     if (rows.length === 0) return [];
@@ -311,11 +316,13 @@ export async function toDocx(
     ];
   };
 
-  const body: XmlElement[] = [
-    paragraph([textRun(cover.title)], { indent: 0 }, [style("Title")]),
-    ...cover.lines.map((line) => paragraph([textRun(line)], { indent: 0 }, [style("Subtitle")])),
-    paragraph([el("w:r", {}, [el("w:br", { "w:type": "page" })])], { indent: 0 }),
-  ];
+  const body: XmlElement[] = withCover
+    ? [
+        paragraph([textRun(cover.title)], { indent: 0 }, [style("Title")]),
+        ...cover.lines.map((line) => paragraph([textRun(line)], { indent: 0 }, [style("Subtitle")])),
+        paragraph([el("w:r", {}, [el("w:br", { "w:type": "page" })])], { indent: 0 }),
+      ]
+    : [];
   const headingLevel = (depth: number) => Math.min(9, depth + 1);
   for (const set of sets) {
     // With one set, the cover names it and its folders start at Heading 1.
@@ -331,7 +338,8 @@ export async function toDocx(
           write(node.id, depth + 1);
           continue;
         }
-        body.push(paragraph([textRun(`${node.uid ?? ""} ${node.name}`.trim())], { indent: 0 }, [style("ItemTitle")]));
+        const title = options.uid === "after" ? `${node.name} ${node.uid ?? ""}` : `${node.uid ?? ""} ${node.name}`;
+        body.push(paragraph([textRun(title.trim())], { indent: 0 }, [style("ItemTitle")]));
         if (node.description) body.push(...blocks(node.description, { indent: 0 }));
         body.push(...fieldTable(set.fields, node.attributes));
         // Child items follow their parent.
@@ -389,7 +397,7 @@ export async function toDocx(
           "w:gutter": "0",
         }),
         // The cover page has no header or footer.
-        el("w:titlePg"),
+        ...(withCover ? [el("w:titlePg")] : []),
       ]),
     ]),
   ]);

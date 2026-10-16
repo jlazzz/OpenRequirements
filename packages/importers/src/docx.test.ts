@@ -279,3 +279,24 @@ test("a grid is written as one table after the cover", async () => {
   expect(xml).toContain("<w:tbl>");
   expect(xml).toContain("●");
 });
+
+test("Word export options: fields, ID position and cover", async () => {
+  const xml = async (options: Parameters<typeof toDocx>[4]) => {
+    const files = await unzip(
+      await toDocx({ title: "CoverTitle", lines: [], header: "H" }, [set], new Map(), undefined, options),
+    );
+    return new TextDecoder().decode(files.get("word/document.xml"));
+  };
+  const all = await xml({});
+  expect(all).toContain("CoverTitle");
+  expect(all).toContain("Approved");
+  expect(all).toContain("<w:titlePg/>");
+  expect(await xml({ fields: [] })).not.toContain("Approved");
+  const none = await xml({ cover: false });
+  expect(none).not.toContain("CoverTitle");
+  expect(none).not.toContain("w:titlePg");
+  expect(none).toContain("SYS-001 ");
+  const after = await xml({ uid: "after" });
+  expect(after).not.toContain("SYS-001 ");
+  expect(after).toMatch(/ SYS-001</);
+});
