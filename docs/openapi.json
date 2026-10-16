@@ -1813,6 +1813,47 @@
             "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "mainBranch"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "mainBranch": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+          }
+        }
       }
     },
     "/api/projects/{projectId}/activity": {
@@ -3332,7 +3373,9 @@
                       6,
                       7,
                       8,
-                      10
+                      9,
+                      10,
+                      11
                     ]
                   },
                   "exportedAt": {
@@ -3361,6 +3404,10 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "mainBranch": {
+                        "type": "string",
+                        "maxLength": 200
                       }
                     }
                   },

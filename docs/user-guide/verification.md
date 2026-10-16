@@ -61,6 +61,16 @@ The project id is in the address bar when the project is open. The token's user 
 - Several tests with the same UID record one result. A failure wins.
 - The answer lists the results recorded and the test names that matched no test case.
 
+## Count only the main branch
+
+By default every uploaded result counts, whatever branch it came from. A failing feature branch then turns a requirement red.
+
+To prevent that, a project admin types the main branch (for example `main`) in **Main branch** on the CI runs page and clicks Save. From then on only results from CI runs on that branch count toward a requirement's status. Results from other branches are still recorded and shown on the test case and on the run, marked "not counted". A result entered by hand or in a test run has no branch and always counts. Names must match exactly; a run uploaded with no branch does not count.
+
+Clear the box to go back to counting every branch. A baseline made earlier keeps the status it froze.
+
+The CI runs page also shows a **pass rate** bar chart for each pipeline: the latest 20 runs, oldest on the left. Each bar is passed over passed plus failed; faded bars are runs that do not count.
+
 ## Send results from GitHub Actions
 
 This repository's `ci.yml` already uploads its own test results and `@req` tags (`scripts/ci/upload-results.ts`). It stays off until you add two repository secrets:

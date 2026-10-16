@@ -11,7 +11,7 @@ const projectParams = {
   properties: { projectId: { type: "string", format: "uuid" } },
 } as const;
 
-export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: AppContext) {
+export function projectRoutes({ app, db, requireUser, requireAdmin, audit, access }: AppContext) {
   app.get("/api/templates", { onRequest: requireUser }, async () => ({
     templates: templates.map((t) => ({
       id: t.id,
@@ -94,6 +94,36 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit }: App
         return created;
       });
       return reply.code(201).send({ project });
+    },
+  );
+
+  // The project's settings. Today one: the main branch whose CI results count toward verification status (ADR 0026).
+  app.patch(
+    "/api/projects/:projectId",
+    {
+      onRequest: requireUser,
+      schema: {
+        params: projectParams,
+        body: {
+          type: "object",
+          required: ["mainBranch"],
+          additionalProperties: false,
+          properties: { mainBranch: { type: "string", maxLength: 200 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { projectId } = req.params as { projectId: string };
+      const { mainBranch } = req.body as { mainBranch: string };
+      if (!(await access(req, reply, { projectId }, "admin"))) return reply;
+      const name = mainBranch.trim();
+      await db.transaction(async (tx) => {
+        await tx.update(projects).set({ mainBranch: name }).where(eq(projects.id, projectId));
+        await audit(tx, req.user?.id ?? null, "project.update", "project", projectId, {
+          label: name ? `Main branch: ${name}` : "Main branch: none",
+        });
+      });
+      return { mainBranch: name };
     },
   );
 

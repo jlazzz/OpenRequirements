@@ -9,6 +9,7 @@ import {
   itemTypes,
   linkTypes,
   nodes,
+  projects,
   resultAttachments,
   sets,
   testCycles,
@@ -17,7 +18,15 @@ import {
   users,
   verificationResults,
 } from "./db/schema.ts";
-import { isFlaky, isOutOfDate, OUTCOMES, type Outcome, verificationStatus } from "./domain/verification.ts";
+import {
+  countsTowardStatus,
+  isFlaky,
+  isOutOfDate,
+  OUTCOMES,
+  type Outcome,
+  passRate,
+  verificationStatus,
+} from "./domain/verification.ts";
 import { liveLinks } from "./links.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -118,6 +127,12 @@ export async function projectVerification(db: Db | Tx, projectId: string) {
   const verifying = new Set(types.map((t) => t.id));
   // The latest result of each test case.
   const latest = new Map<string, { id: string; outcome: Outcome; revision: number; recordedAt: Date }>();
+  const [{ mainBranch = "" } = {}] = await db
+    .select({ mainBranch: projects.mainBranch })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  // The branch rule: a CI result from another branch is recorded but never the latest result that counts.
+  const counts = mainBranch ? or(isNull(verificationResults.ciRunId), eq(ciRuns.branch, mainBranch)) : undefined;
   const rows = await db
     .selectDistinctOn([verificationResults.itemId], {
       itemId: verificationResults.itemId,
@@ -129,7 +144,8 @@ export async function projectVerification(db: Db | Tx, projectId: string) {
     .from(verificationResults)
     .innerJoin(nodes, eq(nodes.id, verificationResults.itemId))
     .innerJoin(sets, eq(sets.id, nodes.setId))
-    .where(eq(sets.projectId, projectId))
+    .leftJoin(ciRuns, eq(ciRuns.id, verificationResults.ciRunId))
+    .where(and(eq(sets.projectId, projectId), counts))
     .orderBy(verificationResults.itemId, desc(verificationResults.createdAt));
   for (const { itemId, ...result } of rows) latest.set(itemId, result);
 
@@ -570,8 +586,14 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
         .selectDistinct({ pipeline: ciRuns.pipeline, branch: ciRuns.branch })
         .from(ciRuns)
         .where(mine);
+      const [{ mainBranch = "" } = {}] = await db
+        .select({ mainBranch: projects.mainBranch })
+        .from(projects)
+        .where(eq(projects.id, projectId));
       return {
-        runs,
+        mainBranch,
+        // `counts`: whether the run's results count toward verification status (the branch rule).
+        runs: runs.map((r) => ({ ...r, counts: countsTowardStatus(r.branch, mainBranch), passRate: passRate(r) })),
         pipelines: [...new Set(names.map((n) => n.pipeline))].sort(),
         branches: [...new Set(names.map((n) => n.branch))].sort(),
       };

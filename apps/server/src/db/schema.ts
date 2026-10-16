@@ -132,6 +132,8 @@ export const apiTokens = pgTable("api_tokens", {
 export const projects = pgTable("projects", {
   id: uuid().primaryKey().defaultRandom(),
   name: text().notNull(),
+  // Only CI results from this branch count toward verification status. Empty: every branch counts.
+  mainBranch: text().notNull().default(""),
   createdAt: createdAt(),
   archivedAt: timestamp({ withTimezone: true }),
 });

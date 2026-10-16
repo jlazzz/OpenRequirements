@@ -50,7 +50,7 @@ One slice per fresh session. Opus for slices with hard data-model or security lo
 | L | A1 slice 4 | Real files | Sonnet | A1 slice 1, a design partner's exports | |  |
 | none | Phase 1 | Playwright end-to-end tests | Sonnet | best after J5 slice 8, so screens stop moving | | built 2026-10-15, CI job not yet run on GitHub |
 | M | J2 slice 8 | Word export options: which fields, UID before or after the name, cover on or off | Sonnet | none | |  |
-| M | T6 slice 2 | CI branch rule (only the project's main branch sets verification status) and pass-rate trend per pipeline | Sonnet | none | DB |  |
+| M | T6 slice 2 | CI branch rule (only the project's main branch sets verification status) and pass-rate trend per pipeline | Sonnet | none | DB | built 2026-10-16 |
 | M | J4 slice 7 | Response schemas in the OpenAPI document | Sonnet | none | |  |
 
 Waves for bundle I and its neighbours (each wave in parallel):

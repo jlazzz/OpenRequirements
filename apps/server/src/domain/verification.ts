@@ -47,3 +47,17 @@ export function isFlaky(outcomes: Outcome[]): boolean {
   const recent = outcomes.slice(-5);
   return recent.filter((outcome, index) => index > 0 && outcome !== recent[index - 1]).length > 1;
 }
+
+/**
+ * Whether a result counts toward verification status. A result that came from a CI run counts only when the project
+ * names no main branch or the run was on it; a result recorded by hand or in a test run (no branch) always counts.
+ */
+export function countsTowardStatus(runBranch: string | null, mainBranch: string): boolean {
+  return runBranch === null || mainBranch === "" || runBranch === mainBranch;
+}
+
+/** The pass rate of a CI run, 0 to 1: passed out of passed and failed. Null when nothing passed or failed. */
+export function passRate(run: { passed: number; failed: number }): number | null {
+  const total = run.passed + run.failed;
+  return total === 0 ? null : run.passed / total;
+}
