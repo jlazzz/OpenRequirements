@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-15 (wave 6 merged: help in the app, migration guide, Playwright)
+Last updated: 2026-10-16 (bundle M merged: Word export options, CI branch rule, OpenAPI response schemas)
 
 Short, current picture of the project. Full checklists live in [docs/PROJECT_OUTLINE.md](docs/PROJECT_OUTLINE.md) section 7. Keep this file under one screen.
 
@@ -76,6 +76,7 @@ Short, current picture of the project. Full checklists live in [docs/PROJECT_OUT
 
 ## In progress
 
+- **Bundle M (J2 slice 8, T6 slice 2, J4 slice 7): built and merged, waiting for the owner's test.** Checkpoint: export a set to Word with the cover off and two fields; set a main branch on a project, upload JUnit from another branch and see it "not counted"; open `/api/openapi.json` and see response schemas.
 - **J2 slice 8 (Word export options): built, waiting for the owner's test.** Checkpoint: Export > Word on a set, untick a field and the cover, open the file.
 - **A5 slice 2 (help in the app): built, waiting for the owner's test.** Checkpoint: open a few screens and click "?"; on an empty instance read the Projects page.
 - **J1 slice 2 (review notifications, Word record): built, waiting for the owner's test.** Checkpoint: sign as the last approver, see the bell; close, download the Word record.
@@ -113,7 +114,7 @@ All eight Phase 1 milestones (M0 to M7) are built. What is left before Phase 1 c
 1. ~~Playwright end-to-end tests~~ done (2026-10-15)
 2. ~~Dogfood~~ done (A2 slice 2); grow the spec and feed it CI results
 
-Wave 6 (help in the app, migration guide, Playwright) merged 2026-10-15, before the owner's test of bundle I. Next: bundle M (Word export options, CI branch rule, OpenAPI responses).
+Wave 6 (help in the app, migration guide, Playwright) merged 2026-10-15, before the owner's test of bundle I. Bundle M merged 2026-10-16. Next: the owner's tests; A1 slice 4 waits for a design partner's files.
 
 After that, the bundles in [docs/ROADMAP.md](docs/ROADMAP.md), in order: I (review gaps, editable item types, baseline compare, dashboard, exports, side bar and section pages, CI runs view, rich test steps), then J (releases, security basics, in-app help; docs site built), K (compliance evidence), L (migration).
 
