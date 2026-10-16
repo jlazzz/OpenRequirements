@@ -15,6 +15,7 @@ import {
   users,
 } from "./db/schema.ts";
 import { liveLinks } from "./links.ts";
+import { arr, date, id, int, nul, obj, res, rows, str, thing } from "./schemas.ts";
 import { projectVerification } from "./verification.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -24,7 +25,28 @@ const idParam = (name: string) => ({ type: "object", required: [name], propertie
 export function baselineRoutes({ app, db, requireUser, audit, access }: AppContext) {
   app.get(
     "/api/projects/:projectId/baselines",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            baselines: arr(
+              obj({
+                id,
+                name: str,
+                setId: nul(id),
+                createdAt: date,
+                author: str,
+                items: int,
+                reviews: rows,
+                cycles: rows,
+              }),
+            ),
+          }),
+        ),
+        params: idParam("projectId"),
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -85,6 +107,7 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -158,7 +181,13 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
   // A baseline's content: its folders and items shaped like the project tree, each item with its frozen revision.
   app.get(
     "/api/baselines/:baselineId",
-    { onRequest: requireUser, schema: { params: idParam("baselineId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ baseline: thing, entries: rows, links: rows, verification: thing })),
+        params: idParam("baselineId"),
+      },
+    },
     async (req, reply) => {
       const { baselineId } = req.params as { baselineId: string };
       if (!(await access(req, reply, { baselineId }, "viewer"))) return reply;
@@ -228,6 +257,15 @@ export function baselineRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(
+          obj({
+            from: obj({ id, name: str }),
+            to: obj({ id, name: str }),
+            items: rows,
+            links: rows,
+            verification: rows,
+          }),
+        ),
         params: idParam("baselineId"),
         querystring: { type: "object", required: ["with"], properties: { with: uuid } },
       },

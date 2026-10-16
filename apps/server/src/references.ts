@@ -4,6 +4,7 @@ import type { Db } from "./db/client.ts";
 import { externalReferences, integrations, nodes, sets } from "./db/schema.ts";
 import { normalBase, readStatus, referenceKind, statusRequest } from "./domain/references.ts";
 import { decrypt, encrypt } from "./domain/secret.ts";
+import { any, arr, bool, date, id, obj, ok, res, rows, str } from "./schemas.ts";
 import { outboundFetch, urlRefusal } from "./worker.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -105,7 +106,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
 
   app.get(
     "/api/items/:itemId/references",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ references: rows })), params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -124,6 +125,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("itemId"),
         body: {
           type: "object",
@@ -164,7 +166,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
 
   app.delete(
     "/api/references/:referenceId",
-    { onRequest: requireUser, schema: { params: idParam("referenceId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("referenceId") } },
     async (req, reply) => {
       const { referenceId } = req.params as { referenceId: string };
       if (!(await access(req, reply, { referenceId }, "editor"))) return reply;
@@ -185,7 +187,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
   // Reads the title and state of one item's references now, instead of waiting for the worker.
   app.post(
     "/api/items/:itemId/references/refresh",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ read: any })), params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -201,6 +203,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
       onRequest: requireUser,
       bodyLimit: 10 * 1024 * 1024,
       schema: {
+        response: res(obj({ unknown: arr(str) }, [])),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -298,7 +301,18 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
 
   app.get(
     "/api/projects/:projectId/integrations",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            tokens: bool,
+            integrations: arr(obj({ id, kind: str, baseUrl: str, hasToken: bool, createdAt: date })),
+          }),
+        ),
+        params: idParam("projectId"),
+      },
+    },
     async (req, reply) => {
       const projectId = await access(req, reply, req.params as { projectId: string }, "admin");
       if (!projectId) return reply;
@@ -326,6 +340,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -374,7 +389,7 @@ export function referenceRoutes({ app, db, requireUser, audit, access, outbound 
 
   app.delete(
     "/api/integrations/:integrationId",
-    { onRequest: requireUser, schema: { params: idParam("integrationId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("integrationId") } },
     async (req, reply) => {
       const { integrationId } = req.params as { integrationId: string };
       const projectId = await access(req, reply, { integrationId }, "admin");

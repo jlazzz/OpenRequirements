@@ -1,53 +1,61 @@
 import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import { notifications, projectMembers, projects, users } from "./db/schema.ts";
+import { bool, int, obj, res, rows, str } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const PAGE = 50;
 
 /** The signed-in person's notifications, and how they want them by email. */
 export function notificationRoutes({ app, db, requireUser, audit, mail }: AppContext) {
-  app.get("/api/notifications", { onRequest: requireUser }, async (req) => {
-    const user = req.user as { id: string; isAdmin: boolean };
-    // Only from projects the person can still open, so losing access also hides what they were told about it.
-    const visible = and(
-      eq(notifications.userId, user.id),
-      isNull(projects.archivedAt),
-      user.isAdmin ? undefined : eq(projectMembers.userId, user.id),
-    );
-    const mine = and(eq(projectMembers.projectId, notifications.projectId), eq(projectMembers.userId, user.id));
-    const list = await db
-      .select({
-        id: notifications.id,
-        kind: notifications.kind,
-        text: notifications.text,
-        path: notifications.path,
-        createdAt: notifications.createdAt,
-        readAt: notifications.readAt,
-      })
-      .from(notifications)
-      .innerJoin(projects, eq(projects.id, notifications.projectId))
-      .leftJoin(projectMembers, mine)
-      .where(visible)
-      .orderBy(desc(notifications.createdAt))
-      .limit(PAGE);
-    const [unread] = await db
-      .select({ n: count() })
-      .from(notifications)
-      .innerJoin(projects, eq(projects.id, notifications.projectId))
-      .leftJoin(projectMembers, mine)
-      .where(and(visible, isNull(notifications.readAt)));
-    const [me] = await db
-      .select({ emailNotifications: users.emailNotifications })
-      .from(users)
-      .where(eq(users.id, user.id));
-    return {
-      notifications: list,
-      unread: unread?.n ?? 0,
-      emailNotifications: me?.emailNotifications,
-      mail: mail.enabled,
-    };
-  });
+  app.get(
+    "/api/notifications",
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ notifications: rows, unread: int, emailNotifications: str, mail: bool })) },
+    },
+    async (req) => {
+      const user = req.user as { id: string; isAdmin: boolean };
+      // Only from projects the person can still open, so losing access also hides what they were told about it.
+      const visible = and(
+        eq(notifications.userId, user.id),
+        isNull(projects.archivedAt),
+        user.isAdmin ? undefined : eq(projectMembers.userId, user.id),
+      );
+      const mine = and(eq(projectMembers.projectId, notifications.projectId), eq(projectMembers.userId, user.id));
+      const list = await db
+        .select({
+          id: notifications.id,
+          kind: notifications.kind,
+          text: notifications.text,
+          path: notifications.path,
+          createdAt: notifications.createdAt,
+          readAt: notifications.readAt,
+        })
+        .from(notifications)
+        .innerJoin(projects, eq(projects.id, notifications.projectId))
+        .leftJoin(projectMembers, mine)
+        .where(visible)
+        .orderBy(desc(notifications.createdAt))
+        .limit(PAGE);
+      const [unread] = await db
+        .select({ n: count() })
+        .from(notifications)
+        .innerJoin(projects, eq(projects.id, notifications.projectId))
+        .leftJoin(projectMembers, mine)
+        .where(and(visible, isNull(notifications.readAt)));
+      const [me] = await db
+        .select({ emailNotifications: users.emailNotifications })
+        .from(users)
+        .where(eq(users.id, user.id));
+      return {
+        notifications: list,
+        unread: unread?.n ?? 0,
+        emailNotifications: me?.emailNotifications,
+        mail: mail.enabled,
+      };
+    },
+  );
 
   // Marks the given notifications read, or all of them when no ids are given.
   app.post(
@@ -55,6 +63,7 @@ export function notificationRoutes({ app, db, requireUser, audit, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ marked: int })),
         body: {
           type: "object",
           additionalProperties: false,
@@ -91,6 +100,7 @@ export function notificationRoutes({ app, db, requireUser, audit, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ emailNotifications: str })),
         body: {
           type: "object",
           required: ["emailNotifications"],

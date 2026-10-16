@@ -4,6 +4,7 @@ import type { AppContext, Tx } from "./app.ts";
 import { passwordResets, sessions, users } from "./db/schema.ts";
 import { hashPassword } from "./domain/password.ts";
 import { queueMail } from "./mail.ts";
+import { bool, obj, ok, ref, res, str } from "./schemas.ts";
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 const HOUR_MS = 3_600_000;
@@ -46,6 +47,7 @@ export function recoveryRoutes({
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(ok),
         body: {
           type: "object",
           required: ["email"],
@@ -84,6 +86,7 @@ export function recoveryRoutes({
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(obj({ email: str })),
         params: { type: "object", required: ["token"], properties: { token: { type: "string", maxLength: 100 } } },
       },
     },
@@ -105,6 +108,7 @@ export function recoveryRoutes({
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(obj({ user: ref("User") })),
         body: {
           type: "object",
           required: ["token", "password"],
@@ -148,6 +152,7 @@ export function recoveryRoutes({
     {
       onRequest: [requireUser, requireAdmin, requireSession],
       schema: {
+        response: res(obj({ token: str, emailed: bool }), 201),
         params: { type: "object", required: ["userId"], properties: { userId: { type: "string", format: "uuid" } } },
       },
     },

@@ -4,6 +4,7 @@ import type { AppContext } from "./app.ts";
 import { attributeDefinitions, itemTypes, linkTypes, projectMembers, projects, sets } from "./db/schema.ts";
 import { templates } from "./domain/templates.ts";
 import { projectNodes } from "./nodes.ts";
+import { arr, bool, id, obj, ref, res, str } from "./schemas.ts";
 
 const projectParams = {
   type: "object",
@@ -12,35 +13,49 @@ const projectParams = {
 } as const;
 
 export function projectRoutes({ app, db, requireUser, requireAdmin, audit, access }: AppContext) {
-  app.get("/api/templates", { onRequest: requireUser }, async () => ({
-    templates: templates.map((t) => ({
-      id: t.id,
-      name: t.name,
-      description: t.description,
-      sets: t.sets.map((s) => s.name),
-    })),
-  }));
+  app.get(
+    "/api/templates",
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ templates: arr(obj({ id: str, name: str, description: str, sets: arr(str) })) })),
+      },
+    },
+    async () => ({
+      templates: templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        sets: t.sets.map((s) => s.name),
+      })),
+    }),
+  );
 
   // Instance administrators see every project; everyone else sees the projects they are a member of.
-  app.get("/api/projects", { onRequest: requireUser }, async (req) => {
-    const user = req.user as { id: string; isAdmin: boolean };
-    const mine = db
-      .select({ id: projectMembers.projectId })
-      .from(projectMembers)
-      .where(eq(projectMembers.userId, user.id));
-    const rows = await db
-      .select()
-      .from(projects)
-      .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)))
-      .orderBy(projects.name);
-    return { projects: rows };
-  });
+  app.get(
+    "/api/projects",
+    { onRequest: requireUser, schema: { response: res(obj({ projects: arr(ref("Project")) })) } },
+    async (req) => {
+      const user = req.user as { id: string; isAdmin: boolean };
+      const mine = db
+        .select({ id: projectMembers.projectId })
+        .from(projectMembers)
+        .where(eq(projectMembers.userId, user.id));
+      const rows = await db
+        .select()
+        .from(projects)
+        .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)))
+        .orderBy(projects.name);
+      return { projects: rows };
+    },
+  );
 
   app.post(
     "/api/projects",
     {
       onRequest: [requireUser, requireAdmin],
       schema: {
+        response: res(obj({ project: ref("Project") }), 201),
         body: {
           type: "object",
           required: ["name", "templateId"],
@@ -110,6 +125,7 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit, acces
           additionalProperties: false,
           properties: { mainBranch: { type: "string", maxLength: 200 } },
         },
+        response: res(obj({ mainBranch: str })),
       },
     },
     async (req, reply) => {
@@ -129,7 +145,20 @@ export function projectRoutes({ app, db, requireUser, requireAdmin, audit, acces
 
   app.get(
     "/api/projects/:projectId",
-    { onRequest: requireUser, schema: { params: projectParams } },
+    {
+      onRequest: requireUser,
+      schema: {
+        params: projectParams,
+        response: res(
+          obj({
+            project: ref("Project"),
+            role: { type: "string", enum: ["viewer", "reviewer", "editor", "admin"] },
+            sets: arr(obj({ id, name: str, uidPrefix: str, itemType: str, isTest: bool })),
+            nodes: arr(ref("Node")),
+          }),
+        ),
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       const [project] = await db

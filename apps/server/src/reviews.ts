@@ -38,6 +38,7 @@ import {
 import { roleAllows } from "./domain/roles.ts";
 import { notify } from "./mail.ts";
 import { searchTextOf } from "./nodes.ts";
+import { any, arr, date, id, int, obj, ok, res, rows, str, thing } from "./schemas.ts";
 import { loadRuns } from "./testruns.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -144,7 +145,7 @@ export function reviewRoutes({
 
   app.get(
     "/api/projects/:projectId/reviews",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ reviews: rows })), params: idParam("projectId") } },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -205,6 +206,7 @@ export function reviewRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -291,32 +293,47 @@ export function reviewRoutes({
   );
 
   // Every open review the signed-in person takes part in, across projects.
-  app.get("/api/reviews/mine", { onRequest: requireUser }, async (req) => {
-    const rows = await db
-      .select({
-        id: reviews.id,
-        name: reviews.name,
-        projectId: reviews.projectId,
-        project: projects.name,
-        baseline: baselines.name,
-        createdAt: reviews.createdAt,
-        role: reviewParticipants.role,
-      })
-      .from(reviewParticipants)
-      .innerJoin(reviews, eq(reviews.id, reviewParticipants.reviewId))
-      .innerJoin(projects, eq(projects.id, reviews.projectId))
-      .innerJoin(baselines, eq(baselines.id, reviews.baselineId))
-      .where(
-        and(
-          eq(reviewParticipants.userId, req.user?.id as string),
-          isNull(reviewParticipants.removedAt),
-          eq(reviews.state, "open"),
-          isNull(projects.archivedAt),
+  app.get(
+    "/api/reviews/mine",
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            reviews: arr(
+              obj({ id, name: str, projectId: id, project: str, baseline: str, createdAt: date, role: str }),
+            ),
+          }),
         ),
-      )
-      .orderBy(desc(reviews.createdAt));
-    return { reviews: rows };
-  });
+      },
+    },
+    async (req) => {
+      const rows = await db
+        .select({
+          id: reviews.id,
+          name: reviews.name,
+          projectId: reviews.projectId,
+          project: projects.name,
+          baseline: baselines.name,
+          createdAt: reviews.createdAt,
+          role: reviewParticipants.role,
+        })
+        .from(reviewParticipants)
+        .innerJoin(reviews, eq(reviews.id, reviewParticipants.reviewId))
+        .innerJoin(projects, eq(projects.id, reviews.projectId))
+        .innerJoin(baselines, eq(baselines.id, reviews.baselineId))
+        .where(
+          and(
+            eq(reviewParticipants.userId, req.user?.id as string),
+            isNull(reviewParticipants.removedAt),
+            eq(reviews.state, "open"),
+            isNull(projects.archivedAt),
+          ),
+        )
+        .orderBy(desc(reviews.createdAt));
+      return { reviews: rows };
+    },
+  );
 
   // Adds a person to an open review. They get an invitation like everyone named when it was made.
   app.post(
@@ -324,6 +341,7 @@ export function reviewRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok, 201),
         params: idParam("reviewId"),
         body: {
           type: "object",
@@ -385,6 +403,7 @@ export function reviewRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: { type: "object", required: ["reviewId", "userId"], properties: { reviewId: uuid, userId: uuid } },
       },
     },
@@ -425,7 +444,13 @@ export function reviewRoutes({
   // One review: its people, marks, comments and signatures. The frozen items themselves are read from its baseline.
   app.get(
     "/api/reviews/:reviewId",
-    { onRequest: requireUser, schema: { params: idParam("reviewId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ review: thing, participants: rows }, ["review", "participants"])),
+        params: idParam("reviewId"),
+      },
+    },
     async (req, reply) => {
       const { reviewId } = req.params as { reviewId: string };
       if (!(await access(req, reply, { reviewId }, "viewer"))) return reply;
@@ -506,6 +531,7 @@ export function reviewRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ marked: int })),
         params: idParam("reviewId"),
         body: {
           type: "object",
@@ -565,6 +591,7 @@ export function reviewRoutes({
       onRequest: [requireUser, requireSession],
       config: loginLimit,
       schema: {
+        response: res(obj({ meaning: str, signedAt: date }), 201),
         params: idParam("reviewId"),
         body: {
           type: "object",
@@ -714,6 +741,7 @@ export function reviewRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ state: str, updated: int, skipped: arr(any) })),
         params: idParam("reviewId"),
         body: { type: "object", additionalProperties: false, properties: { setStatus: { type: "boolean" } } },
       },

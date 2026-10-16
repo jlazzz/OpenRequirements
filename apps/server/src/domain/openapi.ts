@@ -7,7 +7,7 @@ type Schema = { properties?: Record<string, unknown>; required?: string[] };
  * The OpenAPI 3.1 document of the API, built from the JSON schemas the routes already validate with. Fastify's
  * `:name` path parameters become `{name}`. Routes are sorted, so the committed docs/openapi.json only changes with the API.
  */
-export function openApiDocument(routes: ApiRoute[], version: string) {
+export function openApiDocument(routes: ApiRoute[], version: string, schemas: Record<string, unknown> = {}) {
   const paths: Record<string, Record<string, unknown>> = {};
   const sorted = routes
     .filter((r) => r.method !== "HEAD")
@@ -31,8 +31,18 @@ export function openApiDocument(routes: ApiRoute[], version: string) {
       ...(schema.body
         ? { requestBody: { required: true, content: { "application/json": { schema: schema.body } } } }
         : {}),
-      // Response bodies are not described yet: every answer is JSON, and an error is { "error": "…" }.
-      responses: { default: { description: 'JSON. An error answers { "error": "…" } with a 4xx status.' } },
+      responses: {
+        ...Object.fromEntries(
+          Object.entries((schema.response ?? {}) as Record<string, unknown>).map(([code, body]) => [
+            code,
+            { description: "JSON.", content: { "application/json": { schema: body } } },
+          ]),
+        ),
+        default: {
+          description: 'An error answers { "error": "…" } with a 4xx status.',
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+      },
       ...(route.public ? { security: [] } : {}),
     };
   }
@@ -45,6 +55,7 @@ export function openApiDocument(routes: ApiRoute[], version: string) {
         "Every screen of the web app uses this API. Scripts sign in with a personal access token, sent as `Authorization: Bearer …`.",
     },
     components: {
+      schemas,
       securitySchemes: {
         token: { type: "http", scheme: "bearer" },
         session: { type: "apiKey", in: "cookie", name: "session" },

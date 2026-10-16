@@ -8,6 +8,7 @@ import { checkAttributes, type FieldDef } from "./domain/attributes.ts";
 import { onlyStatusChanged } from "./domain/review.ts";
 import { descendantIds, placeBefore, placementError } from "./domain/tree.ts";
 import { watchSuspect } from "./links.ts";
+import { arr, date, id, int, nul, obj, ok, ref, res, rows, str, thing } from "./schemas.ts";
 
 const idParam = (name: string) =>
   ({ type: "object", required: [name], properties: { [name]: { type: "string", format: "uuid" } } }) as const;
@@ -109,6 +110,10 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(
+          obj({ node: obj({ id, setId: id, parentId: nul(id), kind: str, name: str, uid: nul(str) }) }),
+          201,
+        ),
         params: idParam("setId"),
         body: {
           type: "object",
@@ -190,6 +195,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ ids: arr(id) })),
         params: idParam("projectId"),
         querystring: { type: "object", required: ["q"], properties: { q: { type: "string", maxLength: 200 } } },
       },
@@ -221,7 +227,13 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // The data behind List view: the set's field definitions and the current revision of each of its items.
   app.get(
     "/api/sets/:setId/items",
-    { onRequest: requireUser, schema: { params: idParam("setId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ fields: arr(ref("Field")), items: rows, drafts: rows })),
+        params: idParam("setId"),
+      },
+    },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
       if (!(await access(req, reply, { setId }, "viewer"))) return reply;
@@ -260,7 +272,13 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
 
   app.get(
     "/api/items/:itemId",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ item: ref("Item"), fields: arr(ref("Field")), draft: nul(thing) })),
+        params: idParam("itemId"),
+      },
+    },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -302,7 +320,13 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // Polled by an open item page: the latest version, and who else has unsaved edits. Draft contents stay private.
   app.get(
     "/api/items/:itemId/editing",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ revision: int, author: str, editors: arr(obj({ name: str, since: date })) })),
+        params: idParam("itemId"),
+      },
+    },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -327,7 +351,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // Version history of an item, newest first.
   app.get(
     "/api/items/:itemId/revisions",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ revisions: rows })), params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -357,6 +381,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ revision: int }), 201),
         params: idParam("itemId"),
         body: {
           type: "object",
@@ -447,6 +472,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("itemId"),
         body: {
           type: "object",
@@ -500,7 +526,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
 
   app.delete(
     "/api/items/:itemId/draft",
-    { onRequest: requireUser, schema: { params: idParam("itemId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "editor"))) return reply;
@@ -521,6 +547,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("nodeId"),
         body: {
           type: "object",
@@ -555,6 +582,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("nodeId"),
         body: {
           type: "object",
@@ -607,6 +635,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ changed: int })),
         params: idParam("setId"),
         body: {
           type: "object",
@@ -746,7 +775,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // Deleted folders and items of a project, newest first, so they can be restored.
   app.get(
     "/api/projects/:projectId/trash",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ deleted: rows })), params: idParam("projectId") } },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -776,7 +805,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // Undoes a delete: the node comes back with everything that was deleted together with it.
   app.post(
     "/api/nodes/:nodeId/restore",
-    { onRequest: requireUser, schema: { params: idParam("nodeId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ restored: int })), params: idParam("nodeId") } },
     async (req, reply) => {
       const { nodeId } = req.params as { nodeId: string };
       if (!(await access(req, reply, { nodeId }, "editor"))) return reply;
@@ -835,7 +864,7 @@ export function nodeRoutes({ app, db, requireUser, audit, access, mail }: AppCon
   // Soft delete: the node and everything inside it are hidden, never removed. History and UIDs are kept.
   app.delete(
     "/api/nodes/:nodeId",
-    { onRequest: requireUser, schema: { params: idParam("nodeId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ deleted: int })), params: idParam("nodeId") } },
     async (req, reply) => {
       const { nodeId } = req.params as { nodeId: string };
       if (!(await access(req, reply, { nodeId }, "editor"))) return reply;

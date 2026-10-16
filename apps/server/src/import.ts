@@ -8,6 +8,7 @@ import { checkAttributes, type FieldDef } from "./domain/attributes.ts";
 import { onlyStatusChanged } from "./domain/review.ts";
 import { watchSuspect } from "./links.ts";
 import { fieldsOf, searchTextOf, statusFieldOf } from "./nodes.ts";
+import { res, thing } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const MAX_NODES = 5000;
@@ -41,6 +42,7 @@ export function importRoutes({ app, db, requireUser, audit, access, mail }: AppC
       // Room for 5,000 items with long descriptions.
       bodyLimit: 50 * 1024 * 1024,
       schema: {
+        response: res(thing),
         params: { type: "object", required: ["projectId"], properties: { projectId: uuid } },
         body: {
           type: "object",
