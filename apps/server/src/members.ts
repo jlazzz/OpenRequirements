@@ -5,6 +5,7 @@ import { invitations, projectMembers, sessions, users } from "./db/schema.ts";
 import { hashPassword, NO_PASSWORD } from "./domain/password.ts";
 import { ROLES, type Role } from "./domain/roles.ts";
 import { queueMail } from "./mail.ts";
+import { arr, bool, date, id, nul, obj, ok, ref, res, str } from "./schemas.ts";
 
 const INVITE_DAYS = 7;
 const uuid = { type: "string", format: "uuid" } as const;
@@ -30,24 +31,38 @@ export function memberRoutes({
 
   // --- Accounts and invitations: instance administrators only ---
 
-  app.get("/api/users", { onRequest: [requireUser, requireAdmin] }, async () => ({
-    users: await db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        isAdmin: users.isAdmin,
-        createdAt: users.createdAt,
-        deactivatedAt: users.deactivatedAt,
-      })
-      .from(users)
-      .orderBy(users.name),
-    invitations: await db
-      .select({ id: invitations.id, email: invitations.email, expiresAt: invitations.expiresAt })
-      .from(invitations)
-      .where(pending)
-      .orderBy(invitations.createdAt),
-  }));
+  app.get(
+    "/api/users",
+    {
+      onRequest: [requireUser, requireAdmin],
+      schema: {
+        response: res(
+          obj({
+            users: arr(obj({ id, name: str, email: str, isAdmin: bool, createdAt: date, deactivatedAt: nul(date) })),
+            invitations: arr(obj({ id, email: str, expiresAt: date })),
+          }),
+        ),
+      },
+    },
+    async () => ({
+      users: await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          isAdmin: users.isAdmin,
+          createdAt: users.createdAt,
+          deactivatedAt: users.deactivatedAt,
+        })
+        .from(users)
+        .orderBy(users.name),
+      invitations: await db
+        .select({ id: invitations.id, email: invitations.email, expiresAt: invitations.expiresAt })
+        .from(invitations)
+        .where(pending)
+        .orderBy(invitations.createdAt),
+    }),
+  );
 
   // Deactivating keeps the account and everything it wrote, but ends its sessions and refuses new sign-ins.
   app.put(
@@ -55,6 +70,7 @@ export function memberRoutes({
     {
       onRequest: [requireUser, requireAdmin],
       schema: {
+        response: res(ok),
         params: { type: "object", required: ["userId"], properties: { userId: uuid } },
         body: {
           type: "object",
@@ -92,6 +108,7 @@ export function memberRoutes({
     {
       onRequest: [requireUser, requireAdmin],
       schema: {
+        response: res(obj({ id, email: str, token: str, emailed: bool }), 201),
         body: {
           type: "object",
           required: ["email"],
@@ -141,7 +158,10 @@ export function memberRoutes({
     "/api/invitations/:invitationId",
     {
       onRequest: [requireUser, requireAdmin],
-      schema: { params: { type: "object", required: ["invitationId"], properties: { invitationId: uuid } } },
+      schema: {
+        response: res(ok),
+        params: { type: "object", required: ["invitationId"], properties: { invitationId: uuid } },
+      },
     },
     async (req, reply) => {
       const { invitationId } = req.params as { invitationId: string };
@@ -170,7 +190,10 @@ export function memberRoutes({
     "/api/invitations/accept/:token",
     {
       config: { public: true, ...loginLimit },
-      schema: { params: { type: "object", required: ["token"], properties: { token: tokenParam } } },
+      schema: {
+        response: res(obj({ email: str })),
+        params: { type: "object", required: ["token"], properties: { token: tokenParam } },
+      },
     },
     async (req, reply) => {
       const { token } = req.params as { token: string };
@@ -188,6 +211,7 @@ export function memberRoutes({
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(obj({ user: ref("User") })),
         body: {
           type: "object",
           required: ["token", "name", "password"],
@@ -242,7 +266,18 @@ export function memberRoutes({
 
   app.get(
     "/api/projects/:projectId/members",
-    { onRequest: requireUser, schema: { params: projectParam } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            members: arr(obj({ userId: id, name: str, email: str, role: str })),
+            instanceAdmins: arr(obj({ userId: id, name: str })),
+          }),
+        ),
+        params: projectParam,
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -265,7 +300,13 @@ export function memberRoutes({
   // People who could be added: every account that is not yet a member. Project admins only, since it lists all accounts.
   app.get(
     "/api/projects/:projectId/candidates",
-    { onRequest: requireUser, schema: { params: projectParam } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ candidates: arr(obj({ userId: id, name: str, email: str })) })),
+        params: projectParam,
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "admin"))) return reply;
@@ -288,6 +329,7 @@ export function memberRoutes({
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: memberParams,
         body: {
           type: "object",
@@ -319,7 +361,7 @@ export function memberRoutes({
 
   app.delete(
     "/api/projects/:projectId/members/:userId",
-    { onRequest: requireUser, schema: { params: memberParams } },
+    { onRequest: requireUser, schema: { response: res(ok), params: memberParams } },
     async (req, reply) => {
       const { projectId, userId } = req.params as { projectId: string; userId: string };
       if (!(await access(req, reply, { projectId }, "admin"))) return reply;

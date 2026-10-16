@@ -2,6 +2,7 @@ import { type Proposal, planStructure } from "@app/importers";
 import { and, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 import type { AppContext, Tx } from "./app.ts";
 import { attributeDefinitions, itemTypes, linkTypes, nodes, sets } from "./db/schema.ts";
+import { arr, id, nul, obj, ok, ref, res, rows, str, thing } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const idParam = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -48,7 +49,19 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
   app.get(
     "/api/projects/:projectId/types",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            itemTypes: arr(obj({ id, name: str, role: nul(str), fields: arr(ref("Field")) })),
+            sets: rows,
+            linkTypes: rows,
+          }),
+        ),
+        params: idParam("projectId"),
+      },
+    },
     async (req, reply) => {
       const projectId = await access(req, reply, req.params as { projectId: string }, "viewer");
       if (!projectId) return reply;
@@ -95,6 +108,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ added: thing, notes: arr(str), sets: rows, linkTypes: rows })),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -287,6 +301,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -323,6 +338,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("itemTypeId"),
         body: {
           type: "object",
@@ -359,7 +375,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
   app.delete(
     "/api/item-types/:itemTypeId",
-    { onRequest: requireUser, schema: { params: idParam("itemTypeId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("itemTypeId") } },
     async (req, reply) => {
       const { itemTypeId } = req.params as { itemTypeId: string };
       const projectId = await access(req, reply, { itemTypeId }, "admin");
@@ -393,6 +409,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("itemTypeId"),
         body: {
           type: "object",
@@ -452,6 +469,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("fieldId"),
         body: { type: "object", minProperties: 1, additionalProperties: false, properties: { name, options } },
       },
@@ -494,7 +512,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
 
   app.delete(
     "/api/fields/:fieldId",
-    { onRequest: requireUser, schema: { params: idParam("fieldId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("fieldId") } },
     async (req, reply) => {
       const { fieldId } = req.params as { fieldId: string };
       const projectId = await access(req, reply, { fieldId }, "admin");
@@ -520,6 +538,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -577,6 +596,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("setId"),
         body: { type: "object", required: ["name"], additionalProperties: false, properties: { name } },
       },
@@ -599,7 +619,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
   // Only an empty set is removed. Its deleted items stay in history and baselines but can no longer be restored.
   app.delete(
     "/api/sets/:setId",
-    { onRequest: requireUser, schema: { params: idParam("setId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("setId") } },
     async (req, reply) => {
       const { setId } = req.params as { setId: string };
       const projectId = await access(req, reply, { setId }, "admin");
@@ -628,6 +648,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -668,6 +689,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("linkTypeId"),
         body: { type: "object", minProperties: 1, additionalProperties: false, properties: { name, role: linkRole } },
       },
@@ -700,7 +722,7 @@ export function typeRoutes({ app, db, requireUser, audit, access }: AppContext) 
   // Existing relationships keep a removed type; it is offered for no new one. One live type always stays.
   app.delete(
     "/api/link-types/:linkTypeId",
-    { onRequest: requireUser, schema: { params: idParam("linkTypeId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("linkTypeId") } },
     async (req, reply) => {
       const { linkTypeId } = req.params as { linkTypeId: string };
       const projectId = await access(req, reply, { linkTypeId }, "admin");

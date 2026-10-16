@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull, lt, lte } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import type { Db } from "./db/client.ts";
 import { webhookDeliveries, webhooks } from "./db/schema.ts";
+import { id, obj, ok, res, rows, str } from "./schemas.ts";
 import { outboundFetch, urlRefusal } from "./worker.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -84,7 +85,7 @@ export function webhookRoutes({ app, db, requireUser, audit, access, outbound }:
 
   app.get(
     "/api/projects/:projectId/webhooks",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ webhooks: rows })), params: idParam("projectId") } },
     async (req, reply) => {
       const projectId = await access(req, reply, req.params as { projectId: string }, "admin");
       if (!projectId) return reply;
@@ -103,6 +104,7 @@ export function webhookRoutes({ app, db, requireUser, audit, access, outbound }:
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id, secret: str }), 201),
         params: idParam("projectId"),
         body: {
           type: "object",
@@ -145,7 +147,7 @@ export function webhookRoutes({ app, db, requireUser, audit, access, outbound }:
 
   app.delete(
     "/api/webhooks/:webhookId",
-    { onRequest: requireUser, schema: { params: idParam("webhookId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("webhookId") } },
     async (req, reply) => {
       const { webhookId } = req.params as { webhookId: string };
       const projectId = await access(req, reply, { webhookId }, "admin");
@@ -171,7 +173,7 @@ export function webhookRoutes({ app, db, requireUser, audit, access, outbound }:
   // Sends a "ping" to this webhook only, to try the receiver. Not shown in the activity stream.
   app.post(
     "/api/webhooks/:webhookId/ping",
-    { onRequest: requireUser, schema: { params: idParam("webhookId") } },
+    { onRequest: requireUser, schema: { response: res(ok, 201), params: idParam("webhookId") } },
     async (req, reply) => {
       const { webhookId } = req.params as { webhookId: string };
       if (!(await access(req, reply, { webhookId }, "admin"))) return reply;
@@ -186,7 +188,7 @@ export function webhookRoutes({ app, db, requireUser, audit, access, outbound }:
 
   app.get(
     "/api/webhooks/:webhookId/deliveries",
-    { onRequest: requireUser, schema: { params: idParam("webhookId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ deliveries: rows })), params: idParam("webhookId") } },
     async (req, reply) => {
       const { webhookId } = req.params as { webhookId: string };
       if (!(await access(req, reply, { webhookId }, "admin"))) return reply;

@@ -3,6 +3,7 @@ import type { AppContext } from "./app.ts";
 import { baselineEntries, baselineLinks, baselines, itemTypes, links, nodes, sets } from "./db/schema.ts";
 import { traceGraph } from "./domain/trace.ts";
 import { liveLinks } from "./links.ts";
+import { arr, id, int, nul, obj, res, rows } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const levels = { type: "integer", minimum: 0, maximum: 4 } as const;
@@ -23,6 +24,14 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
     {
       onRequest: requireUser,
       schema: {
+        response: res(
+          obj({
+            targetSetId: nul(id),
+            suspectLinkIds: arr(id),
+            coverage: obj({ items: int, noDownstream: int, reachTarget: int }),
+            rows: rows,
+          }),
+        ),
         params: { type: "object", required: ["setId"], properties: { setId: uuid } },
         querystring: {
           type: "object",
@@ -128,7 +137,10 @@ export function traceRoutes({ app, db, requireUser, access }: AppContext) {
     "/api/items/:itemId/impact",
     {
       onRequest: requireUser,
-      schema: { params: { type: "object", required: ["itemId"], properties: { itemId: uuid } } },
+      schema: {
+        response: res(obj({ downstream: rows, upstream: rows })),
+        params: { type: "object", required: ["itemId"], properties: { itemId: uuid } },
+      },
     },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };

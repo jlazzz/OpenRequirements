@@ -44,6 +44,7 @@ import { MARKS } from "./domain/review.ts";
 import { ROLES } from "./domain/roles.ts";
 import { OUTCOMES } from "./domain/verification.ts";
 import { searchTextOf } from "./nodes.ts";
+import { obj, res, thing } from "./schemas.ts";
 
 const id = { type: "string", format: "uuid" } as const;
 const idOrNull = { type: ["string", "null"], format: "uuid" } as const;
@@ -714,7 +715,11 @@ export function backupRoutes(
   // Restores a backup as a new project. It never touches an existing project. Everything gets a new id.
   app.post(
     "/api/projects/restore",
-    { onRequest: [requireUser, requireAdmin], bodyLimit: 256 * 1024 * 1024, schema: { body: backupSchema } },
+    {
+      onRequest: [requireUser, requireAdmin],
+      bodyLimit: 256 * 1024 * 1024,
+      schema: { response: res(obj({ project: thing }), 201), body: backupSchema },
+    },
     async (req, reply) => {
       const uploaded = req.body as Backup;
       const problem = backupError(uploaded);

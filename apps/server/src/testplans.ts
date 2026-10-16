@@ -13,6 +13,7 @@ import {
   users,
 } from "./db/schema.ts";
 import { RUN_STATES, type RunState } from "./domain/testrun.ts";
+import { id, int, obj, ok, res, rows, thing } from "./schemas.ts";
 import { loadRuns } from "./testruns.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -45,7 +46,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
 
   app.get(
     "/api/projects/:projectId/test-plans",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ plans: rows })), params: idParam("projectId") } },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -99,6 +100,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: idParam("projectId"),
         body: { type: "object", required: ["name"], additionalProperties: false, properties: { name } },
       },
@@ -124,7 +126,10 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
   // One plan: its test cases with their groups, and its cycles with how their runs stand.
   app.get(
     "/api/test-plans/:testPlanId",
-    { onRequest: requireUser, schema: { params: idParam("testPlanId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ plan: thing, cases: rows, cycles: rows })), params: idParam("testPlanId") },
+    },
     async (req, reply) => {
       const { testPlanId } = req.params as { testPlanId: string };
       if (!(await access(req, reply, { testPlanId }, "viewer"))) return reply;
@@ -165,7 +170,10 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
   // This is how two cycles are compared. A test case that was not part of a cycle has no entry for it.
   app.get(
     "/api/test-plans/:testPlanId/history",
-    { onRequest: requireUser, schema: { params: idParam("testPlanId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ cycles: rows, tests: rows })), params: idParam("testPlanId") },
+    },
     async (req, reply) => {
       const { testPlanId } = req.params as { testPlanId: string };
       if (!(await access(req, reply, { testPlanId }, "viewer"))) return reply;
@@ -201,6 +209,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: idParam("testPlanId"),
         body: { type: "object", required: ["name"], additionalProperties: false, properties: { name } },
       },
@@ -224,7 +233,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
   // Soft delete: the plan leaves the list. Its cycles, runs and the results they recorded are kept.
   app.delete(
     "/api/test-plans/:testPlanId",
-    { onRequest: requireUser, schema: { params: idParam("testPlanId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("testPlanId") } },
     async (req, reply) => {
       const { testPlanId } = req.params as { testPlanId: string };
       const projectId = await access(req, reply, { testPlanId }, "editor");
@@ -247,6 +256,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ added: int, skipped: int }), 201),
         params: idParam("testPlanId"),
         body: {
           type: "object",
@@ -319,6 +329,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ grouped: int })),
         params: idParam("testPlanId"),
         body: {
           type: "object",
@@ -366,6 +377,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ removed: int })),
         params: idParam("testPlanId"),
         body: { type: "object", required: ["itemIds"], additionalProperties: false, properties: { itemIds } },
       },
@@ -408,6 +420,7 @@ export function testPlanRoutes({ app, db, requireUser, audit, access }: AppConte
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id, runs: int }), 201),
         params: idParam("testPlanId"),
         body: {
           type: "object",

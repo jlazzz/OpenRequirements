@@ -5,6 +5,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { AppContext } from "./app.ts";
 import { attachments, projects } from "./db/schema.ts";
 import { fileType, safeFileName } from "./domain/filetype.ts";
+import { id, obj, res, str } from "./schemas.ts";
 
 const IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 const uuidParam = (name: string) =>
@@ -29,6 +30,7 @@ export function attachmentRoutes({ app, db, requireUser, audit, access }: AppCon
       onRequest: requireUser,
       bodyLimit: maxBytes,
       schema: {
+        response: res(obj({ id, src: str, name: str, contentType: str }), 201),
         params: uuidParam("projectId"),
         // The file's own name, kept so a download gets it back.
         querystring: { type: "object", properties: { name: { type: "string", maxLength: 500 } } },

@@ -19,6 +19,7 @@ import {
 } from "./db/schema.ts";
 import { isFlaky, isOutOfDate, OUTCOMES, type Outcome, verificationStatus } from "./domain/verification.ts";
 import { liveLinks } from "./links.ts";
+import { any, arr, bool, id, int, obj, res, rows, str, thing } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const param = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -183,7 +184,10 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
   // The results of one test case, newest first.
   app.get(
     "/api/items/:itemId/results",
-    { onRequest: requireUser, schema: { params: param("itemId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ isTest: bool, results: rows })), params: param("itemId") },
+    },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       const projectId = await access(req, reply, { nodeId: itemId }, "viewer");
@@ -233,6 +237,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id }), 201),
         params: param("itemId"),
         body: {
           type: "object",
@@ -305,7 +310,10 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
 
   app.get(
     "/api/projects/:projectId/verification",
-    { onRequest: requireUser, schema: { params: param("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ requirements: thing, tests: thing })), params: param("projectId") },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -317,7 +325,10 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
   // who recorded it, in which cycle, and its evidence. Computed on every request, like the status itself.
   app.get(
     "/api/projects/:projectId/reports/verification",
-    { onRequest: requireUser, schema: { params: param("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ requirements: thing, tests: thing })), params: param("projectId") },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -362,7 +373,13 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
   // Flaky tests: live test cases whose last five results changed outcome more than once. Outcomes are oldest first.
   app.get(
     "/api/projects/:projectId/reports/flaky",
-    { onRequest: requireUser, schema: { params: param("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(obj({ tests: arr(obj({ itemId: id, outcomes: arr(str) })) })),
+        params: param("projectId"),
+      },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -393,6 +410,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
       onRequest: requireUser,
       bodyLimit: MAX_REPORT_BYTES,
       schema: {
+        response: res(obj({ ciRunId: id, recorded: rows, unmatched: arr(any), unmatchedCount: int }), 201),
         params: param("projectId"),
         querystring: {
           type: "object",
@@ -528,6 +546,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ runs: rows, pipelines: arr(str), branches: arr(str) })),
         params: param("projectId"),
         querystring: {
           type: "object",
@@ -581,7 +600,7 @@ export function verificationRoutes({ app, db, requireUser, audit, access }: AppC
   // One upload: the results it recorded, each with the requirements its test case verifies, and the unmatched names.
   app.get(
     "/api/ci-runs/:ciRunId",
-    { onRequest: requireUser, schema: { params: param("ciRunId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ run: thing, results: rows })), params: param("ciRunId") } },
     async (req, reply) => {
       const { ciRunId } = req.params as { ciRunId: string };
       const projectId = await access(req, reply, { ciRunId }, "viewer");

@@ -6,6 +6,303 @@
     "description": "Every screen of the web app uses this API. Scripts sign in with a personal access token, sent as `Authorization: Bearer …`."
   },
   "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "isAdmin"
+        ],
+        "additionalProperties": true
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": true
+      },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "setId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "folder",
+              "item"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "setId",
+          "parentId",
+          "kind",
+          "name",
+          "uid",
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "Field": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "options": {}
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "options"
+        ],
+        "additionalProperties": true
+      },
+      "Link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "typeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "upstreamId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "downstreamId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "confirmed": {
+            "type": "object",
+            "properties": {
+              "upstream": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "downstream": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "upstream",
+              "downstream"
+            ],
+            "additionalProperties": true
+          },
+          "current": {
+            "type": "object",
+            "properties": {
+              "upstream": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "downstream": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "upstream",
+              "downstream"
+            ],
+            "additionalProperties": true
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "typeId",
+          "upstreamId",
+          "downstreamId",
+          "confirmed",
+          "current",
+          "changed"
+        ],
+        "additionalProperties": true
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "setId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {},
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "revisedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "setId",
+          "uid",
+          "name",
+          "description",
+          "attributes",
+          "revision",
+          "revisedAt"
+        ],
+        "additionalProperties": true
+      }
+    },
     "securitySchemes": {
       "token": {
         "type": "http",
@@ -56,8 +353,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "emailNotifications": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "emailNotifications"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -95,8 +418,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -119,7 +468,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -130,8 +486,38 @@
           "audit"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "anchors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "anchors"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -140,8 +526,46 @@
           "audit"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "anchor": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "anchor"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -204,8 +628,41 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -216,8 +673,53 @@
           "audit"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "checked": {
+                      "type": "integer"
+                    },
+                    "lastSeq": {
+                      "type": "integer"
+                    },
+                    "unchained": {
+                      "type": "integer"
+                    },
+                    "firstBroken": {},
+                    "anchors": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "checked",
+                    "lastSeq",
+                    "unchained",
+                    "firstBroken",
+                    "anchors"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -239,8 +741,56 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "baseline": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "verification": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "baseline",
+                    "entries",
+                    "links",
+                    "verification"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -271,8 +821,90 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "verification": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "items",
+                    "links",
+                    "verification"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -295,7 +927,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -329,7 +968,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -363,7 +1009,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -385,8 +1038,43 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "run",
+                    "results"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -408,8 +1096,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -431,8 +1145,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -484,8 +1224,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -507,8 +1273,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -540,8 +1332,47 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "emailed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "email",
+                    "token",
+                    "emailed"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -563,8 +1394,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -609,8 +1466,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -634,8 +1517,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "email"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -658,8 +1567,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -705,8 +1640,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -774,8 +1735,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -797,8 +1785,53 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "$ref": "#/components/schemas/Item"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Field"
+                      }
+                    },
+                    "draft": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "fields",
+                    "draft"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -820,8 +1853,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "comments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "comments"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -867,8 +1930,43 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "mentions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "mentions"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -890,8 +1988,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -944,8 +2068,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -967,8 +2117,59 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "author": {
+                      "type": "string"
+                    },
+                    "editors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "since": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "since"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "revision",
+                    "author",
+                    "editors"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -990,8 +2191,46 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "downstream": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "upstream": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "downstream",
+                    "upstream"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1013,8 +2252,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "references": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "references"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1059,8 +2328,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1082,8 +2378,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "read": {}
+                  },
+                  "required": [
+                    "read"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1105,8 +2425,42 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isTest": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "isTest",
+                    "results"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1169,8 +2523,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1192,8 +2573,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revisions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "revisions"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1252,8 +2663,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "revision"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1275,8 +2712,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1322,8 +2785,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1364,8 +2853,59 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "link": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "typeId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "upstreamId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "downstreamId": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "typeId",
+                        "upstreamId",
+                        "downstreamId"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "link"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1387,8 +2927,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1426,8 +2992,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -1439,8 +3031,34 @@
           "logout"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1462,8 +3080,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1505,8 +3149,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1559,8 +3229,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1582,8 +3278,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "restored": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "restored"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1594,8 +3316,50 @@
           "notifications"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "unread": {
+                      "type": "integer"
+                    },
+                    "emailNotifications": {
+                      "type": "string"
+                    },
+                    "mail": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "notifications",
+                    "unread",
+                    "emailNotifications",
+                    "mail"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1628,8 +3392,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "marked": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "marked"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1640,8 +3430,34 @@
           "openapi.json"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "openapi": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "openapi"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -1674,8 +3490,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -1713,8 +3555,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -1737,8 +3605,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "email"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -1750,8 +3644,37 @@
           "projects"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Project"
+                      }
+                    }
+                  },
+                  "required": [
+                    "projects"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1786,8 +3709,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  },
+                  "required": [
+                    "project"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1809,8 +3758,84 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "viewer",
+                        "reviewer",
+                        "editor",
+                        "admin"
+                      ]
+                    },
+                    "sets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "uidPrefix": {
+                            "type": "string"
+                          },
+                          "itemType": {
+                            "type": "string"
+                          },
+                          "isTest": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "uidPrefix",
+                          "itemType",
+                          "isTest"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Node"
+                      }
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "role",
+                    "sets",
+                    "nodes"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1841,8 +3866,42 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "events",
+                    "more"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1873,8 +3932,47 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "src": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "contentType": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "src",
+                    "name",
+                    "contentType"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1897,7 +3995,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1919,8 +4024,92 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "baselines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "setId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "author": {
+                            "type": "string"
+                          },
+                          "items": {
+                            "type": "integer"
+                          },
+                          "reviews": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": true
+                            }
+                          },
+                          "cycles": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "setId",
+                          "createdAt",
+                          "author",
+                          "items",
+                          "reviews",
+                          "cycles"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "baselines"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1966,8 +4155,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1989,8 +4205,55 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "candidates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "candidates"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2028,8 +4291,52 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "pipelines": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "branches": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "runs",
+                    "pipelines",
+                    "branches"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2101,8 +4408,35 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unknown": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2253,8 +4587,26 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2276,8 +4628,68 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tokens": {
+                      "type": "boolean"
+                    },
+                    "integrations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "baseUrl": {
+                            "type": "string"
+                          },
+                          "hasToken": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "baseUrl",
+                          "hasToken",
+                          "createdAt"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "tokens",
+                    "integrations"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2331,8 +4743,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2382,8 +4821,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2433,8 +4899,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2456,8 +4949,81 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linkTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "archivedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "role",
+                          "archivedAt"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Link"
+                      }
+                    }
+                  },
+                  "required": [
+                    "linkTypes",
+                    "links"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2523,8 +5089,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "confirmed": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "confirmed"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2546,8 +5138,80 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name",
+                          "email",
+                          "role"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "instanceAdmins": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "name"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "members",
+                    "instanceAdmins"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2578,8 +5242,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2632,8 +5322,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2655,8 +5371,54 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "itemId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "outcomes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "itemId",
+                          "outcomes"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "tests"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2678,8 +5440,40 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requirements": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "tests": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "requirements",
+                    "tests"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2701,8 +5495,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reviews": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "reviews"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -2765,8 +5589,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2797,8 +5648,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ids"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2852,8 +5733,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2971,8 +5879,58 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "linkTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "added",
+                    "notes",
+                    "sets",
+                    "linkTypes"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2994,8 +5952,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plans": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "plans"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -3037,8 +6025,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3060,8 +6075,46 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cycles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "cycles",
+                    "runs"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3083,8 +6136,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3106,8 +6189,85 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "fields": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/Field"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "role",
+                          "fields"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "sets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "linkTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "itemTypes",
+                    "sets",
+                    "linkTypes"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3129,8 +6289,40 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requirements": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "tests": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "requirements",
+                    "tests"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3206,8 +6398,52 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ciRunId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "recorded": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "unmatched": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "unmatchedCount": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "ciRunId",
+                    "recorded",
+                    "unmatched",
+                    "unmatchedCount"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -3229,8 +6465,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "webhooks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "webhooks"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -3279,8 +6545,39 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "secret"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4926,8 +8223,35 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "project"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4949,8 +8273,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -4972,8 +8322,43 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "review": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "review",
+                    "participants"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5011,8 +8396,43 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "updated",
+                    "skipped"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5035,7 +8455,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5091,8 +8518,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "marked": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "marked"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5141,8 +8594,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5173,8 +8652,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5214,8 +8719,39 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "meaning": {
+                      "type": "string"
+                    },
+                    "signedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "meaning",
+                    "signedAt"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5226,8 +8762,73 @@
           "reviews"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reviews": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "projectId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "baseline": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "projectId",
+                          "project",
+                          "baseline",
+                          "createdAt",
+                          "role"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "reviews"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5238,8 +8839,63 @@
           "session"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/User"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "needsSetup": {
+                      "type": "boolean"
+                    },
+                    "mail": {
+                      "type": "boolean"
+                    },
+                    "sso": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "password": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "needsSetup",
+                    "mail",
+                    "sso"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -5262,8 +8918,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5305,8 +8987,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5376,8 +9084,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "changed"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5411,7 +9145,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5433,8 +9174,53 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Field"
+                      }
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "drafts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "fields",
+                    "items",
+                    "drafts"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5489,8 +9275,80 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "node": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "setId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "parentId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "uid": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "setId",
+                        "parentId",
+                        "kind",
+                        "name",
+                        "uid"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "node"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5524,7 +9382,14 @@
         ],
         "responses": {
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5595,8 +9460,79 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "targetSetId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "suspectLinkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "coverage": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "integer"
+                        },
+                        "noDownstream": {
+                          "type": "integer"
+                        },
+                        "reachTarget": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "noDownstream",
+                        "reachTarget"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "targetSetId",
+                    "suspectLinkIds",
+                    "coverage",
+                    "rows"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5640,8 +9576,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -5653,8 +9615,61 @@
           "templates"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "sets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "sets"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "templates"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5676,8 +9691,43 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cycle": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "cycle",
+                    "runs"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5732,8 +9782,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assigned": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "assigned"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5755,8 +9831,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5778,8 +9880,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5799,8 +9927,51 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "cases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "cycles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "plan",
+                    "cases",
+                    "cycles"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5842,8 +10013,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5895,8 +10092,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "grouped": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "grouped"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5945,8 +10168,38 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "added",
+                    "skipped"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -5993,8 +10246,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "removed": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "removed"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6057,8 +10336,39 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "runs": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "runs"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6080,8 +10390,46 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cycles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "tests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "cycles",
+                    "tests"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6103,8 +10451,56 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "cycle": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "nextRunId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "canExecute": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "run",
+                    "cycle",
+                    "nextRunId",
+                    "canExecute"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6150,8 +10546,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6195,8 +10617,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outcome": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6261,8 +10709,34 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6273,8 +10747,38 @@
           "test-runs"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "runs"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6285,8 +10789,80 @@
           "tokens"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tokens": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastUsedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "createdAt",
+                          "expiresAt",
+                          "lastUsedAt"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "tokens"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -6322,8 +10898,55 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "token",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6345,8 +10968,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6357,8 +11006,102 @@
           "users"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "isAdmin": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "deactivatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email",
+                          "isAdmin",
+                          "createdAt",
+                          "deactivatedAt"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "invitations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "email",
+                          "expiresAt"
+                        ],
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "users",
+                    "invitations"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6399,8 +11142,34 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6422,8 +11191,38 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "emailed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "emailed"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6434,8 +11233,34 @@
           "version"
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": []
@@ -6458,8 +11283,34 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6481,8 +11332,38 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deliveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "deliveries"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -6504,8 +11385,34 @@
           }
         ],
         "responses": {
+          "201": {
+            "description": "JSON.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
           "default": {
-            "description": "JSON. An error answers { \"error\": \"…\" } with a 4xx status."
+            "description": "An error answers { \"error\": \"…\" } with a 4xx status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }

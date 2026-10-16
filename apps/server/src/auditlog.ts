@@ -6,6 +6,7 @@ import type { Db } from "./db/client.ts";
 import { auditAnchors, auditEvents } from "./db/schema.ts";
 import { type Anchor, type AnchorBreak, checkAnchors, makeAnchor } from "./domain/auditanchor.ts";
 import { type ChainBreak, type ChainRow, verifyRows } from "./domain/auditchain.ts";
+import { any, bool, int, nul, obj, ok, res, rows, thing } from "./schemas.ts";
 
 const PAGE = 1000;
 const ANCHOR_LOCK = 7_104_002;
@@ -93,61 +94,78 @@ async function anchorCheck(
 /** Tamper evidence for the audit log (ADR 0020). Administrators only. */
 export function auditLogRoutes({ app, db, requireUser, requireAdmin }: AppContext, anchorOpts: AnchorOptions = {}) {
   // Reads the whole chain in order, a page at a time, and reports the first row that does not fit.
-  app.get("/api/audit/verify", { onRequest: [requireUser, requireAdmin] }, async () => {
-    let after = { seq: 0, hash: "" };
-    let checked = 0;
-    let broken: ChainBreak | null = null;
-    for (;;) {
-      const rows = await db
-        .select()
-        .from(auditEvents)
-        .where(gt(auditEvents.seq, after.seq))
-        .orderBy(asc(auditEvents.seq))
-        .limit(PAGE);
-      if (rows.length === 0) break;
-      const chain: ChainRow[] = rows.map((row) => ({
-        id: row.id,
-        at: row.at.toISOString(),
-        actorUserId: row.actorUserId,
-        projectId: row.projectId,
-        action: row.action,
-        entityType: row.entityType,
-        entityId: row.entityId,
-        data: row.data,
-        seq: row.seq as number,
-        prevHash: row.prevHash ?? "",
-        hash: row.hash ?? "",
-      }));
-      const result = verifyRows(chain, after);
-      if (result.broken) {
-        broken = result.broken;
-        break;
+  app.get(
+    "/api/audit/verify",
+    {
+      onRequest: [requireUser, requireAdmin],
+      schema: {
+        response: res(obj({ ok: bool, checked: int, lastSeq: int, unchained: int, firstBroken: any, anchors: thing })),
+      },
+    },
+    async () => {
+      let after = { seq: 0, hash: "" };
+      let checked = 0;
+      let broken: ChainBreak | null = null;
+      for (;;) {
+        const rows = await db
+          .select()
+          .from(auditEvents)
+          .where(gt(auditEvents.seq, after.seq))
+          .orderBy(asc(auditEvents.seq))
+          .limit(PAGE);
+        if (rows.length === 0) break;
+        const chain: ChainRow[] = rows.map((row) => ({
+          id: row.id,
+          at: row.at.toISOString(),
+          actorUserId: row.actorUserId,
+          projectId: row.projectId,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          data: row.data,
+          seq: row.seq as number,
+          prevHash: row.prevHash ?? "",
+          hash: row.hash ?? "",
+        }));
+        const result = verifyRows(chain, after);
+        if (result.broken) {
+          broken = result.broken;
+          break;
+        }
+        checked += chain.length;
+        after = result.last as { seq: number; hash: string };
       }
-      checked += chain.length;
-      after = result.last as { seq: number; hash: string };
-    }
-    const [unchained] = await db.select({ n: count() }).from(auditEvents).where(isNull(auditEvents.seq));
-    const stored = (await db.select().from(auditAnchors).orderBy(asc(auditAnchors.seq))).map(toAnchor);
-    const anchors = await anchorCheck(db, stored, anchorOpts.key);
-    return {
-      ok: broken === null && anchors.firstBad === null,
-      checked,
-      lastSeq: after.seq,
-      unchained: unchained?.n ?? 0,
-      firstBroken: broken,
-      anchors: { ...anchors, signed: Boolean(anchorOpts.key) },
-    };
-  });
+      const [unchained] = await db.select({ n: count() }).from(auditEvents).where(isNull(auditEvents.seq));
+      const stored = (await db.select().from(auditAnchors).orderBy(asc(auditAnchors.seq))).map(toAnchor);
+      const anchors = await anchorCheck(db, stored, anchorOpts.key);
+      return {
+        ok: broken === null && anchors.firstBad === null,
+        checked,
+        lastSeq: after.seq,
+        unchained: unchained?.n ?? 0,
+        firstBroken: broken,
+        anchors: { ...anchors, signed: Boolean(anchorOpts.key) },
+      };
+    },
+  );
 
   // The anchors, to be kept somewhere the database cannot change. Oldest first.
-  app.get("/api/audit/anchors", { onRequest: [requireUser, requireAdmin] }, async () => ({
-    anchors: (await db.select().from(auditAnchors).orderBy(asc(auditAnchors.seq))).map(toAnchor),
-  }));
+  app.get(
+    "/api/audit/anchors",
+    { onRequest: [requireUser, requireAdmin], schema: { response: res(obj({ anchors: rows })) } },
+    async () => ({
+      anchors: (await db.select().from(auditAnchors).orderBy(asc(auditAnchors.seq))).map(toAnchor),
+    }),
+  );
 
-  app.post("/api/audit/anchors", { onRequest: [requireUser, requireAdmin] }, async (req) => {
-    const anchor = await createAnchor(db, anchorOpts, req.user?.id ?? null);
-    return { created: anchor !== null, anchor };
-  });
+  app.post(
+    "/api/audit/anchors",
+    { onRequest: [requireUser, requireAdmin], schema: { response: res(obj({ created: bool, anchor: nul(thing) })) } },
+    async (req) => {
+      const anchor = await createAnchor(db, anchorOpts, req.user?.id ?? null);
+      return { created: anchor !== null, anchor };
+    },
+  );
 
   // Checks a saved copy of the anchors, which the database cannot have altered, against the live chain.
   // `missing` lists anchors in the copy that this database no longer holds.
@@ -156,6 +174,7 @@ export function auditLogRoutes({ app, db, requireUser, requireAdmin }: AppContex
     {
       onRequest: [requireUser, requireAdmin],
       schema: {
+        response: res(obj({ ok: bool, missing: rows }, ["ok"])),
         body: {
           type: "object",
           required: ["anchors"],

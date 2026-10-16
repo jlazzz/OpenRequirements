@@ -4,6 +4,7 @@ import type { AppContext } from "./app.ts";
 import { auditEvents, baselineEntries, comments, nodes, projectMembers, reviews, users } from "./db/schema.ts";
 import { findMentions } from "./domain/roles.ts";
 import { notify } from "./mail.ts";
+import { bool, id, obj, ok, res, rows } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const param = (name: string) => ({ type: "object", required: [name], properties: { [name]: uuid } }) as const;
@@ -13,7 +14,7 @@ const PAGE = 50;
 export function commentRoutes({ app, db, requireUser, audit, access, mail }: AppContext) {
   app.get(
     "/api/items/:itemId/comments",
-    { onRequest: requireUser, schema: { params: param("itemId") } },
+    { onRequest: requireUser, schema: { response: res(obj({ comments: rows })), params: param("itemId") } },
     async (req, reply) => {
       const { itemId } = req.params as { itemId: string };
       if (!(await access(req, reply, { nodeId: itemId }, "viewer"))) return reply;
@@ -43,6 +44,7 @@ export function commentRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ id, mentions: rows }), 201),
         params: param("itemId"),
         body: {
           type: "object",
@@ -116,7 +118,7 @@ export function commentRoutes({ app, db, requireUser, audit, access, mail }: App
   // Soft delete, by the comment's author or a project admin.
   app.delete(
     "/api/comments/:commentId",
-    { onRequest: requireUser, schema: { params: param("commentId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: param("commentId") } },
     async (req, reply) => {
       const { commentId } = req.params as { commentId: string };
       const projectId = await access(req, reply, { commentId }, "reviewer");
@@ -148,6 +150,7 @@ export function commentRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ events: rows, more: bool })),
         params: param("projectId"),
         querystring: { type: "object", properties: { before: { type: "string", format: "date-time" } } },
       },

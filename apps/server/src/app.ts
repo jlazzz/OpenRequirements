@@ -37,6 +37,7 @@ import { projectRoutes } from "./projects.ts";
 import { recoveryRoutes } from "./recovery.ts";
 import { type OutboundConfig, referenceRoutes } from "./references.ts";
 import { reviewRoutes } from "./reviews.ts";
+import { arr, bool, components, date, id, nul, obj, ok, ref, res, str } from "./schemas.ts";
 import { testPlanRoutes } from "./testplans.ts";
 import { testRunRoutes } from "./testruns.ts";
 import { traceRoutes } from "./trace.ts";
@@ -125,6 +126,8 @@ export async function buildApp(
 ) {
   const security: SecurityConfig = { ...NO_LIMITS, ...opts.security };
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.https ?? false });
+  // Response schemas only describe the API (schemas.ts); they must never drop a field a route sends.
+  app.setSerializerCompiler(() => (data) => JSON.stringify(data));
   await app.register(cookie);
   // Security headers on every response. A route that sets its own, like the attachment download, keeps its own.
   const headers: Record<string, string> = {
@@ -270,22 +273,40 @@ export async function buildApp(
 
   // The release this server runs, read from the root package.json: the one source of the version (ADR 0020).
   const version: string = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version;
-  app.get("/api/version", { config: { public: true } }, async () => ({ version }));
+  app.get("/api/version", { config: { public: true }, schema: { response: res(obj({ version: str })) } }, async () => ({
+    version,
+  }));
 
-  app.get("/api/session", { config: { public: true } }, async (req) => {
-    const user = await findUser(req);
-    const needsSetup = !user && (await db.$count(users)) === 0;
-    const [own] = user ? await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, user.id)) : [];
-    // `mail` tells the sign-in page whether "Forgot password" can work; `sso` names the identity provider, if there is one.
-    // `password` is false for someone who signs in only through the identity provider.
-    return {
-      user,
-      needsSetup,
-      mail: mail.enabled,
-      sso: opts.oidc?.name ?? null,
-      ...(own ? { password: own.hash !== NO_PASSWORD } : {}),
-    };
-  });
+  app.get(
+    "/api/session",
+    {
+      config: { public: true },
+      schema: {
+        response: res(
+          obj({ user: nul(ref("User")), needsSetup: bool, mail: bool, sso: nul(str), password: bool }, [
+            "user",
+            "needsSetup",
+            "mail",
+            "sso",
+          ]),
+        ),
+      },
+    },
+    async (req) => {
+      const user = await findUser(req);
+      const needsSetup = !user && (await db.$count(users)) === 0;
+      const [own] = user ? await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, user.id)) : [];
+      // `mail` tells the sign-in page whether "Forgot password" can work; `sso` names the identity provider, if there is one.
+      // `password` is false for someone who signs in only through the identity provider.
+      return {
+        user,
+        needsSetup,
+        mail: mail.enabled,
+        sso: opts.oidc?.name ?? null,
+        ...(own ? { password: own.hash !== NO_PASSWORD } : {}),
+      };
+    },
+  );
 
   // First run only: whoever reaches the server first creates the admin account.
   app.post(
@@ -293,6 +314,7 @@ export async function buildApp(
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(obj({ user: ref("User") })),
         body: {
           type: "object",
           required: ["email", "name", "password"],
@@ -331,6 +353,7 @@ export async function buildApp(
     {
       config: { public: true, ...loginLimit },
       schema: {
+        response: res(obj({ user: ref("User") })),
         body: { type: "object", required: ["email", "password"], additionalProperties: false, properties: credentials },
       },
     },
@@ -373,7 +396,7 @@ export async function buildApp(
     },
   );
 
-  app.post("/api/logout", { onRequest: requireUser }, async (req, reply) => {
+  app.post("/api/logout", { onRequest: requireUser, schema: { response: res(ok) } }, async (req, reply) => {
     const user = req.user as SessionUser;
     await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(req.cookies[SESSION_COOKIE] ?? "")));
     await audit(db, user.id, "session.delete", "user", user.id);
@@ -388,6 +411,7 @@ export async function buildApp(
       onRequest: [requireUser, requireSession],
       config: loginLimit,
       schema: {
+        response: res(ok),
         body: {
           type: "object",
           required: ["current", "password"],
@@ -418,25 +442,39 @@ export async function buildApp(
   );
 
   // Personal access tokens, for CI and scripts. A token acts as the user who made it, with that user's roles.
-  app.get("/api/tokens", { onRequest: requireUser }, async (req) => ({
-    tokens: await db
-      .select({
-        id: apiTokens.id,
-        name: apiTokens.name,
-        createdAt: apiTokens.createdAt,
-        expiresAt: apiTokens.expiresAt,
-        lastUsedAt: apiTokens.lastUsedAt,
-      })
-      .from(apiTokens)
-      .where(and(eq(apiTokens.userId, req.user?.id as string), isNull(apiTokens.revokedAt)))
-      .orderBy(apiTokens.createdAt),
-  }));
+  app.get(
+    "/api/tokens",
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({
+            tokens: arr(obj({ id, name: str, createdAt: date, expiresAt: nul(date), lastUsedAt: nul(date) })),
+          }),
+        ),
+      },
+    },
+    async (req) => ({
+      tokens: await db
+        .select({
+          id: apiTokens.id,
+          name: apiTokens.name,
+          createdAt: apiTokens.createdAt,
+          expiresAt: apiTokens.expiresAt,
+          lastUsedAt: apiTokens.lastUsedAt,
+        })
+        .from(apiTokens)
+        .where(and(eq(apiTokens.userId, req.user?.id as string), isNull(apiTokens.revokedAt)))
+        .orderBy(apiTokens.createdAt),
+    }),
+  );
 
   app.post(
     "/api/tokens",
     {
       onRequest: [requireUser, requireSession],
       schema: {
+        response: res(obj({ id, name: str, token: str, expiresAt: nul(date) }), 201),
         body: {
           type: "object",
           required: ["name"],
@@ -475,6 +513,7 @@ export async function buildApp(
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok),
         params: { type: "object", required: ["tokenId"], properties: { tokenId: { type: "string", format: "uuid" } } },
       },
     },
@@ -497,10 +536,14 @@ export async function buildApp(
 
   // The API described as OpenAPI 3.1, from the routes' own schemas. The web app shows it at /api-docs.
   let openApi: object | null = null;
-  app.get("/api/openapi.json", { config: { public: true } }, async () => {
-    openApi ??= openApiDocument(app.apiRoutes, "1");
-    return openApi;
-  });
+  app.get(
+    "/api/openapi.json",
+    { config: { public: true }, schema: { response: res(obj({ openapi: str }, ["openapi"])) } },
+    async () => {
+      openApi ??= openApiDocument(app.apiRoutes, "1", components);
+      return openApi;
+    },
+  );
 
   async function takeReauth(req: FastifyRequest) {
     const [row] = await db

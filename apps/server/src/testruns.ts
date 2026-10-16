@@ -27,6 +27,7 @@ import { roleAllows } from "./domain/roles.ts";
 import { runOutcome, runState, runSteps } from "./domain/testrun.ts";
 import { OUTCOMES, type Outcome } from "./domain/verification.ts";
 import { notify } from "./mail.ts";
+import { bool, id, int, nul, obj, ok, res, rows, str, thing } from "./schemas.ts";
 import { areUploadsOf, loadEvidence } from "./verification.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
@@ -165,34 +166,41 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
   const notYours = { error: [403, "This run is assigned to someone else. An editor can execute any run."] } as const;
 
   // The signed-in user's open work in every project: runs assigned to them that are not finished, in cycles still open.
-  app.get("/api/test-runs/mine", { onRequest: requireUser }, async (req) => {
-    const user = req.user as { id: string; isAdmin: boolean };
-    // shortcut: also loads this user's finished runs of open cycles before dropping them, filter in SQL when cycles reach thousands of runs per person
-    const runs = await loadRuns(
-      db,
-      and(eq(testRuns.assigneeId, user.id), isNull(testCycles.closedAt), isNull(testPlans.deletedAt)),
-    );
-    const mine = db
-      .select({ id: projectMembers.projectId })
-      .from(projectMembers)
-      .where(eq(projectMembers.userId, user.id));
-    // Someone taken out of a project no longer sees its runs.
-    const open = await db
-      .select({ id: projects.id, name: projects.name })
-      .from(projects)
-      .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)));
-    const project = new Map(open.map((p) => [p.id, p.name]));
-    return {
-      runs: runs
-        .filter((run) => !run.finished && project.has(run.projectId))
-        .map((run) => ({ ...runSummary(run), project: project.get(run.projectId) })),
-    };
-  });
+  app.get(
+    "/api/test-runs/mine",
+    { onRequest: requireUser, schema: { response: res(obj({ runs: rows })) } },
+    async (req) => {
+      const user = req.user as { id: string; isAdmin: boolean };
+      // shortcut: also loads this user's finished runs of open cycles before dropping them, filter in SQL when cycles reach thousands of runs per person
+      const runs = await loadRuns(
+        db,
+        and(eq(testRuns.assigneeId, user.id), isNull(testCycles.closedAt), isNull(testPlans.deletedAt)),
+      );
+      const mine = db
+        .select({ id: projectMembers.projectId })
+        .from(projectMembers)
+        .where(eq(projectMembers.userId, user.id));
+      // Someone taken out of a project no longer sees its runs.
+      const open = await db
+        .select({ id: projects.id, name: projects.name })
+        .from(projects)
+        .where(and(isNull(projects.archivedAt), user.isAdmin ? undefined : inArray(projects.id, mine)));
+      const project = new Map(open.map((p) => [p.id, p.name]));
+      return {
+        runs: runs
+          .filter((run) => !run.finished && project.has(run.projectId))
+          .map((run) => ({ ...runSummary(run), project: project.get(run.projectId) })),
+      };
+    },
+  );
 
   // Runs in the project's open cycles, for the Test runs page: who they are assigned to, and which plan and cycle.
   app.get(
     "/api/projects/:projectId/test-runs",
-    { onRequest: requireUser, schema: { params: idParam("projectId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ cycles: rows, runs: rows })), params: idParam("projectId") },
+    },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
       if (!(await access(req, reply, { projectId }, "viewer"))) return reply;
@@ -215,7 +223,10 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
   // One cycle with its runs. The runs carry their state and progress, not the text of their steps.
   app.get(
     "/api/test-cycles/:testCycleId",
-    { onRequest: requireUser, schema: { params: idParam("testCycleId") } },
+    {
+      onRequest: requireUser,
+      schema: { response: res(obj({ cycle: thing, runs: rows })), params: idParam("testCycleId") },
+    },
     async (req, reply) => {
       const { testCycleId } = req.params as { testCycleId: string };
       if (!(await access(req, reply, { testCycleId }, "viewer"))) return reply;
@@ -252,6 +263,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ assigned: int })),
         params: idParam("testCycleId"),
         body: {
           type: "object",
@@ -328,7 +340,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
   // Closes a cycle for good. Runs that were not finished stay as they are and record nothing.
   app.post(
     "/api/test-cycles/:testCycleId/close",
-    { onRequest: requireUser, schema: { params: idParam("testCycleId") } },
+    { onRequest: requireUser, schema: { response: res(ok), params: idParam("testCycleId") } },
     async (req, reply) => {
       const { testCycleId } = req.params as { testCycleId: string };
       const projectId = await access(req, reply, { testCycleId }, "editor");
@@ -352,7 +364,20 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
   // The execution screen's data: the frozen test case, each step with its latest result, and where to go next.
   app.get(
     "/api/test-runs/:testRunId",
-    { onRequest: requireUser, schema: { params: idParam("testRunId") } },
+    {
+      onRequest: requireUser,
+      schema: {
+        response: res(
+          obj({ run: thing, cycle: thing, nextRunId: nul(id), canExecute: bool }, [
+            "run",
+            "cycle",
+            "nextRunId",
+            "canExecute",
+          ]),
+        ),
+        params: idParam("testRunId"),
+      },
+    },
     async (req, reply) => {
       const { testRunId } = req.params as { testRunId: string };
       const projectId = await access(req, reply, { testRunId }, "viewer");
@@ -416,6 +441,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ state: str }), 201),
         params: idParam("testRunId"),
         body: {
           type: "object",
@@ -479,6 +505,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(ok, 201),
         params: idParam("testRunId"),
         body: {
           type: "object",
@@ -529,6 +556,7 @@ export function testRunRoutes({ app, db, requireUser, audit, access, mail }: App
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ outcome: str }), 201),
         params: idParam("testRunId"),
         body: {
           type: "object",

@@ -6,6 +6,7 @@ import type { Db } from "./db/client.ts";
 import { itemRevisions, linkRevisions, links, linkTypes, nodes, sets } from "./db/schema.ts";
 import { changedEnds } from "./domain/suspect.ts";
 import { type MailConfig, type Notice, notify } from "./mail.ts";
+import { arr, date, id, int, nul, obj, ok, ref, res, str } from "./schemas.ts";
 
 const uuid = { type: "string", format: "uuid" } as const;
 const revision = { type: "integer", minimum: 1 } as const;
@@ -122,7 +123,15 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
     "/api/projects/:projectId/links",
     {
       onRequest: requireUser,
-      schema: { params: { type: "object", required: ["projectId"], properties: { projectId: uuid } } },
+      schema: {
+        response: res(
+          obj({
+            linkTypes: arr(obj({ id, name: str, role: nul(str), archivedAt: nul(date) })),
+            links: arr(ref("Link")),
+          }),
+        ),
+        params: { type: "object", required: ["projectId"], properties: { projectId: uuid } },
+      },
     },
     async (req, reply) => {
       const { projectId } = req.params as { projectId: string };
@@ -142,6 +151,7 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ link: obj({ id, typeId: id, upstreamId: id, downstreamId: id }) }), 201),
         body: {
           type: "object",
           required: ["upstreamId", "downstreamId", "typeId"],
@@ -232,6 +242,7 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
     {
       onRequest: requireUser,
       schema: {
+        response: res(obj({ confirmed: int })),
         params: { type: "object", required: ["projectId"], properties: { projectId: uuid } },
         body: {
           type: "object",
@@ -308,7 +319,7 @@ export function linkRoutes({ app, db, requireUser, audit, access }: AppContext) 
     "/api/links/:linkId",
     {
       onRequest: requireUser,
-      schema: { params: { type: "object", required: ["linkId"], properties: { linkId: uuid } } },
+      schema: { response: res(ok), params: { type: "object", required: ["linkId"], properties: { linkId: uuid } } },
     },
     async (req, reply) => {
       const { linkId } = req.params as { linkId: string };
