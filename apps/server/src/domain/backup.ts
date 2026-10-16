@@ -11,15 +11,16 @@ export const BACKUP_FORMAT = "open-requirements-backup";
 // attributeDefinitions, sets and linkTypes, attributeDefinitions.archivedOptions and linkTypes.role.
 // Version 9 added ciRuns and verificationResults.ciRunId. Version 10 added id, addedAt, addedBy, removedAt and
 // removedBy to reviewParticipants (a row per time someone took part).
+// Version 11 added project.mainBranch.
 // Older files are still restored.
-export const BACKUP_VERSION = 10;
+export const BACKUP_VERSION = 11;
 
 /** A whole project as one JSON document. Timestamps are ISO strings. Ids are only meaningful inside the file. */
 export type Backup = {
   format: typeof BACKUP_FORMAT;
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | typeof BACKUP_VERSION;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | typeof BACKUP_VERSION;
   exportedAt: string;
-  project: { id: string; name: string; createdAt: string };
+  project: { id: string; name: string; createdAt: string; mainBranch?: string };
   /** Everyone the project's history mentions. Matched to accounts by email when restoring. */
   users: { id: string; email: string; name: string }[];
   members: { userId: string; role: "viewer" | "reviewer" | "editor" | "admin" }[];

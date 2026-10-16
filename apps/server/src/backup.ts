@@ -64,9 +64,19 @@ const rows = (properties: Record<string, object>) => ({ type: "array", items: ro
 const backupSchema = {
   ...row({
     format: { const: BACKUP_FORMAT },
-    version: { enum: [1, 2, 3, 4, 5, 6, 7, 8, BACKUP_VERSION] },
+    version: { enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, BACKUP_VERSION] },
     exportedAt: when,
-    project: row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
+    project: {
+      ...row({ id, name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" }, createdAt: when }),
+      // Added in version 11.
+      required: ["id", "name", "createdAt"],
+      properties: {
+        id,
+        name: { type: "string", minLength: 1, maxLength: 100, pattern: "\\S" },
+        createdAt: when,
+        mainBranch: text(200),
+      },
+    },
     users: rows({ id, email: { type: "string", format: "email", maxLength: 254 }, name: text(100) }),
     members: rows({ userId: id, role: { enum: [...ROLES] } }),
     itemTypes: {
@@ -522,7 +532,12 @@ export function backupRoutes(
         format: BACKUP_FORMAT,
         version: BACKUP_VERSION,
         exportedAt: iso(new Date()),
-        project: { id: project.id, name: project.name, createdAt: iso(project.createdAt) },
+        project: {
+          id: project.id,
+          name: project.name,
+          createdAt: iso(project.createdAt),
+          mainBranch: project.mainBranch,
+        },
         users: [],
         members: (await db.select().from(projectMembers).where(inProject(projectMembers))).map((m) => ({
           userId: m.userId,
@@ -770,7 +785,12 @@ export function backupRoutes(
           const name = taken ? `${backup.project.name} (restored)`.slice(0, 100) : backup.project.name;
           const [created] = await tx
             .insert(projects)
-            .values({ id: projectId, name, createdAt: date(backup.project.createdAt) })
+            .values({
+              id: projectId,
+              name,
+              mainBranch: backup.project.mainBranch ?? "",
+              createdAt: date(backup.project.createdAt),
+            })
             .returning();
           if (!created) throw new Error("project insert returned no row");
 

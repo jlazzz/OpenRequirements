@@ -1409,7 +1409,7 @@ test("a backup restores as a new project with history, relationships, comments, 
   expect(file.statusCode).toBe(200);
   expect(file.headers["content-disposition"]).toContain("attachment");
   const backup = file.json();
-  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 10, project: { name: "P" } });
+  expect(backup).toMatchObject({ format: "open-requirements-backup", version: 11, project: { name: "P" } });
   // Password hashes never leave the server.
   expect(file.body).not.toContain("scrypt");
 
@@ -1576,7 +1576,7 @@ test("a backup that is malformed or points outside itself is refused, and leaves
     return post("/api/projects/restore", backup, cookie);
   };
 
-  expect((await restore((b) => Object.assign(b, { version: 11 }))).statusCode).toBe(400);
+  expect((await restore((b) => Object.assign(b, { version: 12 }))).statusCode).toBe(400);
   expect((await restore((b) => Object.assign(b, { nodes: undefined }))).statusCode).toBe(400);
   // A node placed in another project's set.
   const foreign = await restore((b) => Object.assign(b.nodes[0] as object, { setId: otherSet }));
@@ -1968,6 +1968,54 @@ test("a CI upload is kept as a run that lists its results, requirements and unma
     await get(`/api/ci-runs/${copy.find((r: { branch: string }) => r.branch === "main").id}`, cookie)
   ).json();
   expect(copyDetail.results).toHaveLength(2);
+});
+
+test("only CI results from the project's main branch count toward verification status", async () => {
+  const { cookie, projectId, req, t1, status } = await projectWithTests();
+  const viewer = await person("Vera Viewer", "viewer");
+  const outsider = await person("Olga Outsider");
+  const upload = (branch: string, body: string) =>
+    app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/verification-results/junit?branch=${branch}`,
+      payload: body,
+      headers: { "content-type": "application/xml", cookie },
+    });
+  const pass = '<testsuite><testcase name="VER-001 a"/></testsuite>';
+  const fail = '<testsuite><testcase name="VER-001 a"><failure message="x"/></testcase></testsuite>';
+  await upload("main", pass);
+  await upload("feature", fail);
+  // No main branch set: everything counts, the newest result wins.
+  expect((await status()).requirements[req].tests).toContainEqual({ itemId: t1, outcome: "fail", outOfDate: false });
+
+  expect((await send("PATCH", `/api/projects/${projectId}`, viewer.cookie, { mainBranch: "main" })).statusCode).toBe(
+    403,
+  );
+  expect((await send("PATCH", `/api/projects/${projectId}`, outsider.cookie, { mainBranch: "main" })).statusCode).toBe(
+    404,
+  );
+  expect((await send("PATCH", `/api/projects/${projectId}`, cookie, { mainBranch: " main " })).json()).toEqual({
+    mainBranch: "main",
+  });
+  expect(await auditActions()).toContain("project.update");
+
+  // The feature-branch failure is still recorded and listed, but the main-branch pass is what counts.
+  expect((await status()).requirements[req].tests).toContainEqual({ itemId: t1, outcome: "pass", outOfDate: false });
+  expect((await get(`/api/items/${t1}/results`, cookie)).json().results).toHaveLength(2);
+  const list = (await get(`/api/projects/${projectId}/ci-runs`, viewer.cookie)).json();
+  expect(list.mainBranch).toBe("main");
+  expect(list.runs.map((r: { branch: string; counts: boolean }) => [r.branch, r.counts])).toEqual([
+    ["feature", false],
+    ["main", true],
+  ]);
+  // A result recorded by hand has no branch and always counts.
+  await post(`/api/items/${t1}/results`, { outcome: "fail" }, cookie);
+  expect((await status()).requirements[req].tests).toContainEqual({ itemId: t1, outcome: "fail", outOfDate: false });
+
+  // Backup and restore keep the setting.
+  const backup = (await get(`/api/projects/${projectId}/backup`, cookie)).json();
+  const restored = (await post("/api/projects/restore", backup, cookie)).json().project.id;
+  expect((await get(`/api/projects/${restored}/ci-runs`, cookie)).json().mainBranch).toBe("main");
 });
 
 test("a test case holds steps, which are checked, searched and kept per version", async () => {

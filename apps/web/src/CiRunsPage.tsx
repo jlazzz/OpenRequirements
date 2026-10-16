@@ -1,5 +1,19 @@
-import { Anchor, Badge, Group, NativeSelect, Progress, Stack, Table, Text, Title } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import {
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Group,
+  NativeSelect,
+  Progress,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, type Outcome } from "./api.ts";
@@ -16,6 +30,8 @@ type CiRun = Counts & {
   buildUrl: string;
   createdBy: string;
   createdAt: string;
+  counts: boolean;
+  passRate: number | null;
 };
 type CiRunDetail = {
   run: CiRun & { unmatchedNames: string[] };
@@ -52,6 +68,75 @@ function CountsBar({ run }: { run: Counts }) {
   );
 }
 
+/** Pass rate of the latest runs of each pipeline, oldest on the left: a bar per run, as tall as its pass rate. */
+function Trend({ runs }: { runs: CiRun[] }) {
+  const byPipeline = new Map<string, CiRun[]>();
+  for (const run of runs) byPipeline.set(run.pipeline, [...(byPipeline.get(run.pipeline) ?? []), run]);
+  return (
+    <Stack gap="xs">
+      {[...byPipeline].map(([name, list]) => (
+        <Group key={name} gap="sm" wrap="nowrap">
+          <Text size="sm" w={160} truncate>
+            {name || "(no pipeline)"}
+          </Text>
+          <Group gap={2} align="flex-end" h={32} wrap="nowrap" aria-label={`Pass rate of ${name || "no pipeline"}`}>
+            {list
+              .slice(0, 20)
+              .reverse()
+              .map((run) => (
+                <Tooltip
+                  key={run.id}
+                  label={`${when(run.createdAt)} · ${run.branch || "no branch"} · ${
+                    run.passRate === null ? "nothing passed or failed" : `${Math.round(run.passRate * 100)}% passed`
+                  }`}
+                >
+                  <Box
+                    w={8}
+                    h={Math.max(3, (run.passRate ?? 0) * 32)}
+                    bg={run.passRate === null ? "gray.4" : run.passRate === 1 ? "green.6" : "red.6"}
+                    opacity={run.counts ? 1 : 0.4}
+                  />
+                </Tooltip>
+              ))}
+          </Group>
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
+/** The project's main branch: only CI results from it count toward verification status. */
+function MainBranch({ projectId, current, admin }: { projectId: string; current: string; admin: boolean }) {
+  const [value, setValue] = useState<string | null>(null);
+  const client = useQueryClient();
+  const save = useMutation({
+    mutationFn: (mainBranch: string) => api(`projects/${projectId}`, { mainBranch }, "PATCH"),
+    onSuccess: () => {
+      setValue(null);
+      return client.invalidateQueries({ queryKey: ["projects", projectId] });
+    },
+  });
+  const text = value ?? current;
+  return admin ? (
+    <Group align="flex-end">
+      <TextInput
+        label="Main branch"
+        description="Only CI results from this branch count toward verification status. Empty: every branch counts."
+        value={text}
+        onChange={(e) => setValue(e.currentTarget.value)}
+        w={420}
+      />
+      <Button onClick={() => save.mutate(text)} disabled={text === current} loading={save.isPending}>
+        Save
+      </Button>
+    </Group>
+  ) : (
+    <Text size="sm" c="dimmed">
+      {current ? `Main branch: ${current}. Results from other branches do not count.` : "Every branch counts."}
+    </Text>
+  );
+}
+
 /** One row per CI upload, newest first, filterable by pipeline and branch. */
 export function CiRunsPage() {
   const project = useProject().data;
@@ -64,7 +149,9 @@ export function CiRunsPage() {
   const runs = useQuery({
     queryKey: ["projects", projectId, "ci-runs", pipeline, branch],
     queryFn: () =>
-      api<{ runs: CiRun[]; pipelines: string[]; branches: string[] }>(`projects/${projectId}/ci-runs?${query}`),
+      api<{ mainBranch: string; runs: CiRun[]; pipelines: string[]; branches: string[] }>(
+        `projects/${projectId}/ci-runs?${query}`,
+      ),
     enabled: Boolean(project),
   });
   if (!project) return null;
@@ -75,6 +162,10 @@ export function CiRunsPage() {
   return (
     <Stack p="md" gap="md">
       <Title order={2}>CI runs</Title>
+      {runs.data && (
+        <MainBranch projectId={projectId} current={runs.data.mainBranch} admin={project.role === "admin"} />
+      )}
+      {runs.data && runs.data.runs.length > 0 && <Trend runs={runs.data.runs} />}
       <Group>
         <NativeSelect
           aria-label="Pipeline"
@@ -106,6 +197,11 @@ export function CiRunsPage() {
                   {run.branch || "no branch"}
                   {run.commit && ` · ${run.commit.slice(0, 8)}`}
                 </Text>
+                {!run.counts && (
+                  <Badge size="xs" variant="light" color="gray">
+                    not counted
+                  </Badge>
+                )}
               </Table.Td>
               <Table.Td w={320}>
                 <CountsBar run={run} />

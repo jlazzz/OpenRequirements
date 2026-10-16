@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
-import { isFlaky, isOutOfDate, type Outcome, verificationStatus } from "./verification.ts";
+import {
+  countsTowardStatus,
+  isFlaky,
+  isOutOfDate,
+  type Outcome,
+  passRate,
+  verificationStatus,
+} from "./verification.ts";
 
 const revised = new Date("2026-01-10");
 const before = new Date("2026-01-09");
@@ -56,4 +63,16 @@ test("a test is flaky when its last five results changed outcome more than once"
   expect(isFlaky([])).toBe(false);
   // Only the last five count: the early flapping has aged out.
   expect(isFlaky(["pass", "fail", "pass", "pass", "pass", "pass", "pass"])).toBe(false);
+});
+
+test("a CI result counts when no main branch is set, when it ran on it, or when it did not come from CI", () => {
+  expect(countsTowardStatus("feature", "")).toBe(true);
+  expect(countsTowardStatus("main", "main")).toBe(true);
+  expect(countsTowardStatus("feature", "main")).toBe(false);
+  expect(countsTowardStatus(null, "main")).toBe(true);
+});
+
+test("a pass rate is passed over passed and failed, and skipped tests are left out", () => {
+  expect(passRate({ passed: 3, failed: 1 })).toBe(0.75);
+  expect(passRate({ passed: 0, failed: 0 })).toBeNull();
 });
