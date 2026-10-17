@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requirements: open-source requirements and test management</title>
+<meta name="description" content="Self-hostable requirements management with versions, traceability, baselines, reviews with signatures, and test execution. Open source, AGPL-3.0.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --text: #1b1f24;
+    --muted: #5b6470;
+    --line: #dfe3e8;
+    --accent: #1c7ed6;
+    --accent-text: #ffffff;
+    --nav: #212529;
+    --shadow: 0 10px 30px rgba(20, 30, 50, .14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171a; --bg-alt: #1b1f23; --text: #e8ebee; --muted: #9aa4af;
+      --line: #2c3238; --accent: #4dabf7; --accent-text: #0b1620; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171a; --bg-alt: #1b1f23; --text: #e8ebee; --muted: #9aa4af;
+    --line: #2c3238; --accent: #4dabf7; --accent-text: #0b1620; --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+  header.top { border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  header.top strong { font-size: 18px; }
+  header.top nav a { margin-left: 20px; text-decoration: none; color: var(--muted); font-size: 15px; }
+  header.top nav a:hover { color: var(--text); }
+  .hero { text-align: center; padding: 72px 0 40px; }
+  .hero h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.12; margin: 0 auto 16px; max-width: 18ch; letter-spacing: -.02em; }
+  .hero p.lead { font-size: 20px; color: var(--muted); max-width: 40em; margin: 0 auto 28px; }
+  .btn {
+    display: inline-block; padding: 11px 22px; border-radius: 8px; font-weight: 600; text-decoration: none;
+    background: var(--accent); color: var(--accent-text); margin: 4px;
+  }
+  .btn.alt { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .shot { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); background: var(--bg); }
+  .shot .bar { height: 26px; background: var(--bg-alt); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+  .shot .bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+  .shot img { display: block; width: 100%; height: auto; }
+  .hero .shot { margin-top: 44px; text-align: left; }
+  .note { font-size: 14px; color: var(--muted); margin: 12px 0 0; text-align: center; }
+  section { padding: 72px 0; }
+  section.alt { background: var(--bg-alt); border-block: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.2; margin: 0 0 12px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); max-width: 44em; margin: 0 0 36px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 20px; background: var(--bg); }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .feature { display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: center; }
+  .feature.flip { grid-template-columns: 1.5fr 1fr; }
+  .feature.flip .text { order: 2; }
+  .feature h2 { font-size: clamp(24px, 3vw, 30px); }
+  .feature ul { padding-left: 20px; margin: 12px 0 0; color: var(--muted); font-size: 16px; }
+  .feature li { margin: 4px 0; }
+  .stack { display: grid; gap: 28px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 36px; }
+  .pair figcaption, .cap { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  pre { background: var(--nav); color: #e6e9ec; padding: 16px 18px; border-radius: 8px; overflow-x: auto; font-size: 14px; line-height: 1.5; }
+  footer { border-top: 1px solid var(--line); padding: 32px 0; color: var(--muted); font-size: 14px; }
+  @media (max-width: 800px) {
+    .feature, .feature.flip { grid-template-columns: 1fr; gap: 20px; }
+    .feature.flip .text { order: 0; }
+    .pair { grid-template-columns: 1fr; }
+    section { padding: 48px 0; }
+    header.top nav a:not(.keep) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <strong>Requirements</strong>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#trace">Traceability</a>
+      <a href="#test">Testing</a>
+      <a href="#hosting">Self-hosting</a>
+      <a href="guide/">User guide</a>
+      <a class="keep" href="https://github.com/jlazzz/OpenRequirements">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap hero">
+  <h1>Requirements management you can host yourself</h1>
+  <p class="lead">Write requirements, trace them to the tests that verify them, freeze baselines, get reviews signed, and run the tests. One open-source tool, one Docker Compose file, your own server.</p>
+  <a class="btn" href="#hosting">Run it in 3 commands</a>
+  <a class="btn alt" href="https://github.com/jlazzz/OpenRequirements">View on GitHub</a>
+  <figure class="shot">
+    <div class="bar"><i></i><i></i><i></i></div>
+    <img src="img/list.png" width="1440" height="900" alt="List view of 50 system requirements, each with a verification status and an approval status">
+  </figure>
+  <p class="note">Screenshots show the Kestrel-EO demo project: an earth-observation satellite with 364 items and 499 relationships.</p>
+</div>
+
+<section class="alt" id="features">
+  <div class="wrap">
+    <h2>Everything a regulated team needs to show its work</h2>
+    <p class="sub">Built for hardware, medical, aerospace and software teams who have to prove that what they built is what they said they would build.</p>
+    <div class="grid">
+      <div class="card"><h3>Versioned items</h3><p>Every save is a new version. History is append-only and nothing is ever hard-deleted.</p></div>
+      <div class="card"><h3>Traceability</h3><p>Typed relationships, a traceability matrix, trace views and impact analysis in both directions.</p></div>
+      <div class="card"><h3>Suspect links</h3><p>When one end of a relationship changes, the other end is flagged until someone confirms it still holds.</p></div>
+      <div class="card"><h3>Baselines</h3><p>Name an immutable snapshot, compare it with now or with another baseline.</p></div>
+      <div class="card"><h3>Reviews and signatures</h3><p>Reviewers mark items, approvers sign with their password. Closed reviews download as Word.</p></div>
+      <div class="card"><h3>Test management</h3><p>Plans, cycles, step-by-step runs with evidence, and results that roll up into each requirement.</p></div>
+      <div class="card"><h3>Import and export</h3><p>ReqIF, Word, CSV and spreadsheets in; ReqIF, Word, CSV and a JSON backup out.</p></div>
+      <div class="card"><h3>API first</h3><p>The web app uses the same documented API as your scripts: OpenAPI 3.1, tokens, signed webhooks.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap feature">
+    <div class="text">
+      <h2>Edit like a document, store like a database</h2>
+      <p class="sub" style="margin-bottom:0">Each requirement has a stable ID, a rich-text description with tables, images and equations, and typed fields. Edits auto-save to a private draft until you press <em>Save version</em>.</p>
+      <ul>
+        <li>IDs like <code>SYS-042</code> are never reused</li>
+        <li>Two people editing? A merge screen resolves it field by field</li>
+        <li>Verification status shown beside every requirement</li>
+      </ul>
+    </div>
+    <figure class="shot">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img loading="lazy" src="img/item.png" width="1440" height="900" alt="An item page: description editor, fields, upstream and downstream relationships, verification status and comments">
+    </figure>
+  </div>
+  <div class="wrap pair">
+    <figure class="shot" style="margin:0">
+      <img loading="lazy" src="img/reading.png" width="1440" height="900" alt="Reading view of the requirements as a numbered document">
+      <figcaption class="cap" style="padding:0 12px 10px">Reading view: the same items as a numbered document. Print it or export to Word.</figcaption>
+    </figure>
+    <figure class="shot" style="margin:0">
+      <img loading="lazy" src="img/reports.png" width="1440" height="900" alt="Report listing each requirement with the latest result of each of its tests">
+      <figcaption class="cap" style="padding:0 12px 10px">Reports: each requirement with the latest result of every test that verifies it.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="alt" id="trace">
+  <div class="wrap">
+    <h2>See what depends on what</h2>
+    <p class="sub">Relationships are typed and directional. Coverage gaps and the cost of a change are computed live, never stale.</p>
+    <div class="stack">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <img loading="lazy" src="img/matrix.png" width="1440" height="900" alt="Traceability matrix of system requirements against subsystem requirements">
+      </figure>
+      <p class="cap" style="margin-top:-12px">Traceability matrix between any two sets, with verification status on every row and column.</p>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <img loading="lazy" src="img/trace.png" width="1440" height="900" alt="Trace view from mission requirements through system requirements to subsystem requirements and tests">
+      </figure>
+      <p class="cap" style="margin-top:-12px">Trace view: pick how many levels up and down, and see which requirements reach a test.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap feature flip">
+    <figure class="shot">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img loading="lazy" src="img/suspect.png" width="1440" height="900" alt="Suspect links page listing relationships whose items changed after they were confirmed">
+    </figure>
+    <div class="text">
+      <h2>Changes don’t slip through</h2>
+      <p class="sub" style="margin-bottom:0">Change a requirement and every relationship touching it becomes suspect. Open the changed item, compare versions, and confirm the link or fix what it points to.</p>
+      <ul>
+        <li>Results go out of date when a test or requirement is revised</li>
+        <li>People involved are notified in the app, and by email if they choose</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="test">
+  <div class="wrap">
+    <h2>Run the tests, keep the evidence</h2>
+    <p class="sub">Test plans select cases, cycles freeze their versions, and runs are executed step by step with the keyboard. Finishing a run records a result, and the requirement’s status follows.</p>
+    <div class="pair" style="margin-top:0">
+      <figure style="margin:0">
+        <div class="shot"><img loading="lazy" src="img/cycle.png" width="1440" height="900" alt="A test cycle with progress bar and the state of each test run"></div>
+        <figcaption>A cycle: who runs what, and how far along it is.</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <div class="shot"><img loading="lazy" src="img/run.png" width="1440" height="900" alt="Step-by-step execution of a thermal vacuum test with pass, fail and blocked buttons and attached evidence"></div>
+        <figcaption>Execution: pass, fail or block each step; attach logs, screenshots and data files.</figcaption>
+      </figure>
+    </div>
+    <p class="sub" style="margin-top:28px;margin-bottom:0">Automated results come in as JUnit XML from CI and land on the same requirements. A failed test links to a defect in your own tracker. This is not a bug tracker, and does not try to be.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap feature">
+    <div class="text">
+      <h2>Baselines and signed reviews</h2>
+      <p class="sub" style="margin-bottom:0">Freeze a design review as a baseline. Reviewers mark items, approvers sign with their password, and the signed record is kept with a digest of what was approved.</p>
+      <ul>
+        <li>Compare a baseline with the current state or another baseline</li>
+        <li>Frozen verification status, so a release shows what was proven at the time</li>
+        <li>Hash-chained audit log that can be anchored and verified</li>
+      </ul>
+    </div>
+    <figure class="shot">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <img loading="lazy" src="img/review.png" width="1440" height="900" alt="A review in progress with approvers, reviewers, progress and per-item outcome">
+    </figure>
+  </div>
+  <div class="wrap">
+    <figure class="shot" style="margin-top:36px">
+      <img loading="lazy" src="img/baseline.png" width="1440" height="900" alt="A baseline of 117 subsystem requirements with status and verification as they were">
+    </figure>
+    <p class="cap">A baseline: every item as it was, with its verification status at the time.</p>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Fits into the tools you already use</h2>
+    <div class="grid" style="margin-top:24px">
+      <div class="card"><h3>Coming from DOORS, Polarion or Jama?</h3><p>Import ReqIF, Word and spreadsheets. Re-import updates items by ID instead of duplicating them.</p></div>
+      <div class="card"><h3>CI</h3><p>Upload JUnit results; a scanner for <code>@req SYS-042</code> tags links code to requirements.</p></div>
+      <div class="card"><h3>Jira, GitHub, GitLab</h3><p>Attach issues and pull requests to items and see whether they are open or closed.</p></div>
+      <div class="card"><h3>Sign-in</h3><p>Local accounts, or OpenID Connect with your identity provider. Optional lockout and password expiry.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="hosting">
+  <div class="wrap">
+    <h2>Your server, your data</h2>
+    <p class="sub">One app image plus PostgreSQL. No telemetry, no accounts with us, no per-seat price. HTTPS through Caddy is one setting.</p>
+    <pre>git clone https://github.com/jlazzz/OpenRequirements.git
+cd OpenRequirements
+docker compose -f deploy/docker-compose.yml up -d --build</pre>
+    <p class="cap">Open <code>http://localhost:3000</code>. The first visit creates the administrator account. A demo project like the one in these screenshots loads with <code>npm run demo</code>.</p>
+    <p><a class="btn" href="https://github.com/jlazzz/OpenRequirements">Get the code</a></p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Requirements (working name) · Open source under AGPL-3.0 · Early development: screens and features are changing.
+  </div>
+</footer>
+
+</body>
+</html>

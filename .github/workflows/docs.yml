@@ -2,7 +2,7 @@ name: Docs
 on:
   push:
     branches: [development]
-    paths: [docs/user-guide/**, docs/.vitepress/**, .github/workflows/docs.yml]
+    paths: [docs/user-guide/**, docs/.vitepress/**, site/**, .github/workflows/docs.yml]
   workflow_dispatch:
 
 permissions:
@@ -26,10 +26,12 @@ jobs:
       - run: npm ci
       - run: npm run docs:build
         env:
-          DOCS_BASE: /${{ github.event.repository.name }}/
+          DOCS_BASE: /${{ github.event.repository.name }}/guide/
+      # Landing page at the root, user guide under /guide/.
+      - run: mkdir -p _site/guide && cp -r site/. _site/ && cp -r docs/.vitepress/dist/. _site/guide/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/.vitepress/dist
+          path: _site
   deploy:
     needs: build
     runs-on: ubuntu-latest
