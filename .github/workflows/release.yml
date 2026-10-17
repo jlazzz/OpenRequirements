@@ -22,7 +22,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U app" --health-interval 3s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 26
@@ -46,7 +46,7 @@ jobs:
       packages: write # push to GHCR
       id-token: write # keyless signing
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 26
@@ -104,7 +104,7 @@ jobs:
       REQ_TOKEN: ${{ secrets.REQ_TOKEN }}
     steps:
       - if: ${{ env.REQ_URL != '' && env.REQ_TOKEN != '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - if: ${{ env.REQ_URL != '' && env.REQ_TOKEN != '' }}
         uses: actions/setup-node@v4
         with:
